@@ -1,4 +1,10 @@
 // /data/attachment/processors/repo.js
+// Mục đích: Tầng làm việc với DB cho Attachment, trả PlainAttachment (không trả Mongoose raw).
+// - Sửa listByProject: lọc đúng task==null và deletedAt==null.
+// - Thống nhất counter cấp Project theo conventions: attachmentsCount. Để tương thích dữ liệu cũ (assetsCount),
+//   triển khai helper incProjectAttachments() cập nhật cả hai trường (an toàn, không đổi schema file).
+// - Loại bỏ { lean:true } trong *findByIdAndUpdate* (tùy chọn vì không có hiệu lực), vẫn trả về doc mới qua { new:true }.
+
 import mongoose from 'mongoose';
 import Attachment from '@/model/common/attachment.model.js';
 import Task from '@/model/task.model.js';
@@ -8,8 +14,22 @@ import { asPlainAttachment } from '@/lib/serialize.js';
 
 const O = (id) => new mongoose.Types.ObjectId(String(id));
 
+/** Tăng/giảm attachmentsCount ở cấp Project; đồng thời cập nhật assetsCount để giữ tương thích. */
+async function incProjectAttachments(projectId, delta) {
+    try {
+        await Project.findByIdAndUpdate(
+            O(projectId),
+            { $inc: { attachmentsCount: delta, assetsCount: delta } }, // cập nhật cả 2 trường để không sai số liệu
+            { new: false }
+        );
+    } catch {
+        // swallow
+    }
+}
+
 /**
- * Create + return PlainAttachment
+ * Tạo record Attachment và trả PlainAttachment.
+ * Counters: đã có post-save hook tăng tương ứng (Task/Project) → không tăng lại ở đây.
  */
 export async function createAttachment({
     scope, projectId, taskId = null,
@@ -34,44 +54,48 @@ export async function createAttachment({
     return asPlainAttachment(doc);
 }
 
-/** List by project (project-level attachments only; task==null) */
+/** Danh sách attachment cấp Project (KHÔNG gồm những cái thuộc task) */
 export async function listByProject(projectId) {
     const items = await Attachment.find({
         project: O(projectId),
         $or: [{ task: { $exists: false } }, { task: null }],
-        $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
-    }).sort({ createdAt: -1 }).lean();
+        deletedAt: null,
+    })
+        .sort({ createdAt: -1 })
+        .lean();
     return items.map(asPlainAttachment);
 }
 
-/** List by task */
+/** Danh sách attachment cấp Task */
 export async function listByTask(taskId) {
     const items = await Attachment.find({
         task: O(taskId),
-        $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
-    }).sort({ createdAt: -1 }).lean();
+        deletedAt: null,
+    })
+        .sort({ createdAt: -1 })
+        .lean();
     return items.map(asPlainAttachment);
 }
 
-/** Get by id (lean) */
+/** Lấy 1 attachment (plain) */
 export async function getById(attachmentId) {
     const item = await Attachment.findById(O(attachmentId)).lean();
     return item ? asPlainAttachment(item) : null;
 }
 
-/** Rename (DB only) */
+/** Đổi tên (DB only) và trả PlainAttachment */
 export async function renameAttachment(attachmentId, name) {
     const updated = await Attachment.findByIdAndUpdate(
         O(attachmentId),
         { $set: { driveName: name } },
-        { new: true, lean: true }
+        { new: true }
     );
     return updated ? asPlainAttachment(updated) : null;
 }
 
 /**
- * Move between containers within the same project.
- * Side-effects: adjust counters (-1/+1) accordingly (NO post-save hook triggered on findByIdAndUpdate)
+ * Di chuyển giữa project <-> task cùng 1 project.
+ * Side-effects: cập nhật counters chuẩn (Task.attachmentsCount & Project.attachmentsCount).
  */
 export async function moveAttachment(attachmentId, { scope, projectId, taskId }, driveParentId) {
     const att = await Attachment.findById(O(attachmentId)).lean();
@@ -80,7 +104,7 @@ export async function moveAttachment(attachmentId, { scope, projectId, taskId },
     const fromTaskId = att.task ? String(att.task) : null;
     const toTaskId = taskId ? String(taskId) : null;
 
-    // update attachment record
+    // Cập nhật record
     const updated = await Attachment.findByIdAndUpdate(
         O(attachmentId),
         {
@@ -90,26 +114,25 @@ export async function moveAttachment(attachmentId, { scope, projectId, taskId },
                 driveFolderId: driveParentId || att.driveFolderId || null,
             },
         },
-        { new: true, lean: true }
+        { new: true }
     );
 
-    // counters
+    // Cập nhật counters (tránh double-count với hook: hook chỉ chạy khi create)
     try {
-        // from
         if (fromTaskId && fromTaskId !== toTaskId) {
-            await Task.findByIdAndUpdate(O(fromTaskId), { $inc: { attachmentsCount: -1 } }, { lean: true });
+            await Task.findByIdAndUpdate(O(fromTaskId), { $inc: { attachmentsCount: -1 } });
         }
         if (!fromTaskId && toTaskId) {
-            // moved from project -> task
-            await Project.findByIdAndUpdate(O(projectId), { $inc: { assetsCount: -1 } }, { lean: true });
+            // project -> task
+            await incProjectAttachments(projectId, -1);
         }
-        // to
+
         if (toTaskId && fromTaskId !== toTaskId) {
-            await Task.findByIdAndUpdate(O(toTaskId), { $inc: { attachmentsCount: 1 } }, { lean: true });
+            await Task.findByIdAndUpdate(O(toTaskId), { $inc: { attachmentsCount: 1 } });
         }
         if (!toTaskId && fromTaskId) {
-            // moved from task -> project
-            await Project.findByIdAndUpdate(O(projectId), { $inc: { assetsCount: 1 } }, { lean: true });
+            // task -> project
+            await incProjectAttachments(projectId, 1);
         }
     } catch {
         // swallow
@@ -119,10 +142,9 @@ export async function moveAttachment(attachmentId, { scope, projectId, taskId },
 }
 
 /**
- * Soft/Hard delete attachment
- *  - Soft: set deletedAt; counters -1
- *  - Hard: remove doc; counters -1
- * Returns plain + {_hard:boolean}
+ * Xóa: soft (deletedAt) hoặc hard (remove doc).
+ * Side-effects: giảm counters tương ứng.
+ * Trả về plain + {_hard:boolean}
  */
 export async function deleteAttachment(attachmentId, { hard = false } = {}) {
     const att = await Attachment.findById(O(attachmentId)).lean();
@@ -133,25 +155,26 @@ export async function deleteAttachment(attachmentId, { hard = false } = {}) {
 
     let result;
     if (hard) {
-        await Attachment.findByIdAndDelete(O(attachmentId), { lean: true });
+        await Attachment.findByIdAndDelete(O(attachmentId));
         result = { ...asPlainAttachment(att), _hard: true };
     } else {
         const updated = await Attachment.findByIdAndUpdate(
             O(attachmentId),
             { $set: { deletedAt: new Date() } },
-            { new: true, lean: true }
+            { new: true }
         );
         result = { ...asPlainAttachment(updated), _hard: false };
     }
 
-    // counters
     try {
         if (taskId) {
-            await Task.findByIdAndUpdate(O(taskId), { $inc: { attachmentsCount: -1 } }, { lean: true });
-        } else {
-            await Project.findByIdAndUpdate(O(projectId), { $inc: { assetsCount: -1 } }, { lean: true });
+            await Task.findByIdAndUpdate(O(taskId), { $inc: { attachmentsCount: -1 } });
+        } else if (projectId) {
+            await incProjectAttachments(projectId, -1);
         }
-    } catch { }
+    } catch {
+        // swallow
+    }
 
     return result;
 }

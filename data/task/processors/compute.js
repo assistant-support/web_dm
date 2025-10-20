@@ -1,96 +1,73 @@
-// data/task/processors/compute.js
-// Tác dụng file: Pure helpers cho Task – chuẩn hoá tiêu đề/mô tả/tags, checklist, và plan window.
-// - KHÔNG gọi DB, không 'use server'.
+// /data/task/processors/compute.js
+// Cấu trúc: /data/task/processors/*
+// Mục đích: Helper quy đổi input approve-completion (theo B9) → tham số đúng với Task model.
+// - Input B9: workerSplitPoints[] (userId, points), payouts[] (userId, amount)
+// - Output cho Task.approveCompletionWithSplit: { workerSplitPoints:number, payouts:[{userId, points}] }
+// - Ràng buộc: tổng (sum(workerSplitPoints[].points) + sum(payouts[].amount)) === totalPoints
+// - Assignee nhận phần workerSplitPoints; những người còn lại → payouts (points)
 
-import { AppError } from '@/lib/errors.js';
-
-/** Rút gọn khoảng trắng & trim tiêu đề. */
-export function sanitizeTitle(s = '') {
-    return String(s || '').replace(/\s+/g, ' ').trim();
-}
-
-/** Chuẩn hoá patch meta: lọc các field cho phép & normalize cơ bản. */
-export function normalizeMeta(patch = {}) {
-    const out = {};
-    if (patch.title != null) out.title = sanitizeTitle(patch.title);
-    if (patch.description != null) out.description = String(patch.description || '');
-    if (patch.priority != null) out.priority = patch.priority;
-    if (patch.tags != null)
-        out.tags = Array.isArray(patch.tags)
-            ? [...new Set(patch.tags.map((t) => String(t).trim()).filter(Boolean))]
-            : [];
-    if (Object.prototype.hasOwnProperty.call(patch, 'workType'))
-        out.workType = patch.workType ?? null;
-    if (patch.platforms != null)
-        out.platforms = Array.isArray(patch.platforms)
-            ? [...new Set(patch.platforms.map((p) => String(p).trim()).filter(Boolean))]
-            : [];
-    return out;
-}
-
-/** Bảo đảm checklist item chuẩn. */
-export function ensureChecklistItem({ cid, content, done } = {}) {
-    return {
-        cid: String(cid || ''),
-        content: String(content || '').trim(),
-        done: Boolean(done),
-        ...(done ? { doneAt: new Date() } : { doneAt: null }),
-    };
+function sum(arr, pick) {
+    return (arr || []).reduce((acc, x) => acc + (Number(pick ? x[pick] : x) || 0), 0);
 }
 
 /**
- * Toggle/cập nhật checklist:
- * - Nếu chưa có cid → thêm mới (auto cid)
- * - Nếu có → cập nhật content/done (chỉ 2 field này)
- * Trả về list mới.
+ * Tính workerSplitPoints (numeric, cho assignee) & payouts[] (points) từ input B9.
+ * @param {Object} params
+ * @param {string|null} params.assigneeId
+ * @param {number} params.totalPoints
+ * @param {Array<{userId:string, points:number}>} params.workerSplitItems
+ * @param {Array<{userId:string, amount:number, ref?:string}>} [params.payoutItems]
+ * @returns {{ workerSplitPoints:number, payouts:Array<{userId:string, points:number}>, issues?:Array<{field:string,message:string}> }}
  */
-export function toggleChecklist(list = [], { cid, content, done } = {}) {
-    const next = Array.isArray(list) ? [...list] : [];
-    const id = String(cid || '');
-    const idx = next.findIndex((x) => String(x?.cid) === id);
+export function computeFromB9Input({ assigneeId, totalPoints, workerSplitItems, payoutItems }) {
+    const issues = [];
 
-    if (idx === -1) {
-        // Thêm mới
-        const newCid = generateCid();
-        next.push(
-            ensureChecklistItem({
-                cid: newCid,
-                content: content || '',
-                done: Boolean(done),
-            })
-        );
-    } else {
-        // Cập nhật
-        const cur = { ...next[idx] };
-        if (content != null) cur.content = String(content).trim();
-        if (done != null) {
-            cur.done = Boolean(done);
-            cur.doneAt = cur.done ? new Date() : null;
+    // Chuẩn hoá workerSplitItems (gộp trùng userId)
+    const wsMap = new Map();
+    for (const s of workerSplitItems || []) {
+        const id = String(s.userId);
+        const p = Number(s.points) || 0;
+        wsMap.set(id, (wsMap.get(id) || 0) + p);
+    }
+    const ws = Array.from(wsMap.entries()).map(([userId, points]) => ({ userId, points }));
+
+    // Chuẩn hoá payouts input (amount -> points) + gộp trùng userId
+    const poMap = new Map();
+    for (const p of payoutItems || []) {
+        const id = String(p.userId);
+        const val = Number(p.amount) || 0;
+        poMap.set(id, (poMap.get(id) || 0) + val);
+    }
+    const po = Array.from(poMap.entries()).map(([userId, points]) => ({ userId, points }));
+
+    // Kiểm tra tổng điểm
+    const total = sum(ws, 'points') + sum(po, 'points');
+    if (total !== Number(totalPoints)) {
+        issues.push({ field: 'totalPoints', message: 'Tổng điểm (workerSplit + payouts) phải bằng totalPoints.' });
+    }
+
+    // Phân bổ: assignee → workerSplitPoints; những người còn lại → payouts
+    let workerSplitPoints = 0;
+    const payouts = [];
+
+    for (const x of ws) {
+        if (assigneeId && String(x.userId) === String(assigneeId)) {
+            workerSplitPoints += Number(x.points) || 0;
+        } else {
+            payouts.push({ userId: String(x.userId), points: Number(x.points) || 0 });
         }
-        next[idx] = cur;
     }
-    return next;
-}
 
-function generateCid() {
-    try {
-        return crypto.randomUUID();
-    } catch {
-        // Fallback khi môi trường không có crypto.randomUUID
-        return 'cid_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    // Thêm các payouts "tiền thưởng" khác (po)
+    for (const x of po) {
+        // gộp nếu đã có cùng user
+        const idx = payouts.findIndex((i) => String(i.userId) === String(x.userId));
+        if (idx >= 0) {
+            payouts[idx].points += Number(x.points) || 0;
+        } else {
+            payouts.push({ userId: String(x.userId), points: Number(x.points) || 0 });
+        }
     }
-}
 
-/** Chuẩn hoá start/due về Date|null. Không ném lỗi ở đây. */
-export function normalizePlanWindow({ start, due } = {}) {
-    const s = start == null ? null : start instanceof Date ? start : new Date(start);
-    const d = due == null ? null : due instanceof Date ? due : new Date(due);
-    return { start: s, due: d };
-}
-
-/** Tiện ích: đảm bảo plan window hợp lệ, ném lỗi nếu không. */
-export function assertValidPlanWindow({ start, due } = {}) {
-    if (start && due && start.getTime() > due.getTime()) {
-        throw new AppError('INVALID_PLAN_WINDOW', 'INVALID_PLAN_WINDOW', 400);
-    }
+    return { workerSplitPoints, payouts, issues: issues.length ? issues : undefined };
 }
