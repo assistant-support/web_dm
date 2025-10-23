@@ -134,7 +134,8 @@ export async function listByTaskAction(payload) {
                 limit: input.limit ?? 30,
                 beforeId: input.beforeId,
             });
-            return items;
+            // Serialize để tránh lỗi MongoDB ObjectId
+            return JSON.parse(JSON.stringify(items));
         },
         { requireAuth: true }
     );

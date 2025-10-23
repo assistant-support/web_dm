@@ -1,0 +1,279 @@
+// components/team/MemberRow.client.js
+// Mục đích: Hiển thị 1 member với các actions và stats
+
+'use client';
+
+import { useState } from 'react';
+import { MoreVertical, Trash2, UserCog, Briefcase, Calendar, Trophy, CheckCircle2 } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import Avatar from '@/components/ui/avatar/index.js';
+import UserDisplay, { UserName } from '@/components/ui/user-display';
+import Badge from '@/components/ui/badge/index.js';
+import { ConfirmDialog } from '@/components/ui/dialog/index.js';
+import { removeMemberAction, changeRole } from '@/data/team/actions/server.js';
+import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
+
+/**
+ * MemberRow Component
+ * @param {Object} props
+ * @param {Object} props.member - Member data {userId, role, createdAt}
+ * @param {string} props.teamId - Team ID
+ * @param {boolean} props.isManager - Current user là manager không
+ * @param {string} props.currentUserId - ID của current user
+ * @param {Object} props.stats - Member stats {projectsCount, tasksCompleted, currentMonthPoints, joinedAt}
+ * @param {boolean} props.isLoadingStats - Loading state cho stats
+ */
+export default function MemberRow({ member, teamId, isManager, currentUserId, stats, isLoadingStats }) {
+    const router = useRouter();
+    const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+    const [isChangeRoleDialogOpen, setIsChangeRoleDialogOpen] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const isSelf = String(member.userId) === String(currentUserId);
+    const canManage = isManager && !isSelf;
+
+    const handleRemove = async () => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const result = await removeMemberAction(teamId, { userId: member.userId });
+            if (result.ok) {
+                setIsRemoveDialogOpen(false);
+                router.refresh();
+            } else {
+                setError(result.message || 'Không thể xóa member');
+            }
+        } catch (err) {
+            console.error('Remove member error:', err);
+            setError('Có lỗi xảy ra');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleChangeRole = async (newRole) => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const result = await changeRole(teamId, { userId: member.userId, role: newRole });
+            if (result.ok) {
+                setIsChangeRoleDialogOpen(false);
+                router.refresh();
+            } else {
+                setError(result.message || 'Không thể thay đổi role');
+            }
+        } catch (err) {
+            console.error('Change role error:', err);
+            setError('Có lỗi xảy ra');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <>
+            <div className="py-4 px-6 hover:bg-gray-50 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                    {/* Left: User info */}
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <UserDisplay
+                            userId={member.userId}
+                            showJobTitle={true}
+                            size="md"
+                        />
+                        {isSelf && (
+                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                                Bạn
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Right: Role badge & actions */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                        <Badge 
+                            variant="role" 
+                            role={member.role}
+                            className={member.role === 'manager' 
+                                ? 'bg-purple-100 text-purple-800 border-purple-200' 
+                                : 'bg-gray-100 text-gray-700 border-gray-200'
+                            }
+                        >
+                            {member.role === 'manager' ? 'Quản lý' : 'Thành viên'}
+                        </Badge>
+
+                        {canManage && (
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <button
+                                        className="rounded-lg p-2 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] transition-colors"
+                                        aria-label="Hành động thành viên"
+                                    >
+                                        <MoreVertical className="h-4 w-4 text-gray-500" />
+                                    </button>
+                                </DropdownMenu.Trigger>
+
+                                <DropdownMenu.Portal>
+                                    <DropdownMenu.Content
+                                        className="min-w-[200px] rounded-lg bg-white p-1.5 shadow-lg ring-1 ring-gray-200 z-50"
+                                        sideOffset={5}
+                                        align="end"
+                                    >
+                                        <DropdownMenu.Item
+                                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 outline-none cursor-pointer transition-colors"
+                                            onSelect={() => setIsChangeRoleDialogOpen(true)}
+                                        >
+                                            <UserCog className="h-4 w-4 text-gray-500" />
+                                            <span>Đổi vai trò</span>
+                                        </DropdownMenu.Item>
+                                        <DropdownMenu.Separator className="my-1 h-px bg-gray-200" />
+                                        <DropdownMenu.Item
+                                            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm text-red-700 hover:bg-red-50 focus:bg-red-50 outline-none cursor-pointer transition-colors"
+                                            onSelect={() => setIsRemoveDialogOpen(true)}
+                                        >
+                                            <Trash2 className="h-4 w-4 text-red-600" />
+                                            <span>Xóa thành viên</span>
+                                        </DropdownMenu.Item>
+                                    </DropdownMenu.Content>
+                                </DropdownMenu.Portal>
+                            </DropdownMenu.Root>
+                        )}
+                    </div>
+                </div>
+
+                {/* Stats row */}
+                {!isLoadingStats && stats && (
+                    <div className="mt-3 ml-12 flex items-center gap-6 text-sm text-gray-600">
+                        <div className="flex items-center gap-1.5" title="Số dự án tham gia">
+                            <Briefcase className="h-3.5 w-3.5 text-blue-600" />
+                            <span>{stats.projectsCount} dự án</span>
+                        </div>
+                        <div className="flex items-center gap-1.5" title="Số tasks đã hoàn thành">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                            <span>{stats.tasksCompleted} tasks</span>
+                        </div>
+                        <div className="flex items-center gap-1.5" title="Điểm tháng này">
+                            <Trophy className="h-3.5 w-3.5 text-yellow-600" />
+                            <span className="font-medium">{stats.currentMonthPoints} pts</span>
+                        </div>
+                        {stats.joinedAt && (
+                            <div className="flex items-center gap-1.5 text-gray-500" title="Ngày tham gia">
+                                <Calendar className="h-3.5 w-3.5" />
+                                <span>{format(new Date(stats.joinedAt), 'dd/MM/yyyy')}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {isLoadingStats && (
+                    <div className="mt-3 ml-12 flex items-center gap-2 text-sm text-gray-400">
+                        <div className="animate-pulse flex gap-4">
+                            <div className="h-3 w-16 bg-gray-200 rounded"></div>
+                            <div className="h-3 w-16 bg-gray-200 rounded"></div>
+                            <div className="h-3 w-16 bg-gray-200 rounded"></div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Remove Confirm Dialog */}
+            <ConfirmDialog
+                open={isRemoveDialogOpen}
+                onOpenChange={setIsRemoveDialogOpen}
+                title="Xóa thành viên"
+                description={
+                    <>
+                        Bạn có chắc muốn xóa{' '}
+                        <UserName userId={member.userId} className="font-medium" />{' '}
+                        khỏi nhóm?
+                    </>
+                }
+                onConfirm={handleRemove}
+                confirmText="Xóa"
+                variant="danger"
+                loading={isLoading}
+            />
+
+            {/* Change Role Dialog */}
+            {isChangeRoleDialogOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+                        <div className="p-6 border-b border-gray-200">
+                            <h3 className="text-lg font-semibold text-gray-900">Đổi vai trò</h3>
+                            <p className="text-sm text-gray-500 mt-1">Chọn vai trò mới cho thành viên</p>
+                        </div>
+                        
+                        <div className="p-6">
+                            {error && (
+                                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                                    {error}
+                                </div>
+                            )}
+                            
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => handleChangeRole('manager')}
+                                    disabled={isLoading || member.role === 'manager'}
+                                    className="w-full text-left px-4 py-3.5 rounded-lg border border-gray-200 hover:border-[var(--brand-600)] hover:bg-[var(--brand-50)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-white transition-all group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-600 transition-colors">
+                                            <UserCog className="h-5 w-5 text-purple-600 group-hover:text-white transition-colors" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="font-semibold text-gray-900">Quản lý</div>
+                                            <div className="text-sm text-gray-500">Có thể quản lý nhóm và thành viên</div>
+                                        </div>
+                                        {member.role === 'manager' && (
+                                            <div className="w-5 h-5 rounded-full bg-[var(--brand-600)] flex items-center justify-center">
+                                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </div>
+                                </button>
+                                
+                                <button
+                                    onClick={() => handleChangeRole('member')}
+                                    disabled={isLoading || member.role === 'member'}
+                                    className="w-full text-left px-4 py-3.5 rounded-lg border border-gray-200 hover:border-[var(--brand-600)] hover:bg-[var(--brand-50)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-white transition-all group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-gray-600 transition-colors">
+                                            <UserCog className="h-5 w-5 text-gray-600 group-hover:text-white transition-colors" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="font-semibold text-gray-900">Thành viên</div>
+                                            <div className="text-sm text-gray-500">Thành viên thông thường</div>
+                                        </div>
+                                        {member.role === 'member' && (
+                                            <div className="w-5 h-5 rounded-full bg-[var(--brand-600)] flex items-center justify-center">
+                                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsChangeRoleDialogOpen(false)}
+                                disabled={isLoading}
+                                className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-white disabled:opacity-50 transition-colors"
+                            >
+                                Hủy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}

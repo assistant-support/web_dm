@@ -1,0 +1,13 @@
+/* components/ui/Dropdown.module.css */
+.menu {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+    transition-property: opacity, transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+.menuOpen {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}

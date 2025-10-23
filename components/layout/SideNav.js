@@ -44,10 +44,13 @@ export default function SideNav() {
     return (
         <aside className="h-full w-64 shrink-0 border-r bg-white p-3">
             <Group title="Tổng quan">
-                <NavLink href="/dashboard">Dashboard</NavLink>
+                <NavLink href="/">Nhiệm vụ</NavLink>
+                <NavLink href="/reports">Báo cáo</NavLink>
+                <NavLink href="/settings">Cài đặt</NavLink>
             </Group>
 
             <Group title="Teams">
+                <NavLink href="/teams">All Teams</NavLink>
                 {(teams || []).map((t) => (
                     <NavLink key={t.id} href={`/teams/${t.id}`}>
                         {/* FIX (UI): hiển thị rõ Owner/Manager */}

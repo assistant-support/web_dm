@@ -15,7 +15,7 @@ const ProjectSchema = new mongoose.Schema({
     code: { type: String, trim: true, index: { unique: false, sparse: true } },
     description: String,
 
-    team: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+    team: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', index: true }, // Không required - dự án có thể độc lập
     members: { type: [ProjectMembershipSchema], default: [] },
 
     // ---- Trạng thái/nhãn & cấu hình

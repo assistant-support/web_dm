@@ -1,95 +1,227 @@
-// components/tasks/KanbanBoard.jsx
-'use client'
+// components/tasks/KanbanBoard.js
+'use client';
 
-import { useMemo, useRef } from 'react'
-import { useTaskBoardActions } from '@/app/hooks/task-board.hook'
+import { useState, useMemo } from 'react';
+import {
+    DndContext,
+    DragOverlay,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    closestCorners,
+} from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
+import KanbanColumn from './KanbanColumn';
+import KanbanCard from './KanbanCard';
+import { updateTask, updateKanbanOrder } from '@/data/task/actions/server';
 
-export default function KanbanBoard({ statuses, tasks }) {
-    const { onUpdateStatus, onMarkDone } = useTaskBoardActions()
+/**
+ * Kanban columns configuration
+ */
+const COLUMNS = [
+    {
+        id: 'todo',
+        title: 'Cần làm',
+        statuses: ['draft', 'pending_approval', 'waiting_confirm'],
+    },
+    {
+        id: 'in_progress',
+        title: 'Đang làm',
+        statuses: ['in_progress'],
+    },
+    {
+        id: 'review',
+        title: 'Chờ review',
+        statuses: ['completed_await_review'],
+    },
+    {
+        id: 'completed',
+        title: 'Hoàn thành',
+        statuses: ['completed', 'rejected', 'cancelled', 'on_hold'],
+    },
+];
 
-    const grouped = useMemo(() => {
-        const map = new Map()
-        statuses.forEach((s) => map.set(s, []))
-        tasks.forEach((t) => {
-            if (map.has(t.status)) map.get(t.status).push(t)
-        })
-        return map
-    }, [statuses, tasks])
-
-    const dragTask = useRef(null)
-
-    const onDragStart = (t) => (e) => {
-        dragTask.current = t
-        e.dataTransfer.setData('text/plain', t._id)
-        e.dataTransfer.effectAllowed = 'move'
+/**
+ * Get default status for column
+ */
+function getDefaultStatusForColumn(columnId) {
+    switch (columnId) {
+        case 'todo':
+            return 'draft';
+        case 'in_progress':
+            return 'in_progress';
+        case 'review':
+            return 'completed_await_review';
+        case 'completed':
+            return 'completed';
+        default:
+            return 'draft';
     }
+}
 
-    const onDropTo = (col) => async (e) => {
-        e.preventDefault()
-        const t = dragTask.current
-        dragTask.current = null
-        if (!t) return
-        if (col === 'DONE') {
-            await onMarkDone(t._id)
-        } else if (t.status !== col) {
-            await onUpdateStatus(t._id, col)
+/**
+ * Get column ID from task status
+ */
+function getColumnIdFromStatus(status) {
+    for (const column of COLUMNS) {
+        if (column.statuses.includes(status)) {
+            return column.id;
         }
     }
+    return 'todo'; // Default
+}
 
-    const onDragOver = (e) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-    }
+/**
+ * KanbanBoard - Drag and drop Kanban board for tasks
+ */
+export default function KanbanBoard({ tasks: initialTasks }) {
+    const [tasks, setTasks] = useState(initialTasks);
+    const [activeTask, setActiveTask] = useState(null);
 
-    const Column = ({ status, children }) => (
-        <div
-            className="flex flex-col gap-3 rounded-xl border p-3 min-h-[50vh]"
-            onDrop={onDropTo(status)}
-            onDragOver={onDragOver}
-            aria-label={`Cột ${status}`}
-        >
-            <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold">{status}</div>
-                <div className="text-xs text-muted-foreground">
-                    {(grouped.get(status) || []).length} thẻ
-                </div>
-            </div>
-            {children}
-        </div>
-    )
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8, // 8px movement required to start drag
+            },
+        })
+    );
 
-    const Card = ({ t }) => (
-        <div
-            draggable
-            onDragStart={onDragStart(t)}
-            className="cursor-grab active:cursor-grabbing rounded-lg border bg-card p-3 hover:shadow-sm transition"
-            aria-label={`Task ${t.title}`}
-        >
-            <div className="text-sm font-medium">{t.title}</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-                {(t.assignee ? `@${t.assignee}` : '—')} • {t.priority}
-            </div>
-        </div>
-    )
+    // Group tasks by column
+    const tasksByColumn = useMemo(() => {
+        const groups = {};
+        COLUMNS.forEach((col) => {
+            groups[col.id] = [];
+        });
+
+        tasks.forEach((task) => {
+            const columnId = getColumnIdFromStatus(task.status);
+            groups[columnId].push(task);
+        });
+
+        return groups;
+    }, [tasks]);
+
+    const handleDragStart = (event) => {
+        const { active } = event;
+        const task = tasks.find((t) => t._id === active.id);
+        setActiveTask(task);
+    };
+
+    const handleDragOver = (event) => {
+        const { active, over } = event;
+        if (!over) return;
+
+        const activeId = active.id;
+        const overId = over.id;
+
+        if (activeId === overId) return;
+
+        const activeTask = tasks.find((t) => t._id === activeId);
+        if (!activeTask) return;
+
+        // Determine if dropping on a column or a task
+        const overData = over.data.current;
+        const isOverColumn = overData?.type === 'column';
+        const isOverTask = overData?.type === 'task';
+
+        if (isOverColumn) {
+            // Moving to a different column
+            const newColumnId = overId;
+            const oldColumnId = getColumnIdFromStatus(activeTask.status);
+
+            if (newColumnId !== oldColumnId) {
+                const newStatus = getDefaultStatusForColumn(newColumnId);
+
+                setTasks((prevTasks) => {
+                    return prevTasks.map((task) => {
+                        if (task._id === activeId) {
+                            return { ...task, status: newStatus };
+                        }
+                        return task;
+                    });
+                });
+
+                // Update on server
+                updateTask(activeId, { status: newStatus }).catch((err) => {
+                    console.error('Failed to update task status:', err);
+                    // Revert on error
+                    setTasks(initialTasks);
+                });
+            }
+        } else if (isOverTask) {
+            // Reordering within column or moving to another column
+            const overTask = overData.task;
+            const activeColumnId = getColumnIdFromStatus(activeTask.status);
+            const overColumnId = getColumnIdFromStatus(overTask.status);
+
+            if (activeColumnId !== overColumnId) {
+                // Moving to different column
+                const newStatus = overTask.status;
+
+                setTasks((prevTasks) => {
+                    return prevTasks.map((task) => {
+                        if (task._id === activeId) {
+                            return { ...task, status: newStatus };
+                        }
+                        return task;
+                    });
+                });
+
+                // Update on server
+                updateTask(activeId, { status: newStatus }).catch((err) => {
+                    console.error('Failed to update task status:', err);
+                    setTasks(initialTasks);
+                });
+            } else {
+                // Reordering within same column
+                setTasks((prevTasks) => {
+                    const oldIndex = prevTasks.findIndex((t) => t._id === activeId);
+                    const newIndex = prevTasks.findIndex((t) => t._id === overId);
+                    const newTasks = arrayMove(prevTasks, oldIndex, newIndex);
+
+                    // Update kanbanOrder on server
+                    const taskIds = newTasks.map(t => t._id);
+                    updateKanbanOrder(taskIds).catch((err) => {
+                        console.error('Failed to update kanban order:', err);
+                    });
+
+                    return newTasks;
+                });
+            }
+        }
+    };
+
+    const handleDragEnd = () => {
+        setActiveTask(null);
+    };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
-            {statuses.map((s) => (
-                <Column key={s} status={s}>
-                    {(grouped.get(s) || []).map((t) => (
-                        <Card key={t._id} t={t} />
-                    ))}
-                </Column>
-            ))}
-            {/* Done drop zone */}
-            <div
-                className="rounded-xl border border-dashed p-3 flex items-center justify-center text-sm text-muted-foreground"
-                onDrop={onDropTo('DONE')}
-                onDragOver={onDragOver}
-                aria-label="Thả vào đây để đánh dấu Done"
-            >
-                Thả vào đây để đánh dấu Done
+        <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+        >
+            <div className="flex gap-4 overflow-x-auto pb-4">
+                {COLUMNS.map((column) => (
+                    <KanbanColumn
+                        key={column.id}
+                        column={column}
+                        tasks={tasksByColumn[column.id] || []}
+                    />
+                ))}
             </div>
-        </div>
-    )
+
+            {/* Drag overlay */}
+            <DragOverlay>
+                {activeTask ? (
+                    <div className="opacity-80">
+                        <KanbanCard task={activeTask} />
+                    </div>
+                ) : null}
+            </DragOverlay>
+        </DndContext>
+    );
 }
+

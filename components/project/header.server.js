@@ -2,15 +2,37 @@
 // Cấu trúc: /app/components/project/* (Server Component)
 // Mục đích: Header tóm tắt Project (tên, code, mô tả ngắn, members, stats, tabs marker).
 
-/** Chip avatar đơn giản từ externalUserId (không có profile service ở bước này) */
-function MiniAvatar({ id }) {
-    const txt = String(id || '')
-        .trim()
-        .slice(0, 2)
-        .toUpperCase();
+import { getUsersDisplayInfo } from '@/lib/user-display';
+import Avatar from '@/components/ui/avatar';
+
+/** Chip avatar với tên user */
+async function MemberAvatars({ userIds }) {
+    const usersInfo = await getUsersDisplayInfo(userIds);
+    
+    // Hiển thị tối đa 5 avatar + "+N"
+    const MAX_AVATARS = 5;
+    const displayUsers = userIds.slice(0, MAX_AVATARS);
+    const more = Math.max(0, userIds.length - displayUsers.length);
+    
     return (
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
-            {txt || '??'}
+        <div className="flex shrink-0 items-center gap-2">
+            {displayUsers.map((userId) => {
+                const userInfo = usersInfo.get(userId);
+                return (
+                    <div key={userId} title={userInfo?.name || userId}>
+                        <Avatar 
+                            userId={userId}
+                            name={userInfo?.name || userId}
+                            size="sm"
+                        />
+                    </div>
+                );
+            })}
+            {more > 0 && (
+                <div className="flex h-7 w-7 items-center justify-center rounded-full border text-xs text-slate-500">
+                    +{more}
+                </div>
+            )}
         </div>
     );
 }
@@ -34,15 +56,10 @@ function Stat({ label, value }) {
  *   initialTab?: 'list'|'kanban'|'calendar'
  * }} props
  */
-export default function ProjectHeader({ project, members = [], stats, initialTab = 'list' }) {
+export default async function ProjectHeader({ project, members = [], stats, initialTab = 'list' }) {
     const title = project?.name || 'Project';
     const code = project?.code || null;
     const desc = (project?.description || '').trim();
-
-    // Hiển thị tối đa 5 avatar + “+N”
-    const MAX_AVATARS = 5;
-    const avatars = members.slice(0, MAX_AVATARS);
-    const more = Math.max(0, members.length - avatars.length);
 
     const c = stats?.taskCounts || {
         open: 0,
@@ -69,25 +86,16 @@ export default function ProjectHeader({ project, members = [], stats, initialTab
                     )}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                    {avatars.map((m) => (
-                        <MiniAvatar key={m.userId} id={m.userId} />
-                    ))}
-                    {more > 0 && (
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full border text-xs text-slate-500">
-                            +{more}
-                        </div>
-                    )}
-                </div>
+                <MemberAvatars userIds={members.map(m => m.userId)} />
             </div>
 
             {/* Stats */}
             <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
-                <Stat label="Open" value={c.open} />
-                <Stat label="In Progress" value={c.inProgress} />
-                <Stat label="Await Review" value={c.awaitReview} />
-                <Stat label="Completed" value={c.completed} />
-                <Stat label="Overdue" value={c.overdue} />
+                <Stat label="Mở" value={c.open} />
+                <Stat label="Đang làm" value={c.inProgress} />
+                <Stat label="Chờ review" value={c.awaitReview} />
+                <Stat label="Hoàn thành" value={c.completed} />
+                <Stat label="Quá hạn" value={c.overdue} />
             </div>
 
             {/* Tabs marker (chỉ hiển thị active hiện tại để header đồng bộ với page) */}

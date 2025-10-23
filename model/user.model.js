@@ -14,8 +14,18 @@ function encodeKey(k = '') {
 const AppUserSchema = new mongoose.Schema(
     {
         externalUserId: { type: String, required: true, unique: true, index: true }, // ID từ Auth/DB ngoài
+        oauthSub: { type: String, unique: true, sparse: true, index: true }, // OAuth 2.0 subject ID
 
-        // Thuộc tính riêng của app (không lặp info cá nhân):
+        // Thông tin cơ bản từ OAuth (cached cho performance)
+        email: { type: String, trim: true },
+        name: { type: String, trim: true },
+        firstName: { type: String, trim: true },
+        lastName: { type: String, trim: true },
+        avatar: { type: String, trim: true },
+
+        // Thuộc tính riêng của app:
+        role: { type: String, enum: ['admin', 'manager', 'member'], default: 'member' },
+        isActive: { type: Boolean, default: true },
         jobTitle: { type: String, trim: true },
         capacityHoursPerWeek: { type: Number, default: 40 }, // năng lực tải công việc
         color: { type: String, trim: true }, // màu hiển thị ui

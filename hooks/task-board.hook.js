@@ -2,19 +2,14 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useAsyncNotifier } from '@/lib/useAsyncNotifier'
+import { useAsyncNotifier } from '@/hooks/loading.hook'
 
-// Server actions (B9)
+// Server actions
 import {
     assignTask,
-    approveTask,
-    rejectTask,
-    assigneeConfirmStart,
     updateTaskStatus,
-    markTaskDone,
-    updateTaskPlan,
-    cancelTask,
-} from '@/data/actions.server'
+    updateTask,
+} from '@/data/task/actions/server'
 
 export function useTaskBoardActions() {
     const { run } = useAsyncNotifier({ enableNoti: true })
@@ -29,7 +24,7 @@ export function useTaskBoardActions() {
     return {
         async onAssign(taskId, assignee, requireConfirm) {
             return withRefresh(() =>
-                run(() => assignTask({ taskId, assignee, requireConfirm }), {
+                run(() => assignTask(taskId, assignee), {
                     successMessage: 'Giao việc thành công',
                     errorMessage: 'Không thể giao việc',
                 })
@@ -38,7 +33,7 @@ export function useTaskBoardActions() {
 
         async onApprove(taskId, note) {
             return withRefresh(() =>
-                run(() => approveTask({ taskId, note }), {
+                run(() => updateTaskStatus(taskId, 'draft'), {
                     successMessage: 'Đã duyệt task',
                     errorMessage: 'Duyệt thất bại',
                 })
@@ -47,7 +42,7 @@ export function useTaskBoardActions() {
 
         async onReject(taskId, note) {
             return withRefresh(() =>
-                run(() => rejectTask({ taskId, note }), {
+                run(() => updateTaskStatus(taskId, 'rejected'), {
                     successMessage: 'Đã từ chối',
                     errorMessage: 'Từ chối thất bại',
                 })
@@ -56,7 +51,7 @@ export function useTaskBoardActions() {
 
         async onConfirmStart(taskId) {
             return withRefresh(() =>
-                run(() => assigneeConfirmStart({ taskId }), {
+                run(() => updateTaskStatus(taskId, 'in_progress'), {
                     successMessage: 'Đã xác nhận bắt đầu',
                     errorMessage: 'Xác nhận thất bại',
                 })
@@ -65,7 +60,7 @@ export function useTaskBoardActions() {
 
         async onUpdateStatus(taskId, status) {
             return withRefresh(() =>
-                run(() => updateTaskStatus({ taskId, status }), {
+                run(() => updateTaskStatus(taskId, status), {
                     successMessage: 'Cập nhật trạng thái thành công',
                     errorMessage: 'Cập nhật trạng thái thất bại',
                 })
@@ -74,7 +69,7 @@ export function useTaskBoardActions() {
 
         async onMarkDone(taskId) {
             return withRefresh(() =>
-                run(() => markTaskDone({ taskId }), {
+                run(() => updateTaskStatus(taskId, 'pending_approval'), {
                     successMessage: 'Yêu cầu duyệt hoàn tất',
                     errorMessage: 'Không thể đánh dấu hoàn tất',
                 })
@@ -83,7 +78,10 @@ export function useTaskBoardActions() {
 
         async onUpdatePlan(taskId, plannedStartAt, plannedDueAt) {
             return withRefresh(() =>
-                run(() => updateTaskPlan({ taskId, plannedStartAt: plannedStartAt ?? null, plannedDueAt: plannedDueAt ?? null }), {
+                run(() => updateTask(taskId, { 
+                    plannedStartAt: plannedStartAt ?? null, 
+                    plannedDueAt: plannedDueAt ?? null 
+                }), {
                     successMessage: 'Cập nhật kế hoạch thành công',
                     errorMessage: 'Cập nhật kế hoạch thất bại',
                 })
@@ -92,7 +90,7 @@ export function useTaskBoardActions() {
 
         async onCancel(taskId) {
             return withRefresh(() =>
-                run(() => cancelTask({ taskId }), {
+                run(() => updateTaskStatus(taskId, 'cancelled'), {
                     successMessage: 'Đã huỷ task',
                     errorMessage: 'Huỷ task thất bại',
                 })

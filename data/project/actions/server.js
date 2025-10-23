@@ -326,20 +326,42 @@ export async function getDetailAction(projectId) {
     }, { requireAuth: true });
 }
 
-/** Tạo project (team manager). */
+/** Tạo project (team manager hoặc độc lập nếu không có team). */
 export async function create(payload) {
     await connectDB();
     return runAction(async ({ user }) => {
         const data = validate(projectCreateSchema, payload);
 
-        const team = await Team.findById(data.team).lean().exec();
-        assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        // Nếu có team, kiểm tra quyền manager
+        if (data.team) {
+            const team = await Team.findById(data.team).lean().exec();
+            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        }
+        // Nếu không có team, dự án sẽ là dự án độc lập với creator là owner
 
         const doc = await createProject(data, user.externalUserId);
-        await logActivity({ actor: user.externalUserId, team: data.team, project: doc._id, type: 'project.created', payload: { name: doc.name } });
-        await logActivity({ actor: user.externalUserId, team: data.team, project: doc._id, type: 'drive.folder.created', payload: { driveFolderId: doc.driveFolderId } });
-        await revalidateMany([tags.team(data.team), tags.project(doc._id)]);
+        
+        // Log activity
+        await logActivity({ 
+            actor: user.externalUserId, 
+            team: data.team || undefined, 
+            project: doc._id, 
+            type: 'project.created', 
+            payload: { name: doc.name, isIndependent: !data.team } 
+        });
+        
+        await logActivity({ 
+            actor: user.externalUserId, 
+            team: data.team || undefined, 
+            project: doc._id, 
+            type: 'drive.folder.created', 
+            payload: { driveFolderId: doc.driveFolderId } 
+        });
+        
+        // Revalidate tags
+        const tagsToRevalidate = data.team ? [tags.team(data.team), tags.project(doc._id)] : [tags.project(doc._id)];
+        await revalidateMany(tagsToRevalidate);
 
         return asPlainProject(doc);
     }, { requireAuth: true });
@@ -433,6 +455,38 @@ export async function changeRole(projectId, payload) {
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team, type: 'project.member.role_changed', payload: { ...data } });
         await revalidateMany([tags.team(updated.team), tags.project(id), tags.userInbox(data.userId)]);
 
+        return asPlainProject(updated);
+    }, { requireAuth: true });
+}
+
+/** Update project - wrapper cho update với tên khác */
+export async function updateProjectAction(projectId, updates) {
+    return await update(projectId, updates);
+}
+
+/** Delete project (soft delete bằng cách archive) */
+export async function deleteProjectAction(projectId) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const id = validate(projectIdSchema, projectId);
+        const raw = await getDetail(id, { lean: false });
+        assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+        
+        // Chỉ owner mới có quyền xóa
+        const isOwner = raw.members.some(m => m.userId === user.externalUserId && m.role === 'owner');
+        assert(isOwner, 'FORBIDDEN', 'FORBIDDEN', 403);
+
+        // Soft delete: đánh dấu là deleted
+        const updated = await updateProject(id, { isDeleted: true, deletedAt: new Date() });
+        
+        await logActivity({ 
+            actor: user.externalUserId, 
+            project: id, 
+            team: updated.team, 
+            type: 'project.deleted' 
+        });
+        
+        await revalidateMany([tags.team(updated.team), tags.project(id)]);
         return asPlainProject(updated);
     }, { requireAuth: true });
 }

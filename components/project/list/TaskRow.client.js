@@ -11,7 +11,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatTask, formatDate } from "@/data/_shared/formatters.js";
 import { updateMeta, toggleChecklist } from "@/data/task/actions/server.js";
-import { useAsyncNotifier } from "@/app/hooks/useAsyncNotifier.js";
+import { useAsyncNotifier } from "@/hooks/loading.hook";
 
 /**
  * @param {{

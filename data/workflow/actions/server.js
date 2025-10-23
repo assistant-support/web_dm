@@ -236,8 +236,145 @@ export async function getByProjectAction(payload) {
             const items = await getByProject(projectId);
 
             await revalidateMany([tags.project(projectId)].filter(Boolean));
-            return items;
+            // Serialize để tránh lỗi MongoDB ObjectId
+            return JSON.parse(JSON.stringify(items));
         },
         { requireAuth: true }
     );
+}
+
+/**
+ * ACTION: Tạo workflow cho parent task
+ * Chỉ assignee của parent task mới tạo được
+ */
+export async function createTaskWorkflow(parentTaskId, { name, nodes, edges }) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+        const Task = (await import('@/model/task.model.js')).default;
+        
+        const task = await Task.findById(parentTaskId);
+        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task.assignee === uid, 'Bạn không phải là người đứng chính task', 'FORBIDDEN', 403);
+        
+        // Check if workflow already exists
+        if (task.workflowId) {
+            const existing = await Workflow.findById(task.workflowId);
+            if (existing) {
+                existing.name = name || existing.name;
+                existing.nodes = nodes;
+                existing.edges = edges;
+                existing.version = (existing.version || 1) + 1;
+                await existing.save();
+                
+                await logActivity({
+                    actor: uid,
+                    project: task.project,
+                    task: task._id,
+                    type: 'workflow.updated',
+                    payload: { workflowId: String(existing._id) },
+                });
+                
+                await revalidateMany([tags.task(parentTaskId), wfTag(existing._id)]);
+                return JSON.parse(JSON.stringify(existing.toObject()));
+            }
+        }
+        
+        const workflow = await Workflow.create({
+            parentTask: parentTaskId,
+            project: task.project,
+            name: name || 'Workflow',
+            nodes,
+            edges,
+            version: 1,
+            isActive: true,
+        });
+        
+        task.workflowId = workflow._id;
+        await task.save();
+        
+        await logActivity({
+            actor: uid,
+            project: task.project,
+            task: task._id,
+            type: 'workflow.created',
+            payload: { workflowId: String(workflow._id) },
+        });
+        
+        await revalidateMany([tags.task(parentTaskId), wfTag(workflow._id)]);
+        return JSON.parse(JSON.stringify(workflow.toObject()));
+    }, { requireAuth: true });
+}
+
+/**
+ * ACTION: Get workflow của task
+ */
+export async function getTaskWorkflow(taskId) {
+    await connectDB();
+    return runAction(async () => {
+        const Task = (await import('@/model/task.model.js')).default;
+        const task = await Task.findById(taskId).lean();
+        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        
+        if (!task.workflowId) return null;
+        
+        const workflow = await Workflow.findById(task.workflowId).lean();
+        if (!workflow) return null;
+        
+        return JSON.parse(JSON.stringify(workflow));
+    }, { requireAuth: true });
+}
+
+/**
+ * Helper: Update workflow node status
+ * Được gọi từ approval actions
+ */
+export async function updateWorkflowNodeStatus(workflowId, nodeKey, status) {
+    await connectDB();
+    
+    const workflow = await Workflow.findById(workflowId);
+    if (!workflow) return null;
+    
+    const node = workflow.nodes.find(n => n.key === nodeKey);
+    if (!node) return workflow;
+    
+    node.status = status;
+    if (status === 'completed') {
+        node.completedAt = new Date();
+    }
+    
+    await workflow.save();
+    return workflow;
+}
+
+/**
+ * ACTION: Update node status manually
+ */
+export async function updateNodeStatus(workflowId, nodeKey, status) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+        const Task = (await import('@/model/task.model.js')).default;
+        
+        const workflow = await Workflow.findById(workflowId);
+        assert(workflow, 'Workflow không tồn tại', 'NOT_FOUND', 404);
+        
+        if (workflow.parentTask) {
+            const task = await Task.findById(workflow.parentTask);
+            assert(task?.assignee === uid, 'Bạn không có quyền cập nhật workflow', 'FORBIDDEN', 403);
+        }
+        
+        const updated = await updateWorkflowNodeStatus(workflowId, nodeKey, status);
+        
+        await logActivity({
+            actor: uid,
+            project: workflow.project,
+            task: workflow.parentTask,
+            type: 'workflow.node.updated',
+            payload: { workflowId, nodeKey, status },
+        });
+        
+        await revalidateMany([tags.task(workflow.parentTask), wfTag(workflowId)].filter(Boolean));
+        return JSON.parse(JSON.stringify(updated.toObject()));
+    }, { requireAuth: true });
 }

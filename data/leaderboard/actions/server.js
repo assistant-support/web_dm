@@ -43,7 +43,9 @@ export async function team(payload) {
             const data = await teamLeaderboardAgg({ teamId, ym, limit: limit ?? 20, cursor });
 
             await revalidateMany([tags.leaderboard(`team:${teamId}`, ym)].filter(Boolean));
-            return data;
+            
+            // Serialize để tránh lỗi MongoDB ObjectId
+            return JSON.parse(JSON.stringify(data));
         },
         { requireAuth: true }
     );
@@ -74,7 +76,9 @@ export async function project(payload) {
             await revalidateMany(
                 [tags.leaderboard(`project:${projectId}`, ym), tags.project(projectId)].filter(Boolean)
             );
-            return data;
+            
+            // Serialize để tránh lỗi MongoDB ObjectId
+            return JSON.parse(JSON.stringify(data));
         },
         { requireAuth: true }
     );

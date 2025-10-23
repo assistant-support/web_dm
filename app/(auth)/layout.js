@@ -1,32 +1,18 @@
-// app/(main)/layout.js
-// Cấu trúc: /app/(main)/* (Server Components)
-// Mục đích: Layout SSR cho vùng app chính — nạp whoami + teams/projects (lite),
-//            bọc AuthzProvider để client dùng useCan() ẩn/hiện menu theo quyền.
+// app/(auth)/layout.js
+// Layout cho vùng được bảo vệ (authenticated) 
+// Sử dụng Header và Shell đồng nhất với web_myaccount
 
-import { ReactNode } from 'react';
+import SiteHeader from '@/components/layout/header';
+import ShellGate from '@/components/layout/shell/wrap';
+import { auth } from "@/auth";
+import { AuthzProvider } from '@/context/AuthzContext.client.js';
 import { connectDB } from '@/lib/db.js';
-import { getCurrentUser } from '@/lib/request-user.js';
+import { getCurrentUserWithSync } from '@/lib/oauth-client';
 import Team from '@/model/team.model.js';
 import Project from '@/model/project.model.js';
-import Header from '@/components/layout/Header.js';
-import SideNav from '@/components/layout/SideNav.js';
-import { AuthzProvider } from '@/context/AuthzContext.client.js';
-
-/** Đọc whoami từ layer server (headers/next-auth) và chuẩn hoá */
-async function fetchWhoAmI() {
-    const u = await getCurrentUser();
-    return {
-        id: u?.externalUserId ?? null,
-        name: u?.name ?? null,
-        email: u?.email ?? null,
-        avatar: u?.avatar ?? null,
-    };
-}
 
 /**
  * Lấy danh sách team user là member (lite)
- * @param {string} uid
- * @returns {Promise<{teams: Array<{id:string,name:string,role:'MANAGER'|'MEMBER'}>, teamRoles: Record<string,string>}>}
  */
 async function fetchMyTeamsLite(uid) {
     const teams = await Team.find({ 'members.userId': uid })
@@ -45,8 +31,6 @@ async function fetchMyTeamsLite(uid) {
 
 /**
  * Lấy danh sách project user là member (lite)
- * @param {string} uid
- * @returns {Promise<{projects: Array<{id:string,name:string,role:'OWNER'|'MANAGER'|'MEMBER'}>, projectRoles: Record<string,string>}>}
  */
 async function fetchMyProjectsLite(uid) {
     const projects = await Project.find({ 'members.userId': uid })
@@ -63,16 +47,30 @@ async function fetchMyProjectsLite(uid) {
     return { projects: items, projectRoles };
 }
 
-/**
- * Root layout cho vùng (main): Header + SideNav + content
- * @param {{ children: ReactNode }}
- */
-export default async function MainLayout({ children }) {
+export default async function AuthLayout({ children }) {
+    const session = await auth();
     await connectDB();
-    const whoami = await fetchWhoAmI();
 
-    // Nếu chưa đăng nhập, middleware của bạn đã chặn từ trước — ở đây vẫn fallback an toàn
-    const uid = whoami?.id;
+    // Lấy user info từ OAuth
+    let whoami = null;
+    let uid = null;
+
+    if (session) {
+        try {
+            const user = await getCurrentUserWithSync(session);
+            whoami = {
+                id: user?.oauthSub || user?._id?.toString() || null,
+                name: user?.name || null,
+                email: user?.email || null,
+                avatar: user?.avatar || null,
+            };
+            uid = whoami.id;
+        } catch (error) {
+            console.error('AuthLayout: Error getting user:', error);
+        }
+    }
+
+    // Lấy teams và projects
     const [{ teams, teamRoles }, { projects, projectRoles }] = uid
         ? await Promise.all([fetchMyTeamsLite(uid), fetchMyProjectsLite(uid)])
         : [{ teams: [], teamRoles: {} }, { projects: [], projectRoles: {} }];
@@ -81,12 +79,13 @@ export default async function MainLayout({ children }) {
 
     return (
         <AuthzProvider value={authzValue}>
-            <div className="min-h-screen bg-slate-50">
-                <Header />
-                <div className="mx-auto max-w-screen-2xl grid grid-cols-[16rem_1fr] gap-0 px-4 py-4">
-                    <SideNav />
-                    <main className="min-h-[70vh] rounded-xl border bg-white p-4">{children}</main>
-                </div>
+            <div className="flex flex-col h-screen overflow-hidden">
+                <SiteHeader />
+                <main className="flex-1 min-h-0 overflow-hidden">
+                    <ShellGate session={session}>
+                        {children}
+                    </ShellGate>
+                </main>
             </div>
         </AuthzProvider>
     );

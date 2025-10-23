@@ -2,6 +2,7 @@
 
 import { Inter } from "next/font/google";
 import "./globals.css";
+import "./scrollbar.css";
 import AuthProvider from "@/components/AuthProvider"; // <--- 1. Import component provider
 import OverlaysRoot from "./ui/OverlaysRoot.client";
 const inter = Inter({ subsets: ["latin"] });

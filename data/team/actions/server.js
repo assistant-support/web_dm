@@ -8,6 +8,7 @@ import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
 import { isTeamManager } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
+import { asPlainTeam } from '@/lib/serialize.js';
 
 import {
     validate,
@@ -36,7 +37,47 @@ export async function listMy() {
     return await runAction(
         async ({ user }) => {
             await connectDB();
-            return await listByUser(user.externalUserId);
+            const teams = await listByUser(user.externalUserId);
+            return teams.map(asPlainTeam);
+        },
+        { requireAuth: true }
+    );
+}
+
+/** Liệt kê team mà user là manager (để chọn khi tạo project) */
+export async function listManagedTeams() {
+    'use server';
+    return await runAction(
+        async ({ user }) => {
+            await connectDB();
+            const teams = await listByUser(user.externalUserId);
+            // Chỉ lấy teams mà user là manager
+            const managedTeams = teams.filter(team => 
+                isTeamManager(team, user.externalUserId)
+            );
+            return managedTeams.map(asPlainTeam);
+        },
+        { requireAuth: true }
+    );
+}
+
+/** Lấy chi tiết team (yêu cầu là member) */
+export async function getByIdAction(teamId) {
+    'use server';
+    return await runAction(
+        async ({ user }) => {
+            await connectDB();
+            const id = validate(teamIdSchema, teamId);
+            const team = await getById(id, { lean: true });
+            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
+
+            // Check member
+            const isMember = (team.members || []).some(
+                (m) => String(m.userId) === String(user.externalUserId)
+            );
+            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+
+            return asPlainTeam(team);
         },
         { requireAuth: true }
     );
@@ -59,7 +100,7 @@ export async function create(payload) {
             });
 
             await revalidateMany([tags.team(doc._id)]);
-            return doc;
+            return asPlainTeam(doc);
         },
         { requireAuth: true }
     );
@@ -87,7 +128,7 @@ export async function update(teamId, patch) {
             });
 
             await revalidateMany([tags.team(id)]);
-            return updated;
+            return asPlainTeam(updated);
         },
         { requireAuth: true }
     );
@@ -113,7 +154,7 @@ export async function archive(teamId) {
             });
 
             await revalidateMany([tags.team(id)]);
-            return updated;
+            return asPlainTeam(updated);
         },
         { requireAuth: true }
     );
@@ -142,7 +183,7 @@ export async function addMemberAction(teamId, payload) {
             });
 
             await revalidateMany([tags.team(id), tags.userInbox(data.userId)]);
-            return updated;
+            return asPlainTeam(updated);
         },
         { requireAuth: true }
     );
@@ -171,7 +212,7 @@ export async function removeMemberAction(teamId, payload) {
             });
 
             await revalidateMany([tags.team(id), tags.userInbox(data.userId)]);
-            return updated;
+            return asPlainTeam(updated);
         },
         { requireAuth: true }
     );
@@ -200,7 +241,7 @@ export async function changeRole(teamId, payload) {
             });
 
             await revalidateMany([tags.team(id), tags.userInbox(data.userId)]);
-            return updated;
+            return asPlainTeam(updated);
         },
         { requireAuth: true }
     );

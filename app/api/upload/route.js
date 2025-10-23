@@ -7,17 +7,17 @@
 
 import { NextResponse } from 'next/server'
 import mongoose from 'mongoose'
-import Attachment from '@/model/common/attachment.model'
-import Task from '@/model/common/task.model'
-import Project from '@/model/common/project.model'
+import Attachment from '@/model/attachment.model'
+import Task from '@/model/task.model'
+import Project from '@/model/project.model'
 import { FILE_KIND, STORAGE_PROVIDER } from '@/model/common/enums'
-import { uploadToFolder, createTaskFolder } from '@/lib/drive'
-import { inProject, canEditTask, canManageProject } from '@/lib/permissions'
+import { uploadFile, createTaskFolder } from '@/lib/drive'
+import { canEditTask, canManageProject, canViewProject } from '@/lib/permissions'
 import { revalidateTag } from 'next/cache'
-import { tags } from '@/data/tags'
+import * as tags from '@/data/_shared/tags'
 import { logActivity } from '@/lib/activity'
 import { AppError } from '@/lib/errors'
-import { getCurrentUser } from '@/lib/auth-bridge'
+import { auth } from '@/auth'
 
 const OID = mongoose.Types.ObjectId
 const toOid = (v) => new OID(String(v))
@@ -54,7 +54,8 @@ function kindFromMime(mime, fallback) {
 
 export async function POST(req) {
   try {
-    const user = await getCurrentUser?.()
+    const session = await auth()
+    const user = session?.user
     if (!user) return NextResponse.json({ ok: false, message: 'UNAUTHORIZED', code: 'UNAUTHORIZED' }, { status: 401 })
 
     const form = await req.formData()
@@ -80,10 +81,11 @@ export async function POST(req) {
     let resolvedTaskId
 
     if (taskId) {
-      const task = await Task.findById(taskId)
+      const task = await Task.findById(taskId).populate('project')
       if (!task) return NextResponse.json({ ok: false, message: 'TASK_NOT_FOUND' }, { status: 404 })
 
-      const isMember = (await inProject(user, task.project)) || (await canEditTask(user, task))
+      const uid = getUserId(user)
+      const isMember = canViewProject(task.project, uid) || canEditTask(task, uid)
       if (!isMember) return NextResponse.json({ ok: false, message: 'FORBIDDEN' }, { status: 403 })
 
       resolvedProjectId = String(task.project)
@@ -100,7 +102,8 @@ export async function POST(req) {
     } else if (projectId) {
       const project = await Project.findById(projectId)
       if (!project) return NextResponse.json({ ok: false, message: 'PROJECT_NOT_FOUND' }, { status: 404 })
-      const isMember = await inProject(user, project._id)
+      const uid = getUserId(user)
+      const isMember = canViewProject(project, uid)
       if (!isMember) return NextResponse.json({ ok: false, message: 'FORBIDDEN' }, { status: 403 })
       resolvedProjectId = String(project._id)
       parentFolderId = project.driveFolderId
@@ -110,10 +113,10 @@ export async function POST(req) {
     // Chuẩn bị dữ liệu upload
     const name = file.name || 'upload'
     const mimeType = file.type || 'application/octet-stream'
-    const body = Buffer.from(await file.arrayBuffer())
+    const buffer = Buffer.from(await file.arrayBuffer())
 
     // Upload lên Drive
-    const meta = await uploadToFolder({ parentId: parentFolderId, name, mimeType, body })
+    const meta = await uploadFile({ parentId: parentFolderId, name, mime: mimeType, buffer })
     if (!meta?.id) return NextResponse.json({ ok: false, message: 'UPLOAD_FAILED' }, { status: 500 })
 
     // Xác định kind
@@ -145,7 +148,7 @@ export async function POST(req) {
       payload: { driveFileId: meta.id, kind },
     })
 
-    if (resolvedTaskId) revalidateMany(tags.attachments(resolvedTaskId), tags.task(resolvedTaskId))
+    if (resolvedTaskId) revalidateMany(tags.task(resolvedTaskId))
     else if (resolvedProjectId) revalidateMany(tags.project(resolvedProjectId))
 
     return NextResponse.json({ ok: true, data: { attachment: { id: String(attDoc._id), project: resolvedProjectId, task: resolvedTaskId, kind, driveFileId: meta.id, driveFileName: meta.name || name, driveFileMimeType: meta.mimeType || mimeType } } })

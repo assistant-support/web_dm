@@ -1,0 +1,291 @@
+// data/task/actions/subtasks.server.js
+// Mục đích: Server Actions cho Subtasks
+
+'use server';
+
+import { connectDB } from '@/lib/db.js';
+import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
+import { canManageProject } from '@/lib/permissions.js';
+import { logActivity } from '@/lib/activity.js';
+import * as tags from '@/data/_shared/tags.js';
+
+import Task from '@/model/task.model.js';
+import Project from '@/model/project.model.js';
+import { TASK_STATUS, TASK_SCOPE } from '@/model/common/enums.js';
+import { asPlainTask } from '@/lib/serialize.js';
+
+import {
+    getSubtasks,
+    getSubtaskStats,
+    canHaveSubtasks,
+    validateSubtask,
+    updateParentStatusFromSubtasks,
+    getTaskTree,
+} from '@/data/task/processors/subtasks.js';
+
+/**
+ * Get subtasks of a parent task
+ */
+export async function listSubtasks(parentTaskId) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+
+        // Verify parent task access
+        const parentTask = await Task.findById(parentTaskId).lean();
+        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+
+        // Verify project access
+        if (parentTask.scope === TASK_SCOPE.PROJECT) {
+            const project = await Project.findById(parentTask.project).lean();
+            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            // Permission check would go here
+        }
+
+        const subtasks = await getSubtasks(parentTaskId);
+        return subtasks.map(asPlainTask);
+    }, { requireAuth: true });
+}
+
+/**
+ * Get subtask stats for a parent task
+ */
+export async function getSubtaskStatsAction(parentTaskId) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const parentTask = await Task.findById(parentTaskId).lean();
+        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+
+        const stats = await getSubtaskStats(parentTaskId);
+        return stats;
+    }, { requireAuth: true });
+}
+
+/**
+ * Create a subtask
+ */
+export async function createSubtask(parentTaskId, payload) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+
+        // Get parent task
+        const parentTask = await Task.findById(parentTaskId);
+        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+
+        // Validate subtask creation
+        const validation = validateSubtask(parentTask, payload);
+        assert(validation.valid, validation.error, 'VALIDATION_ERROR', 400);
+
+        // Verify permission
+        if (parentTask.scope === TASK_SCOPE.PROJECT) {
+            const project = await Project.findById(parentTask.project);
+            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+
+            const hasManagePermission = await canManageProject(project, uid);
+            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        }
+
+        // Create subtask
+        const subtask = await Task.create({
+            ...payload,
+            parentTask: parentTaskId,
+            project: parentTask.project,
+            team: parentTask.team,
+            scope: parentTask.scope,
+            createdBy: uid,
+            status: payload.status || TASK_STATUS.DRAFT,
+            // Inherit some properties from parent if not provided
+            priority: payload.priority || parentTask.priority,
+            workType: payload.workType || parentTask.workType,
+            platforms: payload.platforms || parentTask.platforms,
+        });
+
+        await logActivity({
+            actor: uid,
+            team: parentTask.team,
+            project: parentTask.project,
+            task: subtask._id,
+            type: 'subtask.created',
+            payload: {
+                title: subtask.title,
+                parentTaskId: parentTaskId,
+                parentTaskTitle: parentTask.title,
+            },
+        });
+
+        await revalidateMany([
+            tags.project(parentTask.project),
+            tags.task(parentTaskId),
+            tags.task(subtask._id),
+        ]);
+
+        return asPlainTask(subtask.toObject());
+    }, { requireAuth: true });
+}
+
+/**
+ * Update subtask
+ */
+export async function updateSubtask(subtaskId, payload) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+
+        const subtask = await Task.findById(subtaskId);
+        assert(subtask, 'SUBTASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(subtask.parentTask, 'TASK_IS_NOT_SUBTASK', 'VALIDATION_ERROR', 400);
+
+        // Verify permission
+        if (subtask.scope === TASK_SCOPE.PROJECT) {
+            const project = await Project.findById(subtask.project);
+            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+
+            const hasManagePermission = await canManageProject(project, uid);
+            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        }
+
+        const oldStatus = subtask.status;
+
+        // Update fields
+        Object.keys(payload).forEach(key => {
+            if (payload[key] !== undefined) {
+                subtask[key] = payload[key];
+            }
+        });
+
+        // If status changed to completed, set completedAt
+        if (payload.status === TASK_STATUS.COMPLETED && oldStatus !== TASK_STATUS.COMPLETED) {
+            subtask.completedAt = new Date();
+        }
+
+        await subtask.save();
+
+        // Update parent task status if needed
+        await updateParentStatusFromSubtasks(subtask.parentTask);
+
+        await logActivity({
+            actor: uid,
+            team: subtask.team,
+            project: subtask.project,
+            task: subtask._id,
+            type: 'subtask.updated',
+            payload: { title: subtask.title },
+        });
+
+        await revalidateMany([
+            tags.project(subtask.project),
+            tags.task(subtask.parentTask),
+            tags.task(subtask._id),
+        ]);
+
+        return asPlainTask(subtask.toObject());
+    }, { requireAuth: true });
+}
+
+/**
+ * Delete subtask (soft delete)
+ */
+export async function deleteSubtask(subtaskId) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+
+        const subtask = await Task.findById(subtaskId);
+        assert(subtask, 'SUBTASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(subtask.parentTask, 'TASK_IS_NOT_SUBTASK', 'VALIDATION_ERROR', 400);
+
+        // Verify permission
+        if (subtask.scope === TASK_SCOPE.PROJECT) {
+            const project = await Project.findById(subtask.project);
+            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+
+            const hasManagePermission = await canManageProject(project, uid);
+            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        }
+
+        const parentTaskId = subtask.parentTask;
+
+        // Soft delete
+        subtask.deletedAt = new Date();
+        await subtask.save();
+
+        // Update parent status
+        await updateParentStatusFromSubtasks(parentTaskId);
+
+        await logActivity({
+            actor: uid,
+            team: subtask.team,
+            project: subtask.project,
+            task: subtask._id,
+            type: 'subtask.deleted',
+            payload: { title: subtask.title },
+        });
+
+        await revalidateMany([
+            tags.project(subtask.project),
+            tags.task(parentTaskId),
+            tags.task(subtask._id),
+        ]);
+
+        return { success: true };
+    }, { requireAuth: true });
+}
+
+/**
+ * Get task with subtasks (tree view)
+ */
+export async function getTaskWithSubtasks(taskId) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const tree = await getTaskTree(taskId);
+        assert(tree, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
+
+        // Convert to plain objects
+        const plainTree = {
+            ...asPlainTask(tree),
+            subtasks: tree.subtasks ? tree.subtasks.map(asPlainTask) : [],
+        };
+
+        return plainTree;
+    }, { requireAuth: true });
+}
+
+/**
+ * Reorder subtasks
+ */
+export async function reorderSubtasks(parentTaskId, subtaskIds) {
+    await connectDB();
+    return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+
+        const parentTask = await Task.findById(parentTaskId);
+        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+
+        // Verify permission
+        if (parentTask.scope === TASK_SCOPE.PROJECT) {
+            const project = await Project.findById(parentTask.project);
+            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+
+            const hasManagePermission = await canManageProject(project, uid);
+            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        }
+
+        // Update listOrder for each subtask
+        const updates = subtaskIds.map((subtaskId, index) => {
+            return Task.updateOne(
+                { _id: subtaskId, parentTask: parentTaskId },
+                { $set: { listOrder: index } }
+            );
+        });
+
+        await Promise.all(updates);
+
+        await revalidateMany([
+            tags.project(parentTask.project),
+            tags.task(parentTaskId),
+        ]);
+
+        return { success: true };
+    }, { requireAuth: true });
+}

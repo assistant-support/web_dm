@@ -76,6 +76,16 @@ const TaskSchema = new mongoose.Schema({
     assignee: { type: String, index: true },
     watchers: [{ type: String, index: true }],
 
+    // Collaborators: người được mời vào task (không cần là member project)
+    collaborators: [{
+        _id: false,
+        userId: { type: String, required: true, index: true }, // externalUserId
+        invitedBy: { type: String, required: true },
+        invitedAt: { type: Date, default: () => new Date() },
+        acceptedAt: { type: Date },
+        role: { type: String, enum: ['contributor', 'reviewer'], default: 'contributor' }
+    }],
+
     // Liên kết danh mục
     workType: { type: mongoose.Schema.Types.ObjectId, ref: 'WorkType', index: true },
     platforms: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Platform', index: true }],
@@ -114,6 +124,25 @@ const TaskSchema = new mongoose.Schema({
     scoredAt: { type: Date },
 
     autoBypassForSubtask: { type: Boolean, default: false },
+
+    // Progress tracking (auto-calculate từ subtasks)
+    progress: {
+        _id: false,
+        total: { type: Number, default: 0 },
+        completed: { type: Number, default: 0 },
+        inProgress: { type: Number, default: 0 },
+        percentage: { type: Number, default: 0 }, // 0-100
+    },
+
+    // Point distribution cho các subtasks
+    subtaskPointsDistribution: [{
+        _id: false,
+        subtaskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
+        assignedPoints: { type: Number, default: 0, min: 0 },
+    }],
+
+    // Workflow reference
+    workflowId: { type: mongoose.Schema.Types.ObjectId, ref: 'Workflow', index: true },
 
     checklist: [{
         _id: false,
@@ -156,8 +185,10 @@ TaskSchema.index({ scope: 1, 'public.published': 1, priority: 1, createdAt: -1 }
 TaskSchema.index({ 'public.workerId': 1, status: 1 });
 TaskSchema.index({ deletedAt: 1 }, { partialFilterExpression: { deletedAt: { $type: 'null' } } });
 
-// New: text search
+// New B0+: text search, collaborators, workflow
 TaskSchema.index({ title: 'text', description: 'text' });
+TaskSchema.index({ 'collaborators.userId': 1, deletedAt: 1 });
+TaskSchema.index({ workflowId: 1 });
 
 // New: sắp xếp/nhắc hạn
 TaskSchema.index({ project: 1, status: 1, kanbanOrder: 1 });

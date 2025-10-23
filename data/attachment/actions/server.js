@@ -17,7 +17,7 @@ import * as tags from '@/data/_shared/tags.js';
 
 import Project from '@/model/project.model.js';
 import Task from '@/model/task.model.js';
-import Attachment from '@/model/common/attachment.model.js';
+import Attachment from '@/model/attachment.model.js';
 
 import {
     canEditTask,
@@ -181,7 +181,8 @@ export async function listProjectAttachments(projectId) {
             assert(await canViewProject(project, uid), 'Bạn không có quyền xem project này', 'FORBIDDEN', 403);
 
             const items = await listByProject(projectId);
-            return items;
+            // Serialize để tránh lỗi MongoDB ObjectId
+            return JSON.parse(JSON.stringify(items));
         },
         { requireAuth: true }
     );
@@ -202,7 +203,8 @@ export async function listTaskAttachments(taskId) {
             assert(await canViewProject(project, uid), 'Bạn không có quyền xem task này', 'FORBIDDEN', 403);
 
             const items = await listByTask(taskId);
-            return items;
+            // Serialize để tránh lỗi MongoDB ObjectId
+            return JSON.parse(JSON.stringify(items));
         },
         { requireAuth: true }
     );

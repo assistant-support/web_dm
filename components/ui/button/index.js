@@ -17,7 +17,7 @@ export default function Button({
     // Định nghĩa các lớp CSS cho từng variant (màu sắc)
     const variantStyles = {
         primary: 'bg-brand text-white border-transparent hover:bg-brand-dark hover:shadow-brand',
-        secondary: 'bg-muted-100 text-body border-muted hover:bg-muted-200 focus:ring-brand',
+        secondary: 'bg-muted-100 text-body border-muted hover:bg-muted-200',
         link: 'text-brand hover:text-brand-dark border-transparent !font-medium',
     };
 

@@ -12,7 +12,7 @@ export const teamIdSchema = z.string().min(1);
 
 /** Schema tạo Project */
 export const projectCreateSchema = z.object({
-    team: z.string().min(1),
+    team: z.string().min(1).optional(), // Team là optional - dự án có thể độc lập
     name: z.string().min(2).max(160),
     code: z.string().max(40).optional(),
     description: z.string().max(1000).optional(),

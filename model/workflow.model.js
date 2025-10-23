@@ -27,6 +27,13 @@ const NodeSchema = new mongoose.Schema({
     y: { type: Number, default: 0 },
     // liên kết Task (tuỳ chọn)
     task: { type: mongoose.Schema.Types.ObjectId, ref: 'Task' },
+    // Status tracking cho node
+    status: { 
+        type: String, 
+        enum: ['pending', 'in_progress', 'completed', 'blocked'], 
+        default: 'pending' 
+    },
+    completedAt: { type: Date },
     // metadata thêm (workType/platform…)
     meta: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
 }, { _id: false });
@@ -40,6 +47,7 @@ const EdgeSchema = new mongoose.Schema({
 
 const WorkflowSchema = new mongoose.Schema({
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
+    parentTask: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', index: true }, // link tới parent task
     name: { type: String, required: true, trim: true },
     version: { type: Number, default: 1 },
     nodes: { type: [NodeSchema], default: [] },
@@ -51,5 +59,6 @@ const WorkflowSchema = new mongoose.Schema({
 });
 
 WorkflowSchema.index({ project: 1, isActive: 1 });
+WorkflowSchema.index({ parentTask: 1 });
 
 export default mongoose.models.Workflow || mongoose.model('Workflow', WorkflowSchema);

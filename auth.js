@@ -24,8 +24,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             client: { id_token_signed_response_alg: 'HS256' },
             issuer: 'http://localhost:3000',
             profile(profile) {
-                // Map về kiểu NextAuth
-                return { id: profile.sub, name: profile.name, email: profile.email };
+                return { id: profile.sub, avt: profile.avt, name: profile.name, email: profile.email, role: profile.role };
             },
         },
     ],
@@ -52,10 +51,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         async session({ session, token }) {
             session.accessToken = token.accessToken;
             session.idToken = token.idToken;
-            session.expiresAt = token.expiresAt;
-            // === BỔ SUNG: đảm bảo có session.user.id để lib/request-user.js dùng ===
             session.user = session.user || {};
             session.user.id = session.user.id || token.sub || null;
+            session.user.avt = session.user.avt || token.avt || null;
+            session.user.role = session.user.role || token.role || 'ROLE_USER';
             return session;
         },
     },

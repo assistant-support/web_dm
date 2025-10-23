@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAsyncNotifier } from '@/lib/useAsyncNotifier'
+import { useAsyncNotifier } from '@/hooks/loading.hook'
 import { createTask } from '@/data/actions.server'
 
 export default function QuickTaskForm({ projectId, defaultAssignee, onCreated }) {

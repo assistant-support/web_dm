@@ -34,6 +34,16 @@ export function task(id) {
 }
 
 /**
+ * Tag theo Workflow.
+ * @param {string|number} id
+ * @returns {string}
+ */
+export function workflow(id) {
+    const x = s(id);
+    return x ? `workflow:${x}` : '';
+}
+
+/**
  * Tag danh sách Public Tasks.
  * @returns {string}
  */

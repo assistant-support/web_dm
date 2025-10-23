@@ -11,8 +11,8 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { formatDate, formatTask } from "@/data/_shared/formatters.js";
 import { TASK_STATUS } from "@/model/common/enums.js";
-import { useAsyncNotifier } from "@/app/hooks/useAsyncNotifier.js";
-import TaskRow from "@/app/components/project/list/TaskRow.client.js";
+import { useAsyncNotifier } from "@/hooks/loading.hook";
+import TaskRow from "@/components/project/list/TaskRow.client.js";
 
 // Rank priority để sort: CRITICAL > URGENT > HIGH > MEDIUM > LOW
 const PRIORITY_RANK = {

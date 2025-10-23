@@ -1,0 +1,123 @@
+﻿/* globals.css hoáº·c file CSS chÃ­nh cá»§a báº¡n */
+@import "tailwindcss";
+
+/* =========
+  PALETTE (light)
+  ========= */
+:root {
+  --background: #f7faff;
+  --foreground: #0f172a;
+
+  /* Brand Blue */
+  --brand-50: #f2f7ff;
+  --brand-100: #e6f0ff;
+  --brand-200: #cde2ff;
+  --brand-300: #a9ccff;
+  --brand-400: #7fb2ff;
+  --brand-500: #4a97ff;
+  /* MÃ€U CHá»¦ Äáº O */
+  --brand-600: #3b86f6;
+  --brand-700: #2e73e6;
+
+  /* Neutrals */
+  --muted-50: #f1f5f9;
+  --muted-100: #e2e8f0;
+  --muted-200: #cbd5e1;
+  --muted-300: #94a3b8;
+  --muted-400: #7c8aa3;
+  --muted-500: #5b6b85;
+  --muted-600: #475569;
+  --muted-700: #334155;
+  --muted-800: #1f2937;
+  --muted-900: #0b1220;
+
+  /* ThÃªm mÃ u cho tráº¡ng thÃ¡i Lá»—i (Error/Danger) */
+  --danger-100: #fee2e2;
+  /* red-100 */
+  --danger-700: #b91c1c;
+  /* red-700 */
+
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --shadow-soft: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px;
+  --shadow-brand: 0 12px 30px -10px rgba(58, 134, 246, 0.45),
+    0 2px 6px -2px rgba(17, 24, 39, 0.08);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* =========
+  CÃC Lá»šP TIá»†N ÃCH Má»šI
+  ========= */
+.shadow-brand {
+  box-shadow: var(--shadow-brand);
+}
+
+.shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+/* Lá»›p cho mÃ u ná»n */
+.bg-brand {
+  background-color: var(--brand-500);
+}
+
+.bg-brand-light {
+  background-color: var(--brand-100);
+}
+
+.bg-danger-light {
+  background-color: var(--danger-100);
+}
+
+/* Lá»›p cho mÃ u chá»¯ */
+.text-brand {
+  color: var(--brand-500);
+}
+
+.text-heading {
+  color: var(--muted-900);
+}
+
+.text-body {
+  color: var(--muted-600);
+}
+
+.text-muted {
+  color: var(--muted-500);
+}
+
+.text-danger {
+  color: var(--danger-700);
+}
+
+/* Lá»›p cho mÃ u viá»n */
+.border-muted {
+  border-color: var(--muted-200);
+}
+
+.border-brand {
+  border-color: var(--brand-500);
+}
+
+/* Lá»›p cho tráº¡ng thÃ¡i Hover */
+.hover\:bg-brand-dark:hover {
+  background-color: var(--brand-600);
+}
+
+.hover\:text-brand-dark:hover {
+  color: var(--brand-600);
+}
+
+/* Lá»›p cho tráº¡ng thÃ¡i Focus (quan trá»ng cho input) */
+.focus\:border-brand:focus {
+  border-color: var(--brand-500);
+}
+
+.focus\:ring-brand:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(74, 151, 255, 0.4);
+}

@@ -6,7 +6,7 @@
 // - Loại bỏ { lean:true } trong *findByIdAndUpdate* (tùy chọn vì không có hiệu lực), vẫn trả về doc mới qua { new:true }.
 
 import mongoose from 'mongoose';
-import Attachment from '@/model/common/attachment.model.js';
+import Attachment from '@/model/attachment.model.js';
 import Task from '@/model/task.model.js';
 import Project from '@/model/project.model.js';
 import { STORAGE_PROVIDER } from '@/model/common/enums.js';
