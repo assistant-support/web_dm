@@ -10,14 +10,21 @@ export const teamIdSchema = z.string().min(1);
 
 /** Tạo team mới */
 export const teamCreateSchema = z.object({
-    name: z.string().min(2).max(120),
-    description: z.string().max(500).optional(),
+    name: z.string()
+        .min(1, 'Tên team là bắt buộc')
+        .transform(s => s.trim())
+        .pipe(z.string().min(2, 'Tên team phải có ít nhất 2 ký tự').max(120, 'Tên team không được vượt quá 120 ký tự')),
+    description: z.string().max(500, 'Mô tả không được vượt quá 500 ký tự').optional(),
 });
 
 /** Cập nhật thông tin team */
 export const teamUpdateSchema = z.object({
-    name: z.string().min(2).max(120).optional(),
-    description: z.string().max(500).optional(),
+    name: z.string()
+        .min(1, 'Tên team là bắt buộc')
+        .transform(s => s.trim())
+        .pipe(z.string().min(2, 'Tên team phải có ít nhất 2 ký tự').max(120, 'Tên team không được vượt quá 120 ký tự'))
+        .optional(),
+    description: z.string().max(500, 'Mô tả không được vượt quá 500 ký tự').optional(),
     isActive: z.boolean().optional(), // sẽ bị bỏ qua ở repo.updateTeam; archive dùng hàm riêng
 });
 

@@ -3,6 +3,7 @@
 
 import Team from '@/model/team.model.js';
 import { TEAM_ROLE } from '@/model/common/enums.js';
+import { createTeamFolder } from '@/lib/drive.js';
 
 /**
  * Lấy team theo id.
@@ -26,15 +27,27 @@ export async function listByUser(userId, { activeOnly = true } = {}) {
 
 /**
  * Tạo team mới, creator là manager mặc định.
+ * Tạo folder trên Google Drive cho team.
  * @param {{ name:string, description?:string }} data
  * @param {string} creatorUserId
  */
 export async function createTeam({ name, description }, creatorUserId) {
+    console.log('[repo.createTeam] START');
+    console.log('[repo.createTeam] Team name:', name);
+    console.log('[repo.createTeam] Creator:', creatorUserId);
+
+    // Tạo folder Drive cho team
+    const { id: driveFolderId, name: driveFolderName } = await createTeamFolder(name, '1N1UtEAGaSJ5uzZTD1Ht0EugRwu1M9e-X');
     const doc = await Team.create({
         name,
         description: description || undefined,
         members: [{ userId: creatorUserId, role: TEAM_ROLE.MANAGER }],
+        driveFolderId,
+        driveFolderName,
+        driveParentId: process.env.DRIVE_SHARED_DRIVE_ID || undefined,
     });
+    console.log('[repo.createTeam] Team created, _id:', doc._id);
+
     return doc.toObject();
 }
 

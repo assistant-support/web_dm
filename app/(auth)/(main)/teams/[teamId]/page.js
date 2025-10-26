@@ -24,7 +24,7 @@ export default async function TeamOverviewPage({ params }) {
     const managerCount = team.members?.filter(m => m.role === 'manager').length || 0;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 w-full flex flex-col">
             {/* Description */}
             {team.description && (
                 <div>

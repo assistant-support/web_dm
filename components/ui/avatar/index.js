@@ -79,10 +79,25 @@ export default function Avatar({
     const initials = getInitials(name);
     const bgColor = getColorFromId(userId);
 
-    // TODO: Implement image loading khi có src
-    // if (src) {
-    //     return <img src={src} alt={name} className={...} />
-    // }
+    // If has avatar URL, show image
+    if (src) {
+        return (
+            <img
+                src={src}
+                alt={name || userId}
+                className={clsx(
+                    'inline-flex items-center justify-center rounded-full object-cover',
+                    sizeClasses[size],
+                    className
+                )}
+                title={name || userId}
+                onError={(e) => {
+                    const fallback = e.target.nextElementSibling;
+                    if (fallback) fallback.style.display = 'flex';
+                }}
+            />
+        );
+    }
 
     return (
         <div

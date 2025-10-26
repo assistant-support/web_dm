@@ -3,7 +3,7 @@
 
 export default function TeamDetailLoading() {
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 w-full">
             {/* Header Skeleton */}
             <div className="bg-white rounded-lg border p-6">
                 <div className="flex items-start justify-between mb-4">

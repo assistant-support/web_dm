@@ -3,7 +3,6 @@
 import { notFound, redirect } from 'next/navigation';
 import MemberListWrapper from '@/components/project/MemberListWrapper.client';
 import { getProjectDetail } from '@/data/project/actions/list';
-import { canManageProject } from '@/lib/permissions';
 import { getCurrentUser } from '@/lib/request-user';
 
 export const dynamic = 'force-dynamic';

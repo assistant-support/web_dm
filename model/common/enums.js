@@ -16,7 +16,7 @@ export const TASK_STATUS = Object.freeze({
     CANCELLED: 'cancelled',
 });
 
-export const PRIORITY = Object.freeze({ URGENT: 'urgent', HIGH: 'high', NORMAL: 'normal', LOW: 'low' });
+export const PRIORITY = Object.freeze({ URGENT: 'urgent', HIGH: 'high', MEDIUM: 'medium', LOW: 'low' });
 export const APPROVAL_STATUS = Object.freeze({ NONE: 'none', PENDING: 'pending', APPROVED: 'approved', REJECTED: 'rejected' });
 export const STORAGE_PROVIDER = Object.freeze({ DRIVE: 'google_drive' });
 export const FILE_KIND = Object.freeze({ IMAGE: 'image', VIDEO: 'video', DOC: 'doc', OTHER: 'other' });

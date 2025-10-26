@@ -101,7 +101,7 @@ export const Textarea = forwardRef(function Textarea(
                 aria-invalid={error ? 'true' : 'false'}
                 aria-describedby={error ? `${textareaId}-error` : helperText ? `${textareaId}-helper` : undefined}
                 className={clsx(
-                    'block w-full rounded-md text-sm transition-all duration-200 focus:outline-none',
+                    'block w-full border border-gray-200 rounded-md text-sm transition-all duration-200 focus:outline-none',
                     'placeholder:text-muted-400 p-3', // Padding phù hợp cho textarea
                     error ? 'border-red-300 text-red-900 placeholder:text-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/50' : baseClasses,
                     props.disabled && 'bg-muted-50 text-muted-500 cursor-not-allowed border-muted-200'
@@ -143,7 +143,7 @@ export const Select = forwardRef(function Select(
                     aria-invalid={error ? 'true' : 'false'}
                     aria-describedby={error ? `${selectId}-error` : helperText ? `${selectId}-helper` : undefined}
                     className={clsx(
-                        'block w-full appearance-none rounded-md py-2 pl-3 pr-10 text-sm transition-all duration-200 focus:outline-none',
+                        'block w-full border border-gray-200 appearance-none rounded-md py-2 pl-3 pr-10 text-sm transition-all duration-200 focus:outline-none',
                         error ? 'border-red-300 text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/50' : baseClasses,
                         props.disabled && 'bg-muted-50 text-muted-500 cursor-not-allowed border-muted-200'
                     )}

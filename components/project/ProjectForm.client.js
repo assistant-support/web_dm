@@ -3,12 +3,13 @@
 
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { Input, Textarea, Select } from '@/components/ui/input';
 import Form, { FormActions } from '@/components/ui/form';
 import { create, update } from '@/data/project/actions/server.js';
+import { useAsyncNotifier } from '@/hooks/loading.hook';
+import Button from '@/components/ui/button';
 
 const PRIORITIES = [
     { value: '', label: 'Không' },
@@ -27,8 +28,7 @@ const PRIORITIES = [
  */
 export default function ProjectForm({ teamId, project = null, onSuccess }) {
     const router = useRouter();
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState('');
+    const { run, Overlays } = useAsyncNotifier();
 
     const isEditMode = !!project;
 
@@ -45,159 +45,157 @@ export default function ProjectForm({ teamId, project = null, onSuccess }) {
     });
 
     const onSubmit = async (data) => {
-        setIsSubmitting(true);
-        setError('');
+        // Parse tags từ string thành array
+        const tags = data.tags
+            ? data.tags.split(',').map(t => t.trim()).filter(Boolean)
+            : [];
 
-        try {
-            // Parse tags từ string thành array
-            const tags = data.tags
-                ? data.tags.split(',').map(t => t.trim()).filter(Boolean)
-                : [];
+        const payload = {
+            name: data.name.trim(),
+            code: data.code?.trim() || undefined,
+            description: data.description?.trim() || '',
+            priority: data.priority || undefined,
+            startDate: data.startDate || undefined,
+            dueDate: data.dueDate || undefined,
+            tags,
+        };
 
-            const payload = {
-                name: data.name.trim(),
-                code: data.code?.trim() || undefined,
-                description: data.description?.trim() || '',
-                priority: data.priority || undefined,
-                startDate: data.startDate || undefined,
-                dueDate: data.dueDate || undefined,
-                tags,
-            };
+        const result = await run(
+            async () => {
+                if (isEditMode) {
+                    return await update(project._id, payload);
+                } else {
+                    return await create({
+                        ...payload,
+                        team: teamId,
+                    });
+                }
+            },
+            {
+                loadingMessage: isEditMode ? 'Đang cập nhật dự án...' : 'Đang tạo dự án...',
+                successMessage: isEditMode ? 'Cập nhật dự án thành công' : 'Tạo dự án thành công',
+                errorMessage: isEditMode ? 'Cập nhật dự án thất bại' : 'Tạo dự án thất bại',
+                notify: 'success'
+            }
+        );
 
-            let result;
-            if (isEditMode) {
-                result = await update(project._id, payload);
-            } else {
-                result = await create({
-                    ...payload,
-                    team: teamId,
+        if (result?.ok !== true) {
+            if (result?.issues) {
+                Object.entries(result.issues).forEach(([field, message]) => {
+                    form.setError(field, { type: 'manual', message });
                 });
             }
+            return;
+        }
 
-            if (!result.ok) {
-                setError(result.message || 'Có lỗi xảy ra');
-                return;
-            }
-
-            if (onSuccess) {
-                onSuccess(result.data);
-            } else {
-                // Redirect về project detail page
-                router.push(`/projects/${result.data._id}`);
-                router.refresh();
-            }
-        } catch (err) {
-            console.error('Form submission error:', err);
-            setError(err.message || 'Có lỗi không mong muốn xảy ra');
-        } finally {
-            setIsSubmitting(false);
+        if (onSuccess) {
+            onSuccess(result.data);
+        } else {
+            router.push(`/projects/${result.data._id}`);
+            router.refresh();
         }
     };
 
     return (
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {error && (
-                <div className="rounded-md bg-red-50 p-4">
-                    <p className="text-sm text-red-800">{error}</p>
-                </div>
-            )}
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Tên Dự án <span className="text-red-500">*</span>
-                </label>
-                <Input 
-                    {...form.register('name', { required: 'Tên dự án là bắt buộc' })}
-                    placeholder="Nhập tên dự án" 
-                />
-                {form.formState.errors.name && (
-                    <p className="mt-1 text-sm text-red-600">{form.formState.errors.name.message}</p>
-                )}
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mã Dự án
-                </label>
-                <Input 
-                    {...form.register('code')}
-                    placeholder="VD: PROJ-001" 
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mô tả
-                </label>
-                <Textarea 
-                    {...form.register('description')}
-                    rows={4} 
-                    placeholder="Mô tả dự án..." 
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Độ ưu tiên
-                </label>
-                <Select 
-                    {...form.register('priority')}
-                    options={PRIORITIES} 
-                />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <>
+            <Overlays />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Ngày bắt đầu
+                        Tên Dự án <span className="text-red-500">*</span>
                     </label>
                     <Input 
-                        {...form.register('startDate')}
-                        type="date" 
+                        {...form.register('name', { required: 'Tên dự án là bắt buộc' })}
+                        placeholder="Nhập tên dự án" 
+                    />
+                    {form.formState.errors.name && (
+                        <p className="mt-1 text-sm text-red-600">{form.formState.errors.name.message}</p>
+                    )}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Mã Dự án
+                    </label>
+                    <Input 
+                        {...form.register('code')}
+                        placeholder="VD: PROJ-001" 
                     />
                 </div>
 
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Ngày hết hạn
+                        Mô tả
                     </label>
-                    <Input 
-                        {...form.register('dueDate')}
-                        type="date" 
+                    <Textarea 
+                        {...form.register('description')}
+                        rows={4} 
+                        placeholder="Mô tả dự án..." 
                     />
                 </div>
-            </div>
 
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Thẻ
-                </label>
-                <Input 
-                    {...form.register('tags')}
-                    placeholder="Các thẻ cách nhau bằng dấu phẩy (VD: thiết kế, frontend, khẩn cấp)" 
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                    Phân cách nhiều thẻ bằng dấu phẩy
-                </p>
-            </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Độ ưu tiên
+                    </label>
+                    <Select 
+                        {...form.register('priority')}
+                        options={PRIORITIES} 
+                    />
+                </div>
 
-            <FormActions align="right">
-                <button
-                    type="button"
-                    onClick={() => router.back()}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                    disabled={isSubmitting}
-                >
-                    Hủy
-                </button>
-                <button
-                    type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={isSubmitting}
-                >
-                    {isSubmitting ? 'Đang lưu...' : isEditMode ? 'Cập nhật Dự án' : 'Tạo Dự án'}
-                </button>
-            </FormActions>
-        </form>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Ngày bắt đầu
+                        </label>
+                        <Input 
+                            {...form.register('startDate')}
+                            type="date" 
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Ngày hết hạn
+                        </label>
+                        <Input 
+                            {...form.register('dueDate')}
+                            type="date" 
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Thẻ
+                    </label>
+                    <Input 
+                        {...form.register('tags')}
+                        placeholder="Các thẻ cách nhau bằng dấu phẩy (VD: thiết kế, frontend, khẩn cấp)" 
+                    />
+                    <p className="text-sm text-gray-500 mt-1">
+                        Phân cách nhiều thẻ bằng dấu phẩy
+                    </p>
+                </div>
+
+                <FormActions align="right">
+                    <Button
+                        type="button"
+                        onClick={() => router.back()}
+                        variant="secondary"
+                        disabled={form.formState.isSubmitting}
+                    >
+                        Hủy
+                    </Button>
+                    <Button
+                        type="submit"
+                        disabled={form.formState.isSubmitting || !form.watch('name')?.trim()}
+                    >
+                        {isEditMode ? 'Cập nhật Dự án' : 'Tạo Dự án'}
+                    </Button>
+                </FormActions>
+            </form>
+        </>
     );
 }

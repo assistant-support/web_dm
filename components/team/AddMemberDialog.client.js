@@ -3,7 +3,6 @@
 
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,6 +11,7 @@ import DialogComponent from '@/components/ui/dialog/index.js';
 import { Select } from '@/components/ui/input';
 import UserSearchSelect from '@/components/ui/UserSearchSelect.client.js';
 import { addMemberAction } from '@/data/team/actions/server.js';
+import { useAsyncNotifier } from '@/hooks/loading.hook';
 
 // Validation schema
 const addMemberSchema = z.object({
@@ -29,8 +29,7 @@ const addMemberSchema = z.object({
  */
 export default function AddMemberDialog({ teamId, existingMemberIds = [], isOpen, onClose }) {
     const router = useRouter();
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [serverError, setServerError] = useState(null);
+    const { run, Overlays } = useAsyncNotifier();
 
     const form = useForm({
         resolver: zodResolver(addMemberSchema),
@@ -41,68 +40,61 @@ export default function AddMemberDialog({ teamId, existingMemberIds = [], isOpen
     });
 
     const onSubmit = async (data) => {
-        setIsSubmitting(true);
-        setServerError(null);
-
-        try {
-            const result = await addMemberAction(teamId, data);
-            if (result.ok) {
-                form.reset();
-                onClose();
-                router.refresh();
-            } else {
-                setServerError(result.message || 'Không thể thêm member');
+        const result = await run(
+            async () => await addMemberAction(teamId, data),
+            {
+                loadingMessage: 'Đang thêm thành viên...',
+                successMessage: 'Đã thêm thành viên thành công!',
+                errorMessage: 'Không thể thêm thành viên',
+                notify: 'all',
             }
-        } catch (error) {
-            console.error('Add member error:', error);
-            setServerError('Có lỗi không mong muốn xảy ra');
-        } finally {
-            setIsSubmitting(false);
+        );
+
+        if (result?.ok) {
+            form.reset();
+            router.refresh();
+            onClose();
         }
     };
 
     const handleClose = () => {
-        if (!isSubmitting) {
+        if (!form.formState.isSubmitting) {
             form.reset();
-            setServerError(null);
             onClose();
         }
     };
 
     return (
-        <DialogComponent
-            open={isOpen}
-            onOpenChange={(open) => !open && handleClose()}
-            title="Thêm thành viên"
-            description="Chỉ có thể thêm người dùng đã đăng nhập vào hệ thống ít nhất 1 lần"
-            size="sm"
-            footer={
-                <>
-                    <button
-                        type="button"
-                        onClick={handleClose}
-                        disabled={isSubmitting}
-                        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 disabled:opacity-50"
-                    >
-                        Hủy
-                    </button>
-                    <button
-                        type="submit"
-                        onClick={form.handleSubmit(onSubmit)}
-                        disabled={isSubmitting}
-                        className="rounded-md bg-[var(--brand-600)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--brand-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 disabled:opacity-50"
-                    >
-                        {isSubmitting ? 'Đang thêm...' : 'Thêm'}
-                    </button>
-                </>
-            }
-        >
-            <form className="space-y-4">
-                {serverError && (
-                    <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                        {serverError}
-                    </div>
-                )}
+        <>
+            <Overlays />
+            <DialogComponent
+                open={isOpen}
+                onOpenChange={(open) => !open && handleClose()}
+                title="Thêm thành viên"
+                description="Chỉ có thể thêm người dùng đã đăng nhập vào hệ thống ít nhất 1 lần"
+                size="sm"
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={handleClose}
+                            disabled={form.formState.isSubmitting}
+                            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 disabled:opacity-50"
+                        >
+                            Hủy
+                        </button>
+                        <button
+                            type="submit"
+                            onClick={form.handleSubmit(onSubmit)}
+                            disabled={form.formState.isSubmitting || !form.watch('userId')}
+                            className="rounded-md bg-[var(--brand-600)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--brand-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 disabled:opacity-50"
+                        >
+                            Thêm
+                        </button>
+                    </>
+                }
+            >
+                <form className="space-y-4">
 
                 {/* User Search Select */}
                 <div>
@@ -133,7 +125,7 @@ export default function AddMemberDialog({ teamId, existingMemberIds = [], isOpen
                     label="Vai trò"
                     required
                     error={form.formState.errors.role?.message}
-                    disabled={isSubmitting}
+                    disabled={form.formState.isSubmitting}
                     {...form.register('role')}
                 >
                     <option value="member">Thành viên - Thành viên thông thường</option>
@@ -141,5 +133,6 @@ export default function AddMemberDialog({ teamId, existingMemberIds = [], isOpen
                 </Select>
             </form>
         </DialogComponent>
+        </>
     );
 }

@@ -1,20 +1,20 @@
 // components/tasks/TaskDetailHeader.client.js
-// Header component cho task detail page với breadcrumbs và actions
+// Header component cho task detail page với nút quay lại và actions
 
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+// import Link from 'next/link'; // Đã xóa
 import TaskStatusBadge from '@/components/ui/TaskStatusBadge';
 import TaskPriorityBadge from '@/components/ui/TaskPriorityBadge';
 import { updateTask, deleteTask } from '@/data/task/actions/server';
-import { 
-    ArrowLeft, 
-    Edit2, 
-    Save, 
-    X, 
-    Trash2, 
+import {
+    ArrowLeft,
+    Edit2,
+    Save,
+    X,
+    Trash2,
     Copy,
     MoreVertical
 } from 'lucide-react';
@@ -23,15 +23,14 @@ import {
  * TaskDetailHeader - Header cho task detail page
  * @param {Object} props
  * @param {Object} props.task - Task object
- * @param {string} props.projectName - Project name
  * @param {boolean} props.canManage - Permission to manage
  * @param {Function} props.onUpdate - Callback after update
  */
-export default function TaskDetailHeader({ 
-    task, 
-    projectName = '', 
+export default function TaskDetailHeader({
+    task,
+    // projectName = '', // Đã xóa
     canManage = false,
-    onUpdate 
+    onUpdate
 }) {
     const router = useRouter();
     const [isEditing, setIsEditing] = useState(false);
@@ -108,22 +107,18 @@ export default function TaskDetailHeader({
     return (
         <div className="bg-white border-b border-gray-200">
             <div className="px-6 py-4">
-                {/* Breadcrumb */}
-                <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-                    {task.project && (
-                        <>
-                            <Link
-                                href={`/projects/${task.project}`}
-                                className="hover:text-blue-600 flex items-center gap-1 transition-colors"
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                                {projectName || 'Dự án'}
-                            </Link>
-                            <span>/</span>
-                        </>
-                    )}
-                    <span className="text-gray-900 font-medium">Chi tiết nhiệm vụ</span>
-                </div>
+
+                {/* Nút quay lại */}
+                <button
+                    onClick={() => router.back()}
+                    className="flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 transition-colors mb-4 focus:outline-none"
+                >
+                    <ArrowLeft className="h-4 w-4" />
+                    Quay lại
+                </button>
+
+                {/* Breadcrumb - ĐÃ XÓA */}
+                {/* <div className="flex items-center gap-2 text-sm text-gray-600 mb-4"> ... </div> */}
 
                 {/* Title and Actions */}
                 <div className="flex items-start justify-between gap-4">
@@ -188,7 +183,7 @@ export default function TaskDetailHeader({
                                     <Edit2 className="h-4 w-4" />
                                     Sửa
                                 </button>
-                                
+
                                 {/* More menu */}
                                 <div className="relative">
                                     <button

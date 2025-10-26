@@ -29,7 +29,15 @@ const AppUserSchema = new mongoose.Schema(
         jobTitle: { type: String, trim: true },
         capacityHoursPerWeek: { type: Number, default: 40 }, // năng lực tải công việc
         color: { type: String, trim: true }, // màu hiển thị ui
-
+        uid: {
+            type: String
+        },
+        zaloname: {
+            type: String
+        },
+        zaloavt: {
+            type: String
+        },
         // Map KHÔNG chấp nhận key có dấu chấm — dùng key đã ENCODE '.' -> '__'
         preferences: {
             type: Map,

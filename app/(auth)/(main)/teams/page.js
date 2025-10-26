@@ -11,12 +11,11 @@ export const dynamic = 'force-dynamic';
 export default async function TeamsPage() {
     const user = await getCurrentUser();
     const result = await listMy();
-    console.log(result);
     
     // Handle error
     if (!result.ok) {
         return (
-            <div className="space-y-6 w-full">
+            <div className="space-y-6 w-full flex flex-col">
                 <div className="rounded-md bg-red-50 p-4">
                     <div className="flex">
                         <div className="ml-3">

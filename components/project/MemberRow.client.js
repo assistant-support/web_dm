@@ -10,6 +10,7 @@ import Select from '@/components/ui/select';
 import UserDisplay from '@/components/ui/user-display';
 import { removeMemberAction, changeRole } from '@/data/project/actions/server.js';
 import { X } from 'lucide-react';
+import { useAsyncNotifier } from '@/hooks/loading.hook';
 
 const ROLE_OPTIONS = [
     { value: 'owner', label: 'Chủ sở hữu' },
@@ -27,33 +28,33 @@ const ROLE_OPTIONS = [
  * @param {Function} props.onRefresh - Callback để refresh
  */
 export default function MemberRow({ projectId, member, canManage, onRefresh }) {
-    const [isUpdating, setIsUpdating] = useState(false);
+    const { run, Overlays } = useAsyncNotifier();
     const [error, setError] = useState('');
 
     const handleRoleChange = async (newRole) => {
         if (newRole === member.role) return;
 
-        setIsUpdating(true);
         setError('');
 
-        try {
-            const result = await changeRole(projectId, {
+        const result = await run(
+            async () => await changeRole(projectId, {
                 userId: member.userId,
                 role: newRole,
-            });
-
-            if (!result.ok) {
-                setError(result.message || 'Không thể thay đổi vai trò');
-                return;
+            }),
+            {
+                loadingMessage: 'Đang thay đổi vai trò...',
+                successMessage: 'Thay đổi vai trò thành công',
+                errorMessage: 'Thay đổi vai trò thất bại',
+                notify: 'all'
             }
+        );
 
-            if (onRefresh) onRefresh();
-        } catch (err) {
-            console.error('Role change error:', err);
-            setError(err.message || 'Có lỗi không mong muốn xảy ra');
-        } finally {
-            setIsUpdating(false);
+        if (result?.ok !== true) {
+            setError(result?.message || 'Không thể thay đổi vai trò');
+            return;
         }
+
+        if (onRefresh) onRefresh();
     };
 
     const handleRemove = async () => {
@@ -62,65 +63,66 @@ export default function MemberRow({ projectId, member, canManage, onRefresh }) {
             return;
         }
 
-        setIsUpdating(true);
         setError('');
 
-        try {
-            const result = await removeMemberAction(projectId, {
+        const result = await run(
+            async () => await removeMemberAction(projectId, {
                 userId: member.userId,
-            });
-
-            if (!result.ok) {
-                setError(result.message || 'Không thể xóa thành viên');
-                return;
+            }),
+            {
+                loadingMessage: 'Đang xóa thành viên...',
+                successMessage: 'Xóa thành viên thành công',
+                errorMessage: 'Xóa thành viên thất bại',
+                notify: 'all'
             }
+        );
 
-            if (onRefresh) onRefresh();
-        } catch (err) {
-            console.error('Remove member error:', err);
-            setError(err.message || 'Có lỗi không mong muốn xảy ra');
-        } finally {
-            setIsUpdating(false);
+        if (result?.ok !== true) {
+            setError(result?.message || 'Không thể xóa thành viên');
+            return;
         }
+
+        if (onRefresh) onRefresh();
     };
 
     return (
-        <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-                <UserDisplay
-                    userId={member.userId}
-                    showJobTitle={false}
-                    size="sm"
-                />
-                {error && (
-                    <p className="text-xs text-red-600 ml-3">{error}</p>
-                )}
-            </div>
-
-            <div className="flex items-center gap-3 ml-4">
-                {canManage ? (
-                    <Select
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(e.target.value)}
-                        options={ROLE_OPTIONS}
-                        disabled={isUpdating}
-                        className="text-sm"
+        <>
+            <Overlays />
+            <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <UserDisplay
+                        userId={member.userId}
+                        showJobTitle={false}
+                        size="sm"
                     />
-                ) : (
-                    <Badge variant="secondary">{member.role}</Badge>
-                )}
+                    {error && (
+                        <p className="text-xs text-red-600 ml-3">{error}</p>
+                    )}
+                </div>
 
-                {canManage && (
-                    <button
-                        onClick={handleRemove}
-                        disabled={isUpdating}
-                        className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
-                        title="Xóa thành viên"
-                    >
-                        <X className="h-4 w-4" />
-                    </button>
-                )}
+                <div className="flex items-center gap-3 ml-4">
+                    {canManage ? (
+                        <Select
+                            value={member.role}
+                            onChange={(e) => handleRoleChange(e.target.value)}
+                            options={ROLE_OPTIONS}
+                            className="text-sm"
+                        />
+                    ) : (
+                        <Badge variant="secondary">{member.role}</Badge>
+                    )}
+
+                    {canManage && (
+                        <button
+                            onClick={handleRemove}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                            title="Xóa thành viên"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
             </div>
-        </div>
+        </>
     );
 }

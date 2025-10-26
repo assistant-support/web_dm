@@ -2,11 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Activity, Users, Briefcase, CheckCircle2, Trophy, UserPlus, FolderPlus, Clock } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { getActivities } from '@/data/team/actions/activities.js';
-import UserDisplay from '@/components/ui/user-display';
-import { formatDistanceToNow } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import ActivityItem from '@/components/ui/activity-item';
 
 /**
  * TeamActivityLog Component
@@ -54,64 +52,6 @@ export default function TeamActivityLog({ teamId }) {
         }
     };
 
-    const getActivityIcon = (type) => {
-        if (type.includes('member')) return <UserPlus className="h-4 w-4" />;
-        if (type.includes('project')) return <FolderPlus className="h-4 w-4" />;
-        if (type.includes('task.completed') || type.includes('task.approved')) return <CheckCircle2 className="h-4 w-4" />;
-        if (type.includes('task')) return <Briefcase className="h-4 w-4" />;
-        if (type.includes('points')) return <Trophy className="h-4 w-4" />;
-        return <Activity className="h-4 w-4" />;
-    };
-
-    const getActivityColor = (type) => {
-        if (type.includes('member')) return 'bg-blue-100 text-blue-600';
-        if (type.includes('project')) return 'bg-purple-100 text-purple-600';
-        if (type.includes('task.completed') || type.includes('task.approved')) return 'bg-green-100 text-green-600';
-        if (type.includes('task')) return 'bg-orange-100 text-orange-600';
-        if (type.includes('points')) return 'bg-yellow-100 text-yellow-600';
-        return 'bg-gray-100 text-gray-600';
-    };
-
-    const getActivityDescription = (activity) => {
-        const type = activity.type;
-        const payload = activity.payload || {};
-
-        // Member activities
-        if (type === 'team.member.added') {
-            return 'đã thêm thành viên vào nhóm';
-        }
-        if (type === 'team.member.removed') {
-            return 'đã xóa thành viên khỏi nhóm';
-        }
-        if (type === 'team.member.role.changed') {
-            return `đã thay đổi vai trò thành viên thành ${payload.role === 'manager' ? 'Quản lý' : 'Thành viên'}`;
-        }
-
-        // Project activities
-        if (type === 'project.created') {
-            return 'đã tạo dự án mới';
-        }
-
-        // Task activities
-        if (type === 'task.created') {
-            return 'đã tạo task mới';
-        }
-        if (type === 'task.completed') {
-            return 'đã hoàn thành task';
-        }
-        if (type === 'task.approved') {
-            return 'đã phê duyệt task';
-        }
-
-        // Points
-        if (type === 'points.earned') {
-            return `đã nhận ${payload.points || 0} điểm`;
-        }
-
-        // Default
-        return type.replace(/\./g, ' ');
-    };
-
     if (isLoading) {
         return (
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
@@ -132,7 +72,7 @@ export default function TeamActivityLog({ teamId }) {
     }
 
     return (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden ">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
@@ -149,6 +89,7 @@ export default function TeamActivityLog({ teamId }) {
             </div>
 
             {/* Activities list */}
+            {/* Activity List */}
             <div className="divide-y divide-gray-200">
                 {activities.length === 0 ? (
                     <div className="px-6 py-12 text-center text-gray-500">
@@ -159,46 +100,10 @@ export default function TeamActivityLog({ teamId }) {
                     <>
                         {activities.map((activity) => (
                             <div key={activity._id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                                <div className="flex gap-4">
-                                    {/* Icon */}
-                                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${getActivityColor(activity.type)}`}>
-                                        {getActivityIcon(activity.type)}
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-start gap-2">
-                                            <UserDisplay
-                                                userId={activity.actor}
-                                                showJobTitle={false}
-                                                size="sm"
-                                            />
-                                            <span className="text-sm text-gray-700">
-                                                {getActivityDescription(activity)}
-                                            </span>
-                                        </div>
-
-                                        {/* Additional info */}
-                                        {activity.payload && Object.keys(activity.payload).length > 0 && (
-                                            <div className="mt-1 text-xs text-gray-500">
-                                                {activity.payload.name && (
-                                                    <span className="font-medium">"{activity.payload.name}"</span>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Timestamp */}
-                                        <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
-                                            <Clock className="h-3 w-3" />
-                                            <span>
-                                                {formatDistanceToNow(new Date(activity.createdAt), {
-                                                    addSuffix: true,
-                                                    locale: vi
-                                                })}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
+                                <ActivityItem
+                                    activity={activity}
+                                    showPayload={false}
+                                />
                             </div>
                         ))}
 

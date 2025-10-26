@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getProjectDetail } from '@/data/project/actions/list.js';
 import { getCurrentUser } from '@/lib/request-user.js';
 import ProjectTabs from '@/components/project/ProjectTabs.client.js';
-import ProjectHeader from '@/components/project/ProjectHeader.server.js';
+import ProjectHeader from '@/components/project/ProjectHeader.client.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,26 +29,19 @@ export default async function ProjectDetailLayout({ children, params }) {
     }
 
     const project = result.data;
-    
+
     // Check if user is owner or manager
     const userMember = project.members.find(m => m.userId === user.externalUserId);
     const isOwnerOrManager = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {/* Project Header */}
+        <div className='w-full flex flex-col gap-3'>
             <ProjectHeader project={project} canManage={isOwnerOrManager} />
-
-            {/* Tabs */}
-            <div className="mt-6">
-                <ProjectTabs 
-                    projectId={projectId} 
-                    isOwnerOrManager={isOwnerOrManager}
-                />
-            </div>
-
-            {/* Tab Content */}
-            <div className="mt-6">
+            <ProjectTabs
+                projectId={projectId}
+                isOwnerOrManager={isOwnerOrManager}
+            />
+            <div className="flex-1 overflow-scroll">
                 {children}
             </div>
         </div>

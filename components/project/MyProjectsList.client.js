@@ -1,7 +1,7 @@
 // components/project/MyProjectsList.client.js
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Search, Folder, Users, Calendar } from 'lucide-react';
 import { listMyProjects } from '@/data/project/actions/list.js';
@@ -11,6 +11,11 @@ export default function MyProjectsList({ initialProjects = [] }) {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [filter, setFilter] = useState('all'); // all, active, archived, team, independent
+
+    // Update projects when initialProjects changes (after create/update)
+    useEffect(() => {
+        setProjects(initialProjects);
+    }, [initialProjects]);
 
     const handleSearch = async (query) => {
         setSearchQuery(query);

@@ -34,16 +34,24 @@ export async function getDetail(projectId, { lean = true } = {}) {
 
 /**
  * Tạo Project mới + thư mục Drive tương ứng.
+ * Nếu project thuộc team, folder sẽ được tạo trong folder của team.
  * @param {object} payload - theo projectCreateSchema
  * @param {string} creatorUserId - externalUserId của người tạo (sẽ là OWNER)
  */
 export async function createProject(payload, creatorUserId) {
+    console.log('[repo.createProject] START');
+    console.log('[repo.createProject] Payload:', payload);
+    console.log('[repo.createProject] CreatorUserId:', creatorUserId);
+
+    // Xác định parent folder: Ưu tiên dùng folder của team
+    let parentFolderId = '1_guao-kh5cGjvcvLYiZVioujTkqJveEG';
     const { id: driveFolderId, name: driveFolderName } = await createProjectFolder(
         payload.name,
-        payload.driveParentId
+        parentFolderId
     );
+    console.log('[repo.createProject] Drive folder created:', driveFolderId, 'in parent:', parentFolderId);
 
-    const doc = await Project.create({
+    const docData = {
         team: payload.team,
         name: payload.name,
         code: payload.code || undefined,
@@ -54,14 +62,19 @@ export async function createProject(payload, creatorUserId) {
 
         driveFolderId,
         driveFolderName,
-        driveParentId: payload.driveParentId || process.env.DRIVE_ROOT_FOLDER_ID || undefined,
+        driveParentId: parentFolderId || undefined,
 
         members: [{ userId: creatorUserId, role: PROJECT_ROLE.OWNER }],
 
         platforms: payload.platforms || [],
         workTypes: payload.workTypes || [],
         tags: payload.tags || [],
-    });
+    };
+
+    console.log('[repo.createProject] Creating project with data:', JSON.stringify(docData, null, 2));
+    const doc = await Project.create(docData);
+    console.log('[repo.createProject] Project created, _id:', doc._id);
+    console.log('[repo.createProject] Members:', doc.members);
 
     return doc.toObject();
 }

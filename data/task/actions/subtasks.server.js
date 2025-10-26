@@ -65,6 +65,8 @@ export async function getSubtaskStatsAction(parentTaskId) {
  * Create a subtask
  */
 export async function createSubtask(parentTaskId, payload) {
+    console.log('hello');
+    
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -76,14 +78,39 @@ export async function createSubtask(parentTaskId, payload) {
         // Validate subtask creation
         const validation = validateSubtask(parentTask, payload);
         assert(validation.valid, validation.error, 'VALIDATION_ERROR', 400);
+        // Ensure assignee or createdBy of parent task can create subtasks
+        const isAssignee = parentTask.assignee && String(parentTask.assignee) === String(uid);
+        const isCreator = parentTask.createdBy && String(parentTask.createdBy) === String(uid);
+        assert(isAssignee || isCreator, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        // Verify permission
-        if (parentTask.scope === TASK_SCOPE.PROJECT) {
-            const project = await Project.findById(parentTask.project);
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-
-            const hasManagePermission = await canManageProject(project, uid);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        // [THÊM] Xác định status và assigneeConfirm cho subtask dựa trên assignee
+        let status = payload.status || TASK_STATUS.DRAFT;
+        let assigneeConfirm = { required: false };
+        let startedAt = null;
+        
+        // Nếu có assignee khi tạo subtask
+        if (payload.assignee) {
+            // Chỉ tự động IN_PROGRESS khi:
+            // 1. Parent task có assignee (parent owner)
+            // 2. Người được giao subtask chính là parent owner đó
+            if (parentTask.assignee && String(parentTask.assignee) === String(payload.assignee)) {
+                // Parent owner tự giao cho mình → Tự động IN_PROGRESS
+                status = TASK_STATUS.IN_PROGRESS;
+                startedAt = new Date();
+                assigneeConfirm = {
+                    required: false,
+                    confirmedBy: payload.assignee,
+                    confirmedAt: new Date()
+                };
+            } else {
+                // TẤT CẢ các trường hợp khác → Cần xác nhận
+                // - Giao cho người khác
+                // - Parent task chưa có assignee
+                status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                assigneeConfirm = {
+                    required: true
+                };
+            }
         }
 
         // Create subtask
@@ -94,7 +121,9 @@ export async function createSubtask(parentTaskId, payload) {
             team: parentTask.team,
             scope: parentTask.scope,
             createdBy: uid,
-            status: payload.status || TASK_STATUS.DRAFT,
+            status,
+            assigneeConfirm,
+            startedAt,
             // Inherit some properties from parent if not provided
             priority: payload.priority || parentTask.priority,
             workType: payload.workType || parentTask.workType,

@@ -12,8 +12,6 @@ export default async function TeamActivityPage({ params }) {
     if (!teamId) return notFound();
 
     return (
-        <div>
-            <TeamActivityLog teamId={teamId} />
-        </div>
+        <TeamActivityLog teamId={teamId} />
     );
 }

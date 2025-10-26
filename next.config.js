@@ -7,6 +7,12 @@ const nextConfig = {
                 hostname: 'lh3.googleusercontent.com',
                 port: '',
                 pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: 's240-ava-talk.zadn.vn',
+                port: '',
+                pathname: '/**',
             }
         ],
     },

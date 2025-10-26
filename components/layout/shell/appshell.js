@@ -17,7 +17,7 @@ export default function AppShell({ user, children }) {
                 mobileOpen={mobileOpen}
                 setMobileOpen={setMobileOpen}
             />
-            <div className="flex flex-1 flex-col min-h-0">
+            <div className="flex flex-1 flex-col min-h-0 w-full overflow-hidden">
                 <header className="flex h-16 items-center border-b bg-white px-4 md:hidden flex-none">
                     <button
                         type="button"

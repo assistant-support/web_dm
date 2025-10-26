@@ -14,6 +14,11 @@ const TeamSchema = new mongoose.Schema({
     description: String,
     members: { type: [TeamMembershipSchema], default: [] },
     isActive: { type: Boolean, default: true },
+    
+    // ---- Drive: tạo folder khi tạo team
+    driveFolderId: { type: String, index: true }, // ID folder của team trên Google Drive
+    driveFolderName: { type: String }, // Tên folder (để hiển thị)
+    driveParentId: { type: String }, // ID folder cha (thường là DRIVE_SHARED_DRIVE_ID)
 }, {
     timestamps: true,
     toJSON: { transform: (_d, r) => { delete r.__v; } }

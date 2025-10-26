@@ -19,15 +19,15 @@ import clsx from 'clsx';
  * @param {'sm'|'md'|'lg'|'xl'|'2xl'|'full'} props.size - Kích thước dialog
  * @param {string} props.className - Custom classes cho content
  */
-export default function DialogComponent({ 
-    open, 
-    onOpenChange, 
-    title, 
+export default function DialogComponent({
+    open,
+    onOpenChange,
+    title,
     description,
-    children, 
+    children,
     footer,
     size = 'md',
-    className 
+    className
 }) {
     const sizeClasses = {
         sm: 'max-w-sm',
@@ -35,13 +35,14 @@ export default function DialogComponent({
         lg: 'max-w-lg',
         xl: 'max-w-xl',
         '2xl': 'max-w-2xl',
+        '5xl': 'max-w-6xl',
         full: 'max-w-full mx-4'
     };
 
     return (
         <Dialog.Root open={open} onOpenChange={onOpenChange}>
             <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
+                <Dialog.Overlay onClick={onOpenChange} className="fixed inset-0 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
                 <Dialog.Content
                     className={clsx(
                         'fixed left-[50%] top-[50%] z-50 w-full translate-x-[-50%] translate-y-[-50%]',
@@ -54,6 +55,7 @@ export default function DialogComponent({
                         sizeClasses[size],
                         className
                     )}
+                    onPointerDownOutside={(e) => e.preventDefault()}
                 >
                     {/* Header */}
                     <div className="flex items-start justify-between border-b border-gray-200 p-6">

@@ -8,7 +8,15 @@ import KanbanCard from './KanbanCard';
 /**
  * KanbanColumn - Droppable column for Kanban board
  */
-export default function KanbanColumn({ column, tasks }) {
+export default function KanbanColumn({ 
+    column, 
+    tasks,
+    projectId,
+    canManage = false,
+    currentUserId = '',
+    users = [],
+    projectMembers = []
+}) {
     const { setNodeRef } = useDroppable({
         id: column.id,
         data: {
@@ -61,7 +69,15 @@ export default function KanbanColumn({ column, tasks }) {
                     ) : (
                         <div className="space-y-2">
                             {tasks.map((task) => (
-                                <KanbanCard key={task._id} task={task} />
+                                <KanbanCard 
+                                    key={task._id} 
+                                    task={task}
+                                    projectId={projectId}
+                                    canManage={canManage}
+                                    currentUserId={currentUserId}
+                                    users={users}
+                                    projectMembers={projectMembers}
+                                />
                             ))}
                         </div>
                     )}

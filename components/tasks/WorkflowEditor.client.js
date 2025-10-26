@@ -8,46 +8,59 @@ import { useRouter } from 'next/navigation';
 import { Save, Plus, Trash2, Move, Link as LinkIcon } from 'lucide-react';
 import TaskStatusBadge from '@/components/ui/TaskStatusBadge';
 import { createTaskWorkflow, updateWorkflowNodeStatus } from '@/data/workflow/actions/server';
+import CreateSubtaskDialog from '@/components/tasks/CreateSubtaskDialog.client';
 
 /**
  * WorkflowEditor - Simple visual workflow editor
  */
-export default function WorkflowEditor({ task, subtasks = [], workflow }) {
+export default function WorkflowEditor({ task, subtasks = [], workflow, users }) {
     const router = useRouter();
     const canvasRef = useRef(null);
     
-    // Nodes = subtasks + parent task
+    const mapType = (type) => {
+        const typeMapping = {
+            'subtask': 'task', // Replace 'subtask' with valid type 'task'
+        };
+        return typeMapping[type] || type;
+    };
+
+    const mapStatus = (status) => {
+        const statusMapping = {
+            'draft': 'in_progress', // Replace 'draft' with valid status 'in_progress'
+        };
+        return statusMapping[status] || status;
+    };
+
+    // Nodes = subtasks only (no parent task)
     const [nodes, setNodes] = useState(() => {
         if (workflow?.nodes) {
-            return workflow.nodes;
+            // Filter out parent task from existing workflow
+            return workflow.nodes.filter(node => node.type !== 'parent').map(node => ({
+                ...node,
+                type: mapType(node.type),
+                status: mapStatus(node.status),
+            }));
         }
         
-        // Initialize from subtasks
-        return [
-            {
-                key: `task-${task._id}`,
-                type: 'parent',
-                label: task.title,
-                x: 100,
-                y: 50,
-                task: task._id,
-                status: task.status,
-            },
-            ...subtasks.map((sub, idx) => ({
-                key: `subtask-${sub._id}`,
-                type: 'subtask',
-                label: sub.title,
-                x: 100 + (idx % 3) * 250,
-                y: 200 + Math.floor(idx / 3) * 150,
-                task: sub._id,
-                status: sub.status,
-            }))
-        ];
+        // Initialize from subtasks only
+        return subtasks.map((sub, idx) => ({
+            key: `subtask-${sub._id}`,
+            type: mapType('subtask'),
+            label: sub.title,
+            x: 100 + (idx % 3) * 250,
+            y: 100 + Math.floor(idx / 3) * 150,
+            task: sub._id,
+            status: mapStatus(sub.status),
+        }));
     });
 
     const [edges, setEdges] = useState(() => {
         if (workflow?.edges) {
-            return workflow.edges;
+            // Filter out edges connected to parent task
+            const parentKey = `task-${task._id}`;
+            return workflow.edges.filter(edge => 
+                edge.from !== parentKey && edge.to !== parentKey
+            );
         }
         return [];
     });
@@ -57,6 +70,9 @@ export default function WorkflowEditor({ task, subtasks = [], workflow }) {
     const [connectingFrom, setConnectingFrom] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
+    
+    // Create subtask form state
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
     // Handle node drag
     const handleNodeMouseDown = (e, nodeKey) => {
@@ -156,25 +172,32 @@ export default function WorkflowEditor({ task, subtasks = [], workflow }) {
 
     // Auto-layout (simple grid)
     const handleAutoLayout = () => {
-        const parentNode = nodes.find(n => n.type === 'parent');
         const subtaskNodes = nodes.filter(n => n.type === 'subtask');
 
         setNodes([
-            { ...parentNode, x: 400, y: 50 },
             ...subtaskNodes.map((node, idx) => ({
                 ...node,
                 x: 100 + (idx % 3) * 300,
-                y: 200 + Math.floor(idx / 3) * 180,
+                y: 100 + Math.floor(idx / 3) * 180,
             }))
         ]);
     };
-
+    console.log(users);
+    
     return (
         <div className="flex flex-col flex-1">
             {/* Toolbar */}
             <div className="bg-white border-b border-gray-200 px-4 py-3">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCreateDialogOpen(true)}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+                        >
+                            <Plus className="h-4 w-4" />
+                            Tạo task con
+                        </button>
+
                         <button
                             onClick={handleAutoLayout}
                             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -210,6 +233,27 @@ export default function WorkflowEditor({ task, subtasks = [], workflow }) {
                     </div>
                 </div>
             </div>
+
+            {/* Create Subtask Dialog */}
+            <CreateSubtaskDialog
+                open={createDialogOpen}
+                onClose={() => setCreateDialogOpen(false)}
+                parentTask={task}
+                projectId={task.project}
+                users={users} // Pass fetched users
+                onSubtaskCreated={(newSubtask) => {
+                    const newNode = {
+                        key: `subtask-${newSubtask._id}`,
+                        type: mapType('subtask'),
+                        label: newSubtask.title,
+                        x: 100 + (nodes.length % 3) * 250,
+                        y: 100 + Math.floor(nodes.length / 3) * 150,
+                        task: newSubtask._id,
+                        status: mapStatus(newSubtask.status),
+                    };
+                    setNodes((prev) => [...prev, newNode]);
+                }}
+            />
 
             {/* Canvas */}
             <div 

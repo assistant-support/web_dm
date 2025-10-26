@@ -74,7 +74,14 @@ function getColumnIdFromStatus(status) {
 /**
  * KanbanBoard - Drag and drop Kanban board for tasks
  */
-export default function KanbanBoard({ tasks: initialTasks }) {
+export default function KanbanBoard({ 
+    tasks: initialTasks,
+    projectId,
+    canManage = false,
+    currentUserId = '',
+    users = [],
+    projectMembers = []
+}) {
     const [tasks, setTasks] = useState(initialTasks);
     const [activeTask, setActiveTask] = useState(null);
 
@@ -141,11 +148,18 @@ export default function KanbanBoard({ tasks: initialTasks }) {
                     });
                 });
 
-                // Update on server
+                // Update on server (silent - no loading indicator)
                 updateTask(activeId, { status: newStatus }).catch((err) => {
                     console.error('Failed to update task status:', err);
                     // Revert on error
-                    setTasks(initialTasks);
+                    setTasks((prevTasks) => {
+                        return prevTasks.map((task) => {
+                            if (task._id === activeId) {
+                                return { ...task, status: activeTask.status };
+                            }
+                            return task;
+                        });
+                    });
                 });
             }
         } else if (isOverTask) {
@@ -167,10 +181,18 @@ export default function KanbanBoard({ tasks: initialTasks }) {
                     });
                 });
 
-                // Update on server
+                // Update on server (silent - no loading indicator)
                 updateTask(activeId, { status: newStatus }).catch((err) => {
                     console.error('Failed to update task status:', err);
-                    setTasks(initialTasks);
+                    // Revert on error
+                    setTasks((prevTasks) => {
+                        return prevTasks.map((task) => {
+                            if (task._id === activeId) {
+                                return { ...task, status: activeTask.status };
+                            }
+                            return task;
+                        });
+                    });
                 });
             } else {
                 // Reordering within same column
@@ -209,6 +231,11 @@ export default function KanbanBoard({ tasks: initialTasks }) {
                         key={column.id}
                         column={column}
                         tasks={tasksByColumn[column.id] || []}
+                        projectId={projectId}
+                        canManage={canManage}
+                        currentUserId={currentUserId}
+                        users={users}
+                        projectMembers={projectMembers}
                     />
                 ))}
             </div>

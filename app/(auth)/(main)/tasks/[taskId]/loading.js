@@ -3,7 +3,7 @@
 
 export default function TaskDetailLoading() {
     return (
-        <div className="space-y-6 animate-pulse">
+        <div className="space-y-6 animate-pulse w-full">
             {/* Breadcrumb skeleton */}
             <div className="h-5 bg-gray-200 rounded w-48"></div>
 

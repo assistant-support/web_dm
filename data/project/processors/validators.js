@@ -71,13 +71,18 @@ export const memberChangeRoleSchema = z.object({
  */
 export function validate(schema, payload) {
     try {
-        return schema.parse(payload);
+        console.log('[validator] Validating payload:', JSON.stringify(payload, null, 2));
+        const result = schema.parse(payload);
+        console.log('[validator] Validation SUCCESS');
+        return result;
     } catch (err) {
+        console.error('[validator] Validation FAILED:', err);
         const issues =
             err?.errors?.map?.((e) => ({
                 path: Array.isArray(e.path) ? e.path.join('.') : String(e.path ?? ''),
                 message: e.message,
             })) ?? [];
+        console.error('[validator] Issues:', issues);
         throw new AppError('VALIDATION', 'VALIDATION', 400, issues);
     }
 }

@@ -3,24 +3,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-    Home, 
-    FolderKanban, 
-    CheckSquare, 
-    Users, 
+import {
+    Home,
+    FolderKanban,
+    Users,
     BarChart3,
     Settings,
-    X 
+    X
 } from 'lucide-react';
-import Image from 'next/image';
-
 // Navigation items cho web Digital Marketing
 const navItems = [
     { href: '/', label: 'Công việc', icon: Home },
     { href: '/projects', label: 'Dự án', icon: FolderKanban },
     { href: '/teams', label: 'Nhóm', icon: Users },
-    { href: '/reports', label: 'Báo cáo', icon: BarChart3 },
-    { href: '/settings', label: 'Cài đặt', icon: Settings },
+    // { href: '/reports', label: 'Báo cáo', icon: BarChart3 },
+    // { href: '/settings', label: 'Cài đặt', icon: Settings },
 ];
 
 export default function Sidebar({ user, mobileOpen, setMobileOpen }) {
@@ -72,9 +69,8 @@ export default function Sidebar({ user, mobileOpen, setMobileOpen }) {
 
                             <Icon
                                 size={20}
-                                className={`transition-colors ${
-                                    isActive ? 'text-blue-600' : 'text-gray-500'
-                                }`}
+                                className={`transition-colors ${isActive ? 'text-blue-600' : 'text-gray-500'
+                                    }`}
                             />
                             <span>{item.label}</span>
                         </Link>
@@ -88,7 +84,7 @@ export default function Sidebar({ user, mobileOpen, setMobileOpen }) {
             {/* Footer info */}
             <div className="mt-4 pt-4 border-t border-gray-200">
                 <p className="text-xs text-gray-500 text-center">
-                    Digital Marketing v1.0
+                    Digital Marketing v2.0
                 </p>
             </div>
         </div>

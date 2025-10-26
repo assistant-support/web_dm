@@ -64,8 +64,8 @@ function Content({ children, position = 'bottom-left', width = 'w-auto', classNa
 
     // Định nghĩa các lớp CSS cho vị trí
     const positionClasses = {
-        'bottom-left': 'absolute top-full mt-2 left-0',
-        'bottom-right': 'absolute top-full mt-2 right-0',
+        'bottom-left': 'absolute top-full mt-2 left-0 z-1',
+        'bottom-right': 'absolute top-full mt-2 right-0 z-1',
     };
 
     if (!isOpen) {

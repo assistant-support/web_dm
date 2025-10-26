@@ -79,7 +79,7 @@ export default async function AuthLayout({ children }) {
 
     return (
         <AuthzProvider value={authzValue}>
-            <div className="flex flex-col h-screen overflow-hidden">
+            <div className="flex flex-col h-screen w-screen overflow-hidden">
                 <SiteHeader />
                 <main className="flex-1 min-h-0 overflow-hidden">
                     <ShellGate session={session}>

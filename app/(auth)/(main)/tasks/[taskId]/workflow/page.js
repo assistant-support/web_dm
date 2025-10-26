@@ -8,6 +8,7 @@ import { getTaskWorkflow } from '@/data/workflow/actions/server.js';
 import { getCurrentUser } from '@/lib/request-user.js';
 import { getDetailAction } from '@/data/project/actions/server.js';
 import { canManageProject } from '@/lib/permissions.js';
+import { listForPicker } from '@/data/appUser/actions';
 import WorkflowEditor from '@/components/tasks/WorkflowEditor.client.js';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -22,6 +23,8 @@ export default async function WorkflowEditorPage({ params }) {
 
     // Get task
     const taskResult = await getTaskDetail(taskId);
+    console.log(taskResult);
+    
     if (!taskResult.ok) return notFound();
     const task = taskResult.data;
 
@@ -32,13 +35,13 @@ export default async function WorkflowEditorPage({ params }) {
 
     // Check permissions
     let canManage = false;
-    if (task.project) {
-        const projectResult = await getDetailAction(task.project);
-        if (projectResult.ok) {
-            canManage = canManageProject(projectResult.data, user.externalUserId);
-        }
+    // Ensure projectId is a string before validation
+    const projectId = typeof task.project === 'object' ? String(task.project.$oid) : task.project;
+    const projectResult = await getDetailAction(projectId);
+    if (projectResult.ok) {
+        canManage = canManageProject(projectResult.data, user.externalUserId);
     }
-
+    canManage = task.assignee.externalUserId == user.externalUserId || canManage;
     // Must have manage permission
     if (!canManage) {
         redirect(`/tasks/${taskId}`);
@@ -52,11 +55,23 @@ export default async function WorkflowEditorPage({ params }) {
     const workflowResult = await getTaskWorkflow(taskId);
     const workflow = workflowResult.ok ? workflowResult.data : null;
 
+    // Load users for assignment
+    const usersResult = await listForPicker();
+    const users = usersResult.ok ? usersResult.data : [];
+
+    // Work types (hardcoded for now)
+    const workTypes = [
+        { _id: '1', name: 'Thiết kế', code: 'design' },
+        { _id: '2', name: 'Phát triển', code: 'development' },
+        { _id: '3', name: 'Kiểm thử', code: 'testing' },
+        { _id: '4', name: 'Triển khai', code: 'deployment' },
+    ];
+
     return (
         <div className="bg-gray-50 w-full h-full flex flex-col">
             {/* Header */}
             <div className="bg-white border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 py-4">
+                <div className="px-4 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <Link
@@ -89,6 +104,8 @@ export default async function WorkflowEditorPage({ params }) {
                 task={task}
                 subtasks={subtasks}
                 workflow={workflow}
+                users={users}
+                workTypes={workTypes}
             />
         </div>
     );

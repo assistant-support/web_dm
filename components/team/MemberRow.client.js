@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ui/dialog/index.js';
 import { removeMemberAction, changeRole } from '@/data/team/actions/server.js';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+import { useAsyncNotifier } from '@/hooks/loading.hook';
 
 /**
  * MemberRow Component
@@ -26,56 +27,52 @@ import { format } from 'date-fns';
  */
 export default function MemberRow({ member, teamId, isManager, currentUserId, stats, isLoadingStats }) {
     const router = useRouter();
+    const { run, Overlays } = useAsyncNotifier();
     const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
     const [isChangeRoleDialogOpen, setIsChangeRoleDialogOpen] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
 
     const isSelf = String(member.userId) === String(currentUserId);
     const canManage = isManager && !isSelf;
 
     const handleRemove = async () => {
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const result = await removeMemberAction(teamId, { userId: member.userId });
-            if (result.ok) {
-                setIsRemoveDialogOpen(false);
-                router.refresh();
-            } else {
-                setError(result.message || 'Không thể xóa member');
+        const result = await run(
+            async () => await removeMemberAction(teamId, { userId: member.userId }),
+            {
+                loadingMessage: 'Đang xóa thành viên...',
+                successMessage: 'Đã xóa thành viên thành công!',
+                errorMessage: 'Không thể xóa thành viên',
+                notify: 'all',
             }
-        } catch (err) {
-            console.error('Remove member error:', err);
-            setError('Có lỗi xảy ra');
-        } finally {
-            setIsLoading(false);
+        );
+
+        if (result?.ok) {
+            setIsRemoveDialogOpen(false);
+            router.refresh();
         }
     };
 
     const handleChangeRole = async (newRole) => {
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const result = await changeRole(teamId, { userId: member.userId, role: newRole });
-            if (result.ok) {
-                setIsChangeRoleDialogOpen(false);
-                router.refresh();
-            } else {
-                setError(result.message || 'Không thể thay đổi role');
+        const roleName = newRole === 'manager' ? 'Quản lý' : 'Thành viên';
+        
+        const result = await run(
+            async () => await changeRole(teamId, { userId: member.userId, role: newRole }),
+            {
+                loadingMessage: `Đang thay đổi vai trò thành ${roleName}...`,
+                successMessage: `Đã thay đổi vai trò thành ${roleName} thành công!`,
+                errorMessage: 'Không thể thay đổi vai trò',
+                notify: 'all',
             }
-        } catch (err) {
-            console.error('Change role error:', err);
-            setError('Có lỗi xảy ra');
-        } finally {
-            setIsLoading(false);
+        );
+
+        if (result?.ok) {
+            setIsChangeRoleDialogOpen(false);
+            router.refresh();
         }
     };
 
     return (
         <>
+            <Overlays />
             <div className="py-4 px-6 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                     {/* Left: User info */}
@@ -194,7 +191,6 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                 onConfirm={handleRemove}
                 confirmText="Xóa"
                 variant="danger"
-                loading={isLoading}
             />
 
             {/* Change Role Dialog */}
@@ -207,16 +203,10 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                         </div>
                         
                         <div className="p-6">
-                            {error && (
-                                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                                    {error}
-                                </div>
-                            )}
-                            
                             <div className="space-y-3">
                                 <button
                                     onClick={() => handleChangeRole('manager')}
-                                    disabled={isLoading || member.role === 'manager'}
+                                    disabled={member.role === 'manager'}
                                     className="w-full text-left px-4 py-3.5 rounded-lg border border-gray-200 hover:border-[var(--brand-600)] hover:bg-[var(--brand-50)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-white transition-all group"
                                 >
                                     <div className="flex items-center gap-3">
@@ -239,7 +229,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                                 
                                 <button
                                     onClick={() => handleChangeRole('member')}
-                                    disabled={isLoading || member.role === 'member'}
+                                    disabled={member.role === 'member'}
                                     className="w-full text-left px-4 py-3.5 rounded-lg border border-gray-200 hover:border-[var(--brand-600)] hover:bg-[var(--brand-50)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-white transition-all group"
                                 >
                                     <div className="flex items-center gap-3">
@@ -265,8 +255,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg flex justify-end gap-3">
                             <button
                                 onClick={() => setIsChangeRoleDialogOpen(false)}
-                                disabled={isLoading}
-                                className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-white disabled:opacity-50 transition-colors"
+                                className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-white transition-colors"
                             >
                                 Hủy
                             </button>

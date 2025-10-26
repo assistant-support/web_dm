@@ -1,238 +1,241 @@
 // components/tasks/CollaboratorsPanel.client.js
-// UI Panel quản lý collaborators - mời người ngoài project vào task
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { UserPlus, X, Check, Clock, Trash2 } from 'lucide-react';
+import { UserPlus, X, Check, Clock, Trash2, Send } from 'lucide-react';
 import { Select } from '@/components/ui/input';
 import UserDisplay from '@/components/ui/user-display';
+import Button from '@/components/ui/button'; // Import Button
 import {
-    inviteCollaborator,
+    inviteCollaborator, // Use default from prop if not provided
     acceptCollaboratorInvite,
-    removeCollaboratorFromTask,
+    removeCollaboratorFromTask, // Use default from prop if not provided
     listTaskCollaborators
-} from '@/data/task/actions/collaborators.server';
+} from '@/data/task/actions';
+import { useAsyncNotifier } from '@/hooks/loading.hook';
 
 /**
  * CollaboratorsPanel - Quản lý collaborators của task
- * 
+ *
  * @param {Object} props
  * @param {Object} props.task - Task object
- * @param {Array} props.users - All users available for invitation
- * @param {Array} props.projectMembers - Current project members (để exclude)
+ * @param {Object} props.users - Dữ liệu từ listForPicker { items: [], count: number }
+ * @param {Array} props.projectMembers - Current project members [{ userId: string, ... }]
  * @param {string} props.currentUserId - Current user's externalUserId
  * @param {boolean} props.canManage - Can invite/remove collaborators
+ * @param {Function} [props.onUpdate] - Callback khi có thay đổi (optional, để refresh)
+ * @param {Function} [props.inviteAction] - Action để mời (default: import)
+ * @param {Function} [props.removeAction] - Action để xóa (default: import)
  */
 export default function CollaboratorsPanel({
     task,
-    users = [],
+    users: usersProp = { items: [] }, // Expect { items: [] }
     projectMembers = [],
     currentUserId,
-    canManage = false
+    canManage = false,
+    onUpdate,
+    inviteAction = inviteCollaborator,
+    removeAction = removeCollaboratorFromTask
 }) {
-    users = users.items
-    
+    const { run } = useAsyncNotifier();
     const router = useRouter();
+
+    // Use usersProp.items safely
+    const allAvailableUsers = useMemo(() => usersProp?.items || [], [usersProp]);
+
     const [collaborators, setCollaborators] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isInviting, setIsInviting] = useState(false);
+    const [isInvitingFormVisible, setIsInvitingFormVisible] = useState(false);
     const [error, setError] = useState('');
 
     // Invite form state
-    const [selectedUserId, setSelectedUserId] = useState('');
+    const [selectedUserId, setSelectedUserId] = useState(''); // Stores 'value' (ID)
     const [selectedRole, setSelectedRole] = useState('contributor');
 
-    // Load collaborators
+    // Load collaborators initially and when task ID changes
     useEffect(() => {
         loadCollaborators();
     }, [task._id]);
 
     const loadCollaborators = async () => {
         setIsLoading(true);
+        setError('');
         try {
             const result = await listTaskCollaborators(task._id);
             if (result.ok) {
                 setCollaborators(result.data || []);
+            } else {
+                setError('Không tải được danh sách cộng tác viên.');
             }
         } catch (err) {
             console.error('Load collaborators error:', err);
+            setError('Lỗi tải danh sách cộng tác viên.');
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Filter users: exclude project members và existing collaborators
-    const availableUsers = users.filter(user => {
-        const isMember = projectMembers.some(m => m.userId === user.externalUserId);
-        const isCollaborator = collaborators.some(c => c.userId === user.externalUserId);
-        return !isMember && !isCollaborator;
-    });
+    // Filter users for the dropdown: exclude project members & existing collaborators
+    const availableUsersForDropdown = useMemo(() => {
+        return allAvailableUsers.filter(user => {
+            // Check if user.value exists in projectMembers (compare with m.userId)
+            const isMember = projectMembers.some(m => m.userId === user.value);
+            // Check if user.value exists in collaborators (compare with c.userId)
+            const isCollaborator = collaborators.some(c => c.userId === user.value);
+            return !isMember && !isCollaborator;
+        });
+    }, [allAvailableUsers, projectMembers, collaborators]);
 
-    // Handle invite
+
+    // Handle invite using useAsyncNotifier
     const handleInvite = async () => {
         if (!selectedUserId) {
             setError('Vui lòng chọn người muốn mời');
             return;
         }
-
-        setIsInviting(true);
         setError('');
 
-        try {
-            const result = await inviteCollaborator(task._id, {
-                userId: selectedUserId,
-                role: selectedRole
-            });
-
-            if (!result.ok) {
-                setError(result.message || 'Không thể mời');
-                return;
+        await run(
+            () => inviteAction(task._id, { userId: selectedUserId, role: selectedRole }),
+            {
+                loadingMessage: 'Đang gửi lời mời...',
+                successMessage: 'Đã gửi lời mời!',
+                errorMessage: 'Không thể gửi lời mời.',
+                onSuccess: () => {
+                    setSelectedUserId('');
+                    setSelectedRole('contributor');
+                    setIsInvitingFormVisible(false);
+                    loadCollaborators();
+                    if (onUpdate) onUpdate(); else router.refresh();
+                },
+                onError: (err) => setError(err.message || 'Lỗi khi gửi lời mời.')
             }
-
-            // Reset form
-            setSelectedUserId('');
-            setSelectedRole('contributor');
-            
-            // Reload
-            await loadCollaborators();
-            router.refresh();
-        } catch (err) {
-            console.error('Invite error:', err);
-            setError(err.message || 'Có lỗi xảy ra');
-        } finally {
-            setIsInviting(false);
-        }
+        );
     };
 
-    // Handle accept (for current user)
-    const handleAccept = async (collaboratorUserId) => {
-        try {
-            const result = await acceptCollaboratorInvite(task._id);
-            if (result.ok) {
-                await loadCollaborators();
-                router.refresh();
-            }
-        } catch (err) {
-            console.error('Accept error:', err);
-        }
+    // Handle accept using useAsyncNotifier
+    const handleAccept = async () => {
+        await run(() => acceptCollaboratorInvite(task._id), {
+            loadingMessage: 'Đang chấp nhận...',
+            successMessage: 'Đã chấp nhận lời mời!',
+            errorMessage: 'Không thể chấp nhận lời mời.',
+            onSuccess: () => {
+                loadCollaborators();
+                if (onUpdate) onUpdate(); else router.refresh();
+            },
+            onError: (err) => setError(err.message || 'Lỗi khi chấp nhận.')
+        });
     };
 
-    // Handle remove
-    const handleRemove = async (collaboratorUserId) => {
+    // Handle remove using useAsyncNotifier
+    const handleRemove = async (collaboratorUserIdToRemove) => {
         if (!confirm('Bạn có chắc muốn xóa người này khỏi công việc?')) return;
-
-        try {
-            const result = await removeCollaboratorFromTask(task._id, collaboratorUserId);
-            if (result.ok) {
-                await loadCollaborators();
-                router.refresh();
-            }
-        } catch (err) {
-            console.error('Remove error:', err);
-        }
+        await run(() => removeAction(task._id, collaboratorUserIdToRemove), {
+            loadingMessage: 'Đang xóa...',
+            successMessage: 'Đã xóa cộng tác viên!',
+            errorMessage: 'Không thể xóa cộng tác viên.',
+            onSuccess: () => {
+                loadCollaborators();
+                if (onUpdate) onUpdate(); else router.refresh();
+            },
+            onError: (err) => setError(err.message || 'Lỗi khi xóa.')
+        });
     };
 
     return (
-        <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-gray-900">
-                    Cộng tác viên ({collaborators.length})
-                </h3>
-                {canManage && availableUsers.length > 0 && (
+        <div className="space-y-3">
+            {/* Header with Invite Toggle */}
+            <div className="flex items-center justify-end"> {/* Moved button to right */}
+                {canManage && (
                     <button
-                        onClick={() => setIsInviting(!isInviting)}
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                        onClick={() => setIsInvitingFormVisible(!isInvitingFormVisible)}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 p-1 hover:bg-blue-50 rounded"
+                        disabled={availableUsersForDropdown.length === 0 && !isInvitingFormVisible} // Disable if no one to invite
                     >
-                        <UserPlus className="h-4 w-4 inline mr-1" />
-                        Mời người
+                        <UserPlus className="h-3.5 w-3.5" />
+                        {isInvitingFormVisible ? 'Đóng mời' : 'Mời người'}
                     </button>
                 )}
             </div>
 
-            {/* Description */}
-            <p className="text-xs text-gray-500">
-                Mời người ngoài project để cùng làm việc trên task này. Họ chỉ xem được task này, không xem toàn bộ project.
-            </p>
-
-            {/* Error */}
+            {/* Error Display */}
             {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+                <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
                     {error}
                 </div>
             )}
 
             {/* Invite Form */}
-            {canManage && isInviting && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+            {canManage && isInvitingFormVisible && (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Chọn người
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Chọn người (ngoài project)
                         </label>
                         <Select
                             value={selectedUserId}
                             onChange={(e) => setSelectedUserId(e.target.value)}
-                            disabled={isInviting}
+                            className="text-xs" // Smaller text
                         >
                             <option value="">-- Chọn người --</option>
-                            {availableUsers.map(user => (
-                                <option key={user.externalUserId} value={user.externalUserId}>
-                                    {user.fullName} ({user.email})
+                            {availableUsersForDropdown.map(user => (
+                                <option key={user.value} value={user.value}>
+                                    {user.label} {/* label includes name and email */}
                                 </option>
                             ))}
                         </Select>
+                        {availableUsersForDropdown.length === 0 && (
+                            <p className="mt-1 text-xs text-gray-500 italic">Không có người dùng nào phù hợp để mời.</p>
+                        )}
                     </div>
-
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                             Vai trò
                         </label>
                         <Select
                             value={selectedRole}
                             onChange={(e) => setSelectedRole(e.target.value)}
-                            disabled={isInviting}
+                            className="text-xs" // Smaller text
                         >
-                            <option value="contributor">Contributor - Thực hiện công việc</option>
-                            <option value="reviewer">Reviewer - Xem và góp ý</option>
+                            <option value="contributor">Contributor - Thực hiện</option>
+                            <option value="reviewer">Reviewer - Xem xét</option>
                         </Select>
                     </div>
-
-                    <div className="flex gap-2">
-                        <button
+                    <div className="flex gap-2 pt-1">
+                        <Button
+                            size="xs"
                             onClick={handleInvite}
-                            disabled={isInviting || !selectedUserId}
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                            disabled={!selectedUserId} // Only disable if no user selected
+                            icon={Send}
                         >
                             Gửi lời mời
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            size="xs"
+                            variant="secondary"
                             onClick={() => {
-                                setIsInviting(false);
+                                setIsInvitingFormVisible(false);
                                 setError('');
                                 setSelectedUserId('');
+                                // Reset role? Optional: setSelectedRole('contributor');
                             }}
-                            disabled={isInviting}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
                         >
                             Hủy
-                        </button>
+                        </Button>
                     </div>
                 </div>
             )}
 
             {/* Collaborators List */}
             {isLoading ? (
-                <div className="text-sm text-gray-500 text-center py-4">
-                    Đang tải...
-                </div>
-            ) : collaborators.length === 0 ? (
-                <div className="text-sm text-gray-500 text-center py-4 border border-gray-200 border-dashed rounded-lg">
-                    Chưa có cộng tác viên nào
+                <div className="text-xs text-gray-500 text-center py-3">Đang tải...</div>
+            ) : collaborators.length === 0 && !isInvitingFormVisible ? ( // Only show if form is also hidden
+                <div className="text-xs text-gray-500 text-center py-3 border border-gray-200 border-dashed rounded-lg">
+                    Chưa có cộng tác viên nào.
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5"> {/* Tighter spacing */}
                     {collaborators.map((collab) => {
                         const isPending = !collab.acceptedAt;
                         const isCurrentUser = collab.userId === currentUserId;
@@ -241,72 +244,69 @@ export default function CollaboratorsPanel({
                         return (
                             <div
                                 key={collab.userId}
-                                className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
+                                className="flex items-center justify-between p-1.5 pr-1 bg-white border border-gray-100 rounded hover:bg-gray-50 transition-colors" // Lighter background/border
                             >
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5 flex-1 min-w-0">
                                     {/* Status icon */}
                                     {isPending ? (
-                                        <Clock className="h-4 w-4 text-yellow-600 flex-shrink-0" />
+                                        <Clock className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" title="Chờ xác nhận" />
                                     ) : (
-                                        <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                        <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" title="Đã tham gia" />
                                     )}
-
                                     {/* User info */}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <UserDisplay 
-                                                userId={collab.userId} 
-                                                size="sm"
+                                        <div className="flex items-center gap-1">
+                                            {/* Assuming UserDisplay can handle string ID */}
+                                            <UserDisplay
+                                                userId={String(collab.userId)}
+                                                size="xs" // Smaller size
                                                 showAvatar={true}
+                                                className="text-xs font-medium text-gray-700" // Slightly darker text
                                             />
-                                            {isCurrentUser && (
-                                                <span className="text-xs text-gray-500">(Bạn)</span>
-                                            )}
+                                            {isCurrentUser && (<span className="text-xs text-gray-500">(Bạn)</span>)}
                                         </div>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="text-xs text-gray-600">
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="text-[11px] text-gray-500"> {/* Smaller text */}
                                                 {collab.role === 'contributor' ? 'Contributor' : 'Reviewer'}
                                             </span>
                                             {isPending && (
-                                                <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">
-                                                    Chờ xác nhận
-                                                </span>
+                                                <span className="text-[10px] px-1 py-0 bg-yellow-100 text-yellow-700 rounded">Chờ</span>
                                             )}
                                         </div>
                                     </div>
                                 </div>
-
                                 {/* Actions */}
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                                     {canAccept && (
-                                        <button
-                                            onClick={() => handleAccept(collab.userId)}
-                                            className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700"
+                                        <Button
+                                            size="xs" // Smaller button
+                                            variant="success_outline" // Outline style might be less intrusive
+                                            onClick={handleAccept}
+                                            icon={Check}
                                         >
                                             Chấp nhận
-                                        </button>
+                                        </Button>
                                     )}
-                                    {canManage && (
-                                        <button
+                                    {/* Optional: Reject invite button */}
+                                    {/* {canAccept && ( <Button size="xs" variant="danger_outline" onClick={() => handleRemove(collab.userId)} icon={X}>Từ chối</Button> )} */}
+
+                                    {/* Remove Button (Manager sees for others, or for pending self-invite) */}
+                                    {canManage && (!isCurrentUser || isPending) && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon_xs" // Extra small icon button
+                                            className="text-gray-400 hover:text-red-600 hover:bg-red-50"
                                             onClick={() => handleRemove(collab.userId)}
-                                            className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
-                                            title="Xóa cộng tác viên"
+                                            tooltip="Xóa" // Assuming Button supports tooltip prop
                                         >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                            <Trash2 className="h-3 w-3" /> {/* Smaller Icon */}
+                                        </Button>
                                     )}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
-            )}
-
-            {/* Info note */}
-            {collaborators.length > 0 && (
-                <p className="text-xs text-gray-500 italic">
-                    💡 Cộng tác viên chỉ xem được task này và các comment/attachment liên quan.
-                </p>
             )}
         </div>
     );

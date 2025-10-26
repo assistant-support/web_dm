@@ -52,7 +52,7 @@ export default async function ProjectOverviewPage({ params }) {
     ];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 w-full">
             {/* Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {quickStats.map((stat) => {

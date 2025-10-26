@@ -2,23 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Clock, UserPlus, FolderPlus, CheckCircle, Trophy, FileText } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { Clock } from 'lucide-react';
 import { getActivities } from '@/data/project/actions/analytics.js';
-
-const ACTIVITY_TYPES = {
-    'project.created': { icon: FolderPlus, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Tạo dự án' },
-    'project.updated': { icon: FileText, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Cập nhật dự án' },
-    'project.archived': { icon: FileText, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Lưu trữ dự án' },
-    'member.added': { icon: UserPlus, color: 'text-green-600', bg: 'bg-green-100', label: 'Thêm thành viên' },
-    'member.removed': { icon: UserPlus, color: 'text-red-600', bg: 'bg-red-100', label: 'Xóa thành viên' },
-    'member.role.changed': { icon: UserPlus, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Đổi vai trò' },
-    'task.created': { icon: FolderPlus, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Tạo task' },
-    'task.completed': { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100', label: 'Hoàn thành task' },
-    'task.updated': { icon: FileText, color: 'text-gray-600', bg: 'bg-gray-100', label: 'Cập nhật task' },
-    'points.earned': { icon: Trophy, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Nhận điểm' },
-};
+import ActivityItem from '@/components/ui/activity-item';
 
 export default function ProjectActivityLog({ projectId }) {
     const [activities, setActivities] = useState([]);
@@ -99,46 +85,13 @@ export default function ProjectActivityLog({ projectId }) {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {activities.map((activity, index) => {
-                        const config = ACTIVITY_TYPES[activity.type] || ACTIVITY_TYPES['project.updated'];
-                        const Icon = config.icon;
-
-                        return (
-                            <div key={activity._id || index} className="flex gap-4">
-                                {/* Icon */}
-                                <div className={`flex-shrink-0 w-10 h-10 rounded-full ${config.bg} flex items-center justify-center`}>
-                                    <Icon className={`h-5 w-5 ${config.color}`} />
-                                </div>
-
-                                {/* Content */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1">
-                                            <p className="text-sm text-gray-900">
-                                                <span className="font-medium">{activity.actor}</span>
-                                                {' '}
-                                                <span className="text-gray-600">{config.label}</span>
-                                                {activity.payload?.name && (
-                                                    <span className="font-medium"> "{activity.payload.name}"</span>
-                                                )}
-                                            </p>
-                                            {activity.payload && Object.keys(activity.payload).length > 1 && (
-                                                <p className="text-xs text-gray-500 mt-0.5">
-                                                    {JSON.stringify(activity.payload)}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <span className="text-xs text-gray-500 flex-shrink-0">
-                                            {formatDistanceToNow(new Date(activity.createdAt), { 
-                                                addSuffix: true, 
-                                                locale: vi 
-                                            })}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
+                    {activities.map((activity, index) => (
+                        <ActivityItem
+                            key={activity._id || index}
+                            activity={activity}
+                            showPayload={false}
+                        />
+                    ))}
                 </div>
             )}
 

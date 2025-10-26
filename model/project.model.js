@@ -49,4 +49,10 @@ ProjectSchema.index({ team: 1, isActive: 1 });
 // Tìm các project chứa user
 ProjectSchema.index({ 'members.userId': 1 });
 
-export default mongoose.models.Project || mongoose.model('Project', ProjectSchema);
+// Force delete cached model to pick up new enum values
+if (mongoose.models.Project) {
+    delete mongoose.models.Project;
+    delete mongoose.connection.models.Project;
+}
+
+export default mongoose.model('Project', ProjectSchema);

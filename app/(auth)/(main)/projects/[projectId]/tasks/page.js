@@ -1,16 +1,13 @@
-// app/(auth)/(main)/projects/[projectId]/tasks/page.js
-
 import { notFound, redirect } from 'next/navigation';
-import { unstable_cache } from 'next/cache';
 import TaskBoard from '@/components/tasks/TaskBoard.client';
 import { getProjectDetail } from '@/data/project/actions/list';
 import { listByProject } from '@/data/task/actions/server';
 import { getCurrentUser } from '@/lib/request-user';
+import { listForPicker } from '@/data/appUser/actions';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0; // Always revalidate
+export const revalidate = 0; 
 
-// Main page component
 export default async function ProjectTasksPage({ params }) {
     const { projectId } = await params;
 
@@ -25,7 +22,7 @@ export default async function ProjectTasksPage({ params }) {
     if (!result.ok) {
         notFound();
     }
-    
+
     const project = result.data;
     if (!project) {
         notFound();
@@ -39,25 +36,23 @@ export default async function ProjectTasksPage({ params }) {
     const tasksResult = await listByProject(projectId, {});
     const initialTasks = tasksResult.ok ? tasksResult.data : [];
 
+    // Get all users for assignee selection
+    const usersResult = await listForPicker();
+    const allUsers = usersResult.ok ? usersResult.data.items : [];
+    const users = allUsers.map(u => ({
+        value: u.value,
+        label: u.email,
+        name: u.name
+    }));
     return (
         <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                        Quản lý công việc trong dự án
-                    </p>
-                </div>
-            </div>
-
-            {/* Task Board */}
             <TaskBoard
                 projectId={projectId}
                 canManage={canManage}
                 currentUserId={user.externalUserId}
                 initialTasks={initialTasks}
                 projectMembers={project.members || []}
+                users={users}
             />
         </div>
     );

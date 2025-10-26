@@ -1,134 +1,208 @@
 // app/(auth)/(main)/tasks/[taskId]/page.js
-// Mục đích: Trang chi tiết task (SSR)
+// Mục đích: Trang chi tiết task (SSR) - Đã cập nhật layout cuộn độc lập
 
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import { getTaskDetail } from '@/data/task/actions/server.js';
-import { getDetailAction } from '@/data/project/actions/server.js';
 import { getCurrentUser } from '@/lib/request-user.js';
 import { canManageProject } from '@/lib/permissions.js';
+// Actions
+import { getTaskDetail, listSubtasks } from '@/data/task/actions';
+import { getDetailAction as getProjectDetail } from '@/data/project/actions/server.js';
 import { listForPicker } from '@/data/appUser/actions';
-import TaskDetail from '@/components/tasks/TaskDetail.client.js';
-import { ArrowLeft } from 'lucide-react';
+import { getTaskWorkflow } from '@/data/workflow/actions/server.js';
+import { listByTaskAction, remove as removeComment } from '@/data/comment/actions/server';
+
+// [THÊM] Import hàm lấy chi tiết file từ Drive
+import { getFileMeta } from '@/lib/drive';
+
+// Placeholders
+const getWorkTypes = async () => Promise.resolve([]);
+const getPlatforms = async () => Promise.resolve([]);
+
+// Components MỚI
+import TaskHeader from './ui/TaskHeader.client';
+import TaskMainContent from './ui/TaskMainContent.client';
+import TaskSidebar from './ui/TaskSidebar.client';
+import { AlertTriangle } from 'lucide-react';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
+// Helper for error display (Giữ nguyên)
+const ErrorDisplay = ({ message }) => (
+    <div className="rounded-md bg-red-50 p-4">
+        <div className="flex">
+            <div className="flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-red-400" aria-hidden="true" />
+            </div>
+            <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Lỗi tải dữ liệu</h3>
+                <div className="mt-2 text-sm text-red-700">
+                    <p>{message || 'Không thể tải chi tiết nhiệm vụ.'}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 export default async function TaskDetailPage({ params }) {
-    // Await params theo Next.js 15
     const { taskId } = await params;
     if (!taskId) return notFound();
 
-    const user = await getCurrentUser();
-    
-    // Get task detail
-    const taskResult = await getTaskDetail(taskId);
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+        return <ErrorDisplay message="Người dùng chưa được xác thực." />;
+    }
+
+    // --- [SỬA] BƯỚC 1: Fetch dữ liệu chính (Task) và các dữ liệu độc lập ---
+    // (Bỏ attachmentsResult ra khỏi Promise.all ban đầu)
+    const [
+        taskResult,
+        usersResult,
+        workTypes,
+        platforms,
+        workflowResult,
+        commentsResult,
+    ] = await Promise.all([
+        getTaskDetail(taskId),
+        listForPicker(),
+        getWorkTypes(),
+        getPlatforms(),
+        getTaskWorkflow(taskId),
+        listByTaskAction({ taskId }),
+    ]);
+
+    // --- Handle Task Fetching Error ---
     if (!taskResult.ok) {
         if (taskResult.code === 'NOT_FOUND' || taskResult.message?.includes('NOT_FOUND')) {
             return notFound();
         }
-        return (
-            <div className="space-y-6">
-                <div className="rounded-md bg-red-50 p-4">
-                    <div className="flex">
-                        <div className="ml-3">
-                            <h3 className="text-sm font-medium text-red-800">Error</h3>
-                            <div className="mt-2 text-sm text-red-700">
-                                {taskResult.message || 'Failed to load task'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        return <ErrorDisplay message={taskResult.message} />;
+    }
+
+    // Đã có task (với task.fileIds)
+    const task = JSON.parse(JSON.stringify(taskResult.data));
+    const workflow = workflowResult || null;
+    const comments = commentsResult.ok ? commentsResult.data : [];
+
+
+    // --- [THÊM] BƯỚC 2: Dùng task.fileIds để lấy chi tiết Attachments ---
+    let attachments = [];
+    if (task.fileIds && task.fileIds.length > 0) {
+
+        // Tạo một mảng các promise để gọi getFileMeta cho mỗi fileId
+        const filePromises = task.fileIds.map(fileId =>
+            getFileMeta(fileId).catch(err => {
+                // Nếu 1 file bị lỗi (VD: bị xóa), không làm hỏng cả trang
+                console.error(`[TaskPage] Lỗi không thể lấy meta cho file: ${fileId}`, err.message);
+                return null;
+            })
         );
+
+        // Chờ tất cả các promise hoàn thành và lọc bỏ những file bị lỗi (null)
+        attachments = (await Promise.all(filePromises)).filter(Boolean);
     }
+    // Giờ đây, 'attachments' là mảng đối tượng file đầy đủ [{ id, name, mimeType, webViewLink, ... }]
 
-    const task = taskResult.data;
 
-    // Get project info for permissions
-    let hasManagePermission = false;
-    let projectName = '';
-    let projectMembers = [];
+    // --- Standardize User Data (Giữ nguyên) ---
+    const allUsersWithDetails = usersResult.ok
+        ? usersResult.data.items.map(u => ({
+            id: u.value,
+            name: u.name,
+            email: u.email,
+            avatarUrl: u.avatar,
+            label: u.label,
+            jobTitle: u.jobTitle,
+            color: u.color,
+        }))
+        : [];
+    const usersForPickerProp = usersResult.ok ? usersResult.data : { items: [], count: 0 };
+    console.log(commentsResult);
 
-    if (task.project) {
-        const projectResult = await getDetailAction(task.project);
-        if (projectResult.ok) {
-            const project = projectResult.data;
-            projectName = project.name;
-            hasManagePermission = canManageProject(project, user.externalUserId);
-            projectMembers = project.team?.members || [];
-        }
-    }
-
-    // Load users for subtask creation
-    const usersResult = await listForPicker();
-    const users = usersResult.ok ? usersResult.data : [];
-
-    // If this is a subtask, load parent task to get parent assignee
+    // --- Fetch Parent Task, Subtasks (Sử dụng task đã được populate) ---
+    const project = task.project; // Lấy project object
+    const team = task.team; // Lấy team object
     let parentTask = null;
-    if (task.parentTask) {
-        const parentResult = await getTaskDetail(task.parentTask);
-        if (parentResult.ok) {
-            parentTask = parentResult.data;
-        }
-    }
-
-    // If this is a parent task, load subtasks for notifications
     let subtasks = [];
-    if (!task.parentTask) {
-        const { listSubtasks } = await import('@/data/task/actions/subtasks.server');
-        const subtasksResult = await listSubtasks(task._id);
-        if (subtasksResult.ok) {
-            subtasks = subtasksResult.data || [];
-        }
-    }
 
-    // TODO: Replace with actual data loaders when available
-    const workTypes = [
-        { _id: '1', name: 'Design', code: 'design' },
-        { _id: '2', name: 'Development', code: 'dev' },
-        { _id: '3', name: 'Content', code: 'content' },
-        { _id: '4', name: 'QA', code: 'qa' },
-    ];
-    const platforms = [
-        { _id: '1', name: 'Facebook', code: 'facebook' },
-        { _id: '2', name: 'Instagram', code: 'instagram' },
-        { _id: '3', name: 'TikTok', code: 'tiktok' },
-        { _id: '4', name: 'Website', code: 'website' },
-    ];
+    const parentTaskPromise = task.parentTask?._id
+        ? getTaskDetail(task.parentTask._id).then(res => res.ok ? JSON.parse(JSON.stringify(res.data)) : null)
+        : Promise.resolve(null);
 
+    const subtasksPromise = !task.parentTask?._id
+        ? listSubtasks(task._id).then(res => res.ok ? JSON.parse(JSON.stringify(res.data || [])) : [])
+        : Promise.resolve([]);
+
+    const [fetchedParentTask, fetchedSubtasks] = await Promise.all([
+        parentTaskPromise,
+        subtasksPromise
+    ]);
+
+    parentTask = fetchedParentTask;
+    subtasks = fetchedSubtasks;
+
+    // --- Calculate Permissions & Prepare Props (Giữ nguyên) ---
+    const currentUserId = currentUser.externalUserId;
+    const hasManagePermission = project ? canManageProject(project, currentUserId) : false;
+    const isAssignee = task.assignee?.externalUserId === currentUserId;
+    const isCreator = task.createdBy?.externalUserId === currentUserId;
+    const canEditTask = hasManagePermission || isCreator;
+    const projectName = project?.name || '';
+    const projectMembers = team?.members || [];
+
+    // --- Render the Client Component ---
     return (
-        <div className="space-y-6">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-                {task.project && (
-                    <>
-                        <Link
-                            href={`/projects/${task.project}`}
-                            className="hover:text-indigo-600 flex items-center gap-1"
-                        >
-                            <ArrowLeft className="h-4 w-4" />
-                            {projectName || 'Back to Project'}
-                        </Link>
-                        <span>/</span>
-                    </>
-                )}
-                <span className="text-gray-900">Task Detail</span>
-            </div>
-
-            {/* Task Detail */}
-            <TaskDetail 
+        <div className="flex flex-col h-full overflow-hidden w-full">
+            {/* 1. Header Component */}
+            <TaskHeader
                 task={task}
                 parentTask={parentTask}
                 projectName={projectName}
                 canManage={hasManagePermission}
-                currentUser={user}
-                users={users}
+                canEditTask={canEditTask}
+                isAssignee={isAssignee}
+                isCreator={isCreator}
+                currentUser={currentUser}
+                allUsersWithDetails={allUsersWithDetails}
                 projectMembers={projectMembers}
+                users={usersForPickerProp}
                 workTypes={workTypes}
                 platforms={platforms}
-                subtasks={subtasks}
+                subtasksCount={subtasks.length}
             />
+            {/* 2. Main Content & Sidebar */}
+            <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden px-4 sm:px-6 lg:px-8 pb-6 pt-6 bg-gray-50/50">
+                <div className="flex-1 min-w-0 overflow-y-auto h-full custom-scrollbar">
+                    <TaskMainContent
+                        task={task}
+                        subtasks={subtasks}
+                        workflow={workflow.data}
+                        currentUser={currentUser}
+                        canManage={hasManagePermission}
+                        isAssignee={isAssignee}
+                        isCreator={isCreator}
+                        allUsersWithDetails={allUsersWithDetails}
+                        projectMembers={projectMembers}
+                        users={usersForPickerProp}
+                        workTypes={workTypes}
+                        platforms={platforms}
+                        comments={comments}
+
+                        // [SỬA] Truyền mảng attachments đầy đủ xuống
+                        attachments={attachments}
+                    />
+                </div>
+                <div className="lg:w-80 xl:w-96 flex-shrink-0 overflow-y-auto h-full custom-scrollbar">
+                    <TaskSidebar
+                        task={task}
+                        allUsersWithDetails={allUsersWithDetails}
+                        workTypes={workTypes}
+                        platforms={platforms}
+                        currentUser={currentUser}
+                        canManage={hasManagePermission}
+                    />
+                </div>
+            </div>
         </div>
     );
 }

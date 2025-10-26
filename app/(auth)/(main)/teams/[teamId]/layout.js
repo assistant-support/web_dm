@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { getByIdAction } from '@/data/team/actions/server.js';
 import { getCurrentUser } from '@/lib/request-user.js';
 import { isTeamManager } from '@/lib/permissions.js';
-import TeamHeader from '@/components/team/TeamHeader.server.js';
+import TeamHeader from '@/components/team/TeamHeader.client.js';
 import TeamTabs from '@/components/team/TeamTabs.client.js';
 
 // Force dynamic rendering
@@ -24,7 +24,7 @@ export default async function TeamLayout({ children, params }) {
             return notFound();
         }
         return (
-            <div className="space-y-6">
+            <div className="space-y-6 w-full">
                 <div className="rounded-md bg-red-50 p-4">
                     <div className="flex">
                         <div className="ml-3">
@@ -47,16 +47,16 @@ export default async function TeamLayout({ children, params }) {
     const userIsManager = isTeamManager(team, currentUserId);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 w-full flex flex-col">
             {/* Team Header */}
             <TeamHeader team={team} isManager={userIsManager} />
 
             {/* Tab Navigation */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col flex-1">
                 <TeamTabs teamId={team._id} isManager={userIsManager} />
-                
+
                 {/* Tab Content */}
-                <div className="p-6">
+                <div className="p-6 overflow-scroll flex-1">
                     {children}
                 </div>
             </div>

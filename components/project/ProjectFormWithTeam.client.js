@@ -75,6 +75,8 @@ export default function ProjectFormWithTeam({ onSuccess }) {
         setServerError(null);
 
         try {
+            console.log('[ProjectForm] Form data:', data);
+            
             // Parse tags
             const tags = data.tags
                 ? data.tags.split(',').map(t => t.trim()).filter(Boolean)
@@ -91,9 +93,12 @@ export default function ProjectFormWithTeam({ onSuccess }) {
                 tags,
             };
 
+            console.log('[ProjectForm] Payload to send:', payload);
             const result = await createProject(payload);
+            console.log('[ProjectForm] Result:', result);
 
             if (!result.ok) {
+                console.error('[ProjectForm] Error:', result);
                 setServerError(result.message || 'Không thể tạo dự án');
                 return;
             }
@@ -105,7 +110,7 @@ export default function ProjectFormWithTeam({ onSuccess }) {
                 router.refresh();
             }
         } catch (error) {
-            console.error('Create project error:', error);
+            console.error('[ProjectForm] Create project error:', error);
             setServerError('Có lỗi không mong muốn xảy ra');
         } finally {
             setIsSubmitting(false);

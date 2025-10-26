@@ -1,4 +1,4 @@
-// cấu trúc thư mục hiện tại: /app/hooks/loading.hook.js
+// cấu trúc thư mục hiện tại: /hooks/loading.hook.js
 // Tác dụng file: Hook client `useAsyncNotifier` giúp chạy async có overlay Loading + Notification.
 // - Cung cấp component `Overlays` để mount 1 lần trong layout.
 // - Hàm `run(asyncFn, { notify })` để thực thi và tự hiển thị thông báo thành công/thất bại.
@@ -25,7 +25,7 @@ function normalizeError(err) {
 export function useAsyncNotifier(options = {}) {
     const {
         theme = 'dark',
-        zIndex = 9999,
+        zIndex = 10000,
         defaultLoadingMessage = 'Đang xử lý...',
         defaultAutoCloseMsSuccess = 0,
         defaultAutoCloseMsError = 0,
@@ -162,7 +162,10 @@ export function useAsyncNotifier(options = {}) {
             } else {
                 if (wantErrorNoti) {
                     const desc = result.issues?.length
-                        ? result.issues.map((i) => (i.field ? `${i.field}: ${i.message}` : i.message)).join(' • ')
+                        ? result.issues.map((i) => {
+                            const field = i.field || i.path;
+                            return field ? `${field}: ${i.message}` : i.message;
+                        }).join(' • ')
                         : result.code
                             ? `Mã: ${result.code}`
                             : '';

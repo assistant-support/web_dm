@@ -22,6 +22,7 @@ import {
     Trophy
 } from 'lucide-react';
 import { userMonthly } from '@/data/report/actions/server';
+import ActivityItem from '@/components/ui/activity-item';
 
 /**
  * PersonalReportClient - Dashboard báo cáo cá nhân
@@ -401,24 +402,13 @@ export default function PersonalReportClient({
                                 Hoạt động gần đây
                             </h3>
                             {activities.length > 0 ? (
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                     {activities.map((activity) => (
-                                        <div
+                                        <ActivityItem
                                             key={activity._id}
-                                            className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                                        >
-                                            <div className="p-2 bg-blue-100 rounded-lg">
-                                                <Activity className="w-4 h-4 text-blue-600" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium text-gray-900">
-                                                    {activity.type}
-                                                </p>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    {format(new Date(activity.createdAt), 'dd/MM/yyyy HH:mm', { locale: vi })}
-                                                </p>
-                                            </div>
-                                        </div>
+                                            activity={activity}
+                                            showPayload={false}
+                                        />
                                     ))}
                                 </div>
                             ) : (

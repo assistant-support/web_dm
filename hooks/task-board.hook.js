@@ -9,6 +9,8 @@ import {
     assignTask,
     updateTaskStatus,
     updateTask,
+    deleteTask,
+    createSubtask,
 } from '@/data/task/actions/server'
 
 export function useTaskBoardActions() {
@@ -96,5 +98,19 @@ export function useTaskBoardActions() {
                 })
             )
         },
+
+        async onDelete(taskId) {
+            return withRefresh(() =>
+                run(() => deleteTask(taskId), {
+                    successMessage: 'Đã xoá task',
+                    errorMessage: 'Xoá task thất bại',
+                })
+            )
+        },
+
+        // onEdit và onAddSubtask sẽ được xử lý ở component UI level
+        // Không cần async action vì chỉ mở dialog
+        onEdit: null,
+        onAddSubtask: null,
     }
 }

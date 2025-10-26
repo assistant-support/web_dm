@@ -19,6 +19,7 @@ import * as tags from '@/data/_shared/tags.js';
 import Project from '@/model/project.model.js';
 import Task from '@/model/task.model.js';
 import Comment from '@/model/comment.model.js';
+import User from '@/model/user.model.js';
 
 import { canViewProject, canManageProject } from '@/lib/permissions.js';
 import { PROJECT_ROLE } from '@/model/common/enums.js';
@@ -121,7 +122,6 @@ export async function listByTaskAction(payload) {
         async ({ user }) => {
             const input = validate(commentListByTaskSchema, payload);
             const uid = user.externalUserId;
-
             const task = await Task.findById(input.taskId).lean();
             assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
 
@@ -134,8 +134,26 @@ export async function listByTaskAction(payload) {
                 limit: input.limit ?? 30,
                 beforeId: input.beforeId,
             });
+
+            // Populate author details (name and avatar)
+            const populatedItems = await Promise.all(
+                items.map(async (comment) => {
+                    const author = await User.findOne({ externalUserId: comment.author }).lean();
+                    console.log(author);
+                    
+                    return {
+                        ...comment,
+                        author: {
+                            id: author._id,
+                            name: author.name,
+                            avatar: author.avt,
+                        },
+                    };
+                })
+            );
+
             // Serialize để tránh lỗi MongoDB ObjectId
-            return JSON.parse(JSON.stringify(items));
+            return JSON.parse(JSON.stringify(populatedItems));
         },
         { requireAuth: true }
     );

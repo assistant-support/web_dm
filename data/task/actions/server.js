@@ -3,100 +3,86 @@
 
 'use server';
 
+import mongoose from 'mongoose';
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
 import { canManageProject } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
-
 import Task from '@/model/task.model.js';
 import Project from '@/model/project.model.js';
 import Team from '@/model/team.model.js';
 import { TASK_STATUS, TASK_SCOPE } from '@/model/common/enums.js';
 import { asPlainTask } from '@/lib/serialize.js';
-
+import { revalidatePath } from 'next/cache';
+import { sendZalo } from '@/lib/noti';
 /**
  * List tasks by project
  */
 export async function listByProject(projectId, filters = {}) {
     await connectDB();
-    return runAction(async ({ user }) => {
-        const uid = user.externalUserId;
+    try {
+        return runAction(async ({ user }) => {
+            const uid = user.externalUserId;
+            const project = await Project.findById(projectId).lean();
+            console.log("[DEBUG] Tìm thấy project:", project ? `_id: ${project._id}, team: ${project.team}` : "KHÔNG TÌM THẤY");
+            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            const team = await Team.findById(project.team).lean();
+            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404); // Thêm assert cho team
+            const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
+            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const query = {
+                project: new mongoose.Types.ObjectId(projectId),
+                scope: TASK_SCOPE.PROJECT,
+                deletedAt: null,
+                parentTask: null,
+            };
 
-        // Verify project access
-        const project = await Project.findById(projectId).lean();
-        assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            // Log các giá trị enum/const
+            console.log("[DEBUG] Giá trị TASK_SCOPE.PROJECT (dùng để lọc):", TASK_SCOPE.PROJECT);
 
-        const team = await Team.findById(project.team).lean();
-        const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
-        assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
-
-        // Build query
-        const query = {
-            project: projectId,
-            scope: TASK_SCOPE.PROJECT,
-            deletedAt: null,
-            parentTask: null, // Only get root tasks, not subtasks
-        };
-
-        if (filters.status) {
-            query.status = Array.isArray(filters.status) 
-                ? { $in: filters.status }
-                : filters.status;
-        }
-
-        if (filters.assignee) {
-            query.assignee = filters.assignee;
-        }
-
-        if (filters.priority) {
-            query.priority = filters.priority;
-        }
-
-        if (filters.tags && filters.tags.length > 0) {
-            query.tags = { $in: filters.tags };
-        }
-
-        // Execute query with aggregation to get subtask count
-        const tasks = await Task.aggregate([
-            { $match: query },
-            {
-                $lookup: {
-                    from: 'tasks',
-                    let: { taskId: '$_id' },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$parentTask', '$$taskId'] },
-                                        { $eq: ['$deletedAt', null] }
-                                    ]
-                                }
-                            }
-                        },
-                        { $count: 'count' }
-                    ],
-                    as: 'subtaskCountArray'
-                }
-            },
-            {
-                $addFields: {
-                    subtaskCount: {
-                        $ifNull: [
-                            { $arrayElemAt: ['$subtaskCountArray.count', 0] },
-                            0
-                        ]
+            // Filter logic (với filters = {} thì đoạn này sẽ bị bỏ qua)
+            if (filters.status) {
+                query.status = Array.isArray(filters.status)
+                    ? { $in: filters.status }
+                    : filters.status;
+            }
+            const matchStage = { $match: query };
+            const countResult = await Task.aggregate([
+                matchStage,
+                { $count: 'matchingDocs' }
+            ]);
+            if (!countResult || countResult.length === 0 || countResult[0].matchingDocs === 0) {
+                const anyTaskInProject = await Task.find({ project: new mongoose.Types.ObjectId(projectId) }).lean();
+                return []; // Trả về mảng rỗng như hành vi cũ
+            }
+            const tasks = await Task.aggregate([
+                matchStage, // Dùng lại $match đã debug
+                { $lookup: { from: 'projects', localField: 'project', foreignField: '_id', as: 'projectData' } },
+                { $addFields: { projectName: { $arrayElemAt: ['$projectData.name', 0] } } },
+                {
+                    $lookup: {
+                        from: 'tasks',
+                        let: { taskId: '$_id' },
+                        pipeline: [
+                            { $match: { $expr: { $and: [{ $eq: ['$parentTask', '$$taskId'] }, { $eq: ['$deletedAt', null] }] } } },
+                            { $count: 'count' }
+                        ],
+                        as: 'subtaskCountArray'
                     }
-                }
-            },
-            { $project: { subtaskCountArray: 0 } },
-            { $sort: { listOrder: 1, createdAt: -1 } },
-            { $limit: filters.limit || 100 }
-        ]);
+                },
+                { $addFields: { subtaskCount: { $ifNull: [{ $arrayElemAt: ['$subtaskCountArray.count', 0] }, 0] } } },
+                { $project: { subtaskCountArray: 0, projectData: 0 } },
+                { $sort: { listOrder: 1, createdAt: -1 } },
+                { $limit: filters.limit || 100 }
+            ]);
+            return tasks.map(asPlainTask);
 
-        return tasks.map(asPlainTask);
-    }, { requireAuth: true });
+        }, { requireAuth: true });
+
+    } catch (err) {
+        return []; // Trả về mảng rỗng nếu assert lỗi
+    }
 }
 
 /**
@@ -119,7 +105,7 @@ export async function listMyTasks(filters = {}) {
         };
 
         if (filters.status) {
-            query.status = Array.isArray(filters.status) 
+            query.status = Array.isArray(filters.status)
                 ? { $in: filters.status }
                 : filters.status;
         }
@@ -132,7 +118,7 @@ export async function listMyTasks(filters = {}) {
             query.project = filters.projectId;
         }
 
-        // Execute query with project info and subtask count
+        // Execute query with project info (with members), subtask count AND full subtasks data
         const tasks = await Task.aggregate([
             { $match: query },
             {
@@ -158,28 +144,31 @@ export async function listMyTasks(filters = {}) {
                                 }
                             }
                         },
-                        { $count: 'count' }
+                        { $sort: { createdAt: 1 } } // Sort subtasks by creation date
                     ],
-                    as: 'subtaskCountArray'
+                    as: 'subtasks'
                 }
             },
             {
                 $addFields: {
                     projectName: { $arrayElemAt: ['$projectInfo.name', 0] },
-                    subtaskCount: {
-                        $ifNull: [
-                            { $arrayElemAt: ['$subtaskCountArray.count', 0] },
-                            0
-                        ]
-                    }
+                    projectMembers: { $arrayElemAt: ['$projectInfo.members', 0] },
+                    subtaskCount: { $size: '$subtasks' }
                 }
             },
-            { $project: { projectInfo: 0, subtaskCountArray: 0 } },
+            { $project: { projectInfo: 0 } },
             { $sort: { createdAt: -1 } },
             { $limit: filters.limit || 200 }
         ]);
 
-        return tasks.map(asPlainTask);
+        return tasks.map(task => {
+            const plainTask = asPlainTask(task);
+            // Include pre-loaded subtasks
+            plainTask.subtasks = (task.subtasks || []).map(asPlainTask);
+            // Include project members for permission checks
+            plainTask.projectMembers = task.projectMembers || [];
+            return plainTask;
+        });
     }, { requireAuth: true });
 }
 
@@ -191,20 +180,151 @@ export async function getTaskDetail(taskId) {
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
 
-        const task = await Task.findById(taskId).lean();
+        // --- Bắt đầu Aggregation Pipeline ---
+        const tasks = await Task.aggregate([
+            // 1. Tìm Task chính
+            { $match: { _id: new mongoose.Types.ObjectId(taskId) } },
+
+            // 2. Populate 'project' (lấy object Project)
+            {
+                $lookup: {
+                    from: 'projects', // Tên collection của Project
+                    localField: 'project',
+                    foreignField: '_id',
+                    as: 'project'
+                }
+            },
+
+            // 3. Populate 'team' (lấy object Team)
+            {
+                $lookup: {
+                    from: 'teams', // Tên collection của Team
+                    localField: 'team',
+                    foreignField: '_id',
+                    as: 'team'
+                }
+            },
+
+            // 4. Populate 'platforms' (lấy mảng Platforms)
+            {
+                $lookup: {
+                    from: 'platforms', // Tên collection của Platform
+                    localField: 'platforms',
+                    foreignField: '_id',
+                    as: 'platforms'
+                }
+            },
+
+            // 5. Populate thông tin 'createdBy' (User)
+            // Giả định: collection User là 'appusers'
+            // Giả định: trường ID trong 'appusers' là 'externalUserId'
+            {
+                $lookup: {
+                    from: 'appusers',
+                    localField: 'createdBy',
+                    foreignField: 'externalUserId',
+                    pipeline: [
+                        // Chỉ lấy các trường cần thiết
+                        { $project: { _id: 0, name: 1, email: 1, avatar: 1, externalUserId: 1 } }
+                    ],
+                    as: 'createdBy'
+                }
+            },
+
+            // 6. Populate thông tin 'assignee' (User)
+            {
+                $lookup: {
+                    from: 'appusers',
+                    localField: 'assignee',
+                    foreignField: 'externalUserId',
+                    pipeline: [
+                        { $project: { _id: 0, name: 1, email: 1, avatar: 1, externalUserId: 1 } }
+                    ],
+                    as: 'assignee'
+                }
+            },
+
+            // 7. Populate 'parentTask' (lấy tên)
+            {
+                $lookup: {
+                    from: 'tasks',
+                    localField: 'parentTask',
+                    foreignField: '_id',
+                    pipeline: [
+                        { $project: { _id: 1, title: 1 } } // Chỉ lấy title
+                    ],
+                    as: 'parentTask'
+                }
+            },
+
+            // 8. Đếm Subtasks (Giữ nguyên từ code cũ của bạn)
+            {
+                $lookup: {
+                    from: 'tasks',
+                    let: { taskId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$parentTask', '$$taskId'] },
+                                        { $eq: ['$deletedAt', null] }
+                                    ]
+                                }
+                            }
+                        },
+                        { $count: 'count' }
+                    ],
+                    as: 'subtaskCountArray'
+                }
+            },
+
+            // 9. Xử lý dữ liệu (Unwind các mảng lookup)
+            {
+                $addFields: {
+                    // Chuyển mảng [object] thành object (hoặc null nếu không tìm thấy)
+                    project: { $arrayElemAt: ['$project', 0] },
+                    team: { $arrayElemAt: ['$team', 0] },
+                    createdBy: { $arrayElemAt: ['$createdBy', 0] },
+                    assignee: { $arrayElemAt: ['$assignee', 0] },
+                    parentTask: { $arrayElemAt: ['$parentTask', 0] },
+
+                    // Lấy subtask count (Giữ nguyên)
+                    subtaskCount: {
+                        $ifNull: [
+                            { $arrayElemAt: ['$subtaskCountArray.count', 0] },
+                            0
+                        ]
+                    }
+                }
+            },
+
+            // 10. Dọn dẹp
+            { $project: { subtaskCountArray: 0 } }
+        ]);
+        // --- Kết thúc Aggregation Pipeline ---
+
+        const task = tasks[0];
         assert(task, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
 
-        // Verify access
+        // --- Cập nhật Kiểm tra quyền truy cập ---
+        // Giờ đây 'task.project' và 'task.team' đã là object
         if (task.scope === TASK_SCOPE.PROJECT) {
-            const project = await Project.findById(task.project).lean();
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(task.project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(task.team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const team = await Team.findById(project.team).lean();
-            const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
+            // Kiểm tra thành viên trực tiếp từ task.team
+            const isMember = (task.team?.members || []).some((m) => String(m.userId) === String(uid));
             assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
-        return asPlainTask(task);
+        // Không cần asPlainTask nếu aggregation đã trả về POJO (Plain Old JavaScript Object)
+        // Nếu `aggregate` trả về Mongoose document, bạn có thể cần `JSON.parse(JSON.stringify(task))`
+        // nhưng thông thường `aggregate` trả về POJO.
+
+        // Trả về task đã được populate đầy đủ
+        return JSON.parse(JSON.stringify(task))
+
     }, { requireAuth: true });
 }
 
@@ -223,20 +343,23 @@ export async function getTaskDetail(taskId) {
  *    - approval.required = true, approval.status = 'pending', status = 'pending_approval'
  *    - Cannot set points (initialPoints always 0)
  */
+
+
 export async function createTask(projectId, payload) {
-    await connectDB();
+    // No need to connect DB here, runAction likely handles it or it's done inside
     return runAction(async ({ user }) => {
-        const uid = user.externalUserId;
+        await connectDB(); // Ensure DB is connected within the action scope
+        const uid = user.externalUserId; // Creator's ID
 
         // Verify project and team membership
-        const project = await Project.findById(projectId);
-        assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+        const project = await Project.findById(projectId).lean(); // Use lean for reads
+        assert(project, 'PROJECT_NOT_FOUND', 'Dự án không tồn tại.', 404);
 
-        const team = await Team.findById(project.team);
-        assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
+        const team = await Team.findById(project.team).lean(); // Use lean for reads
+        assert(team, 'TEAM_NOT_FOUND', 'Nhóm không tồn tại.', 404);
 
         const isMember = (team.members || []).some((m) => String(m.userId) === String(uid));
-        assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(isMember, 'FORBIDDEN', 'Bạn không phải thành viên của nhóm này.', 403);
 
         const hasManagePermission = canManageProject(project, uid);
 
@@ -244,39 +367,43 @@ export async function createTask(projectId, payload) {
         let status = TASK_STATUS.DRAFT;
         let approval = { required: false, status: 'none' };
         let assigneeConfirm = { required: false };
-        let initialPoints = 0;
+        let initialPoints = Number(payload.initialPoints) || 0; // Allow points always, but might be 0
+        let shouldNotifyAssignee = false; // Flag to check if notification is needed
 
         if (!hasManagePermission) {
-            // Member creates task → needs approval
+            // Member creates task -> needs approval
             status = TASK_STATUS.PENDING_APPROVAL;
-            approval = {
-                required: true,
-                status: 'pending',
-            };
-            initialPoints = 0; // Members can't set points
+            approval = { required: true, status: 'pending' };
+            initialPoints = 0; // Member cannot set points initially
         } else {
             // Manager creates task
             if (payload.assignee && payload.assignee !== uid) {
-                // Assigned to someone else → needs confirmation
+                // Assigned to someone else -> needs confirmation
                 status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
-                assigneeConfirm = {
-                    required: true,
-                };
+                assigneeConfirm = { required: true };
+                shouldNotifyAssignee = true; // Set flag to notify
+            } else if (payload.assignee && payload.assignee === uid) {
+                // Manager assigns to self -> In Progress directly
+                status = TASK_STATUS.IN_PROGRESS;
+            } else {
+                // Manager creates unassigned task -> Draft or as specified
+                status = payload.status || TASK_STATUS.DRAFT; // Allow overriding status if manager creates
             }
-            // Manager can set points
+            // Manager can always set initial points
             initialPoints = Number(payload.initialPoints) || 0;
         }
 
-        // Override with payload if provided (for flexibility)
+        // Allow explicit overrides if necessary (use with caution)
         if (payload.status) status = payload.status;
         if (payload.approval) approval = payload.approval;
         if (payload.assigneeConfirm) assigneeConfirm = payload.assigneeConfirm;
 
         // Create task
-        const task = await Task.create({
+        const task = new Task({ // Use 'new Task' and 'task.save()' for potential middleware/hooks
             title: payload.title,
             description: payload.description || '',
-            priority: payload.priority || 'normal',
+            priority: payload.priority || 'medium', // Default to medium
+            workType: payload.workType || null,
             assignee: payload.assignee || null,
             plannedStartAt: payload.plannedStartAt || null,
             plannedDueAt: payload.plannedDueAt || null,
@@ -290,7 +417,63 @@ export async function createTask(projectId, payload) {
             status,
             approval,
             assigneeConfirm,
+            // Ensure docs object exists if needed later
+            docs: payload.createTaskFolder ? {} : undefined,
         });
+
+        await task.save(); // Save the new task document
+
+        // Create Google Drive folder if requested
+        if (payload.createTaskFolder && project.driveFolderId) {
+            try {
+                const { createTaskFolder } = await import('@/lib/drive.js');
+                const folderResult = await createTaskFolder(task.title + '_' + Date.now(), project.driveFolderId);
+
+                // Update task with folder info (fetch and save again)
+                const taskToUpdate = await Task.findById(task._id);
+                if (taskToUpdate) {
+                    taskToUpdate.docs = taskToUpdate.docs || {};
+                    taskToUpdate.docs.driveFolderId = folderResult.id;
+                    taskToUpdate.docs.driveFolderName = folderResult.name;
+                    await taskToUpdate.save();
+                }
+
+            } catch (driveErr) {
+                console.error(`[createTask ${_id}] Failed to create Drive folder:`, driveErr);
+                // Log error but don't fail task creation
+            }
+        }
+
+        // --- Send Zalo Notification ---
+        if (shouldNotifyAssignee && payload.assignee) {
+            try {
+                // Ensure task details are available for the message
+                const taskLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/tasks/${task._id}`;
+                const creatorName = user.name || user.email || 'Quản lý'; // Get creator's name/email
+
+                const zaloMessage = `🔔 Công việc mới được giao
+--------------------
+Công việc: ${task.title}
+Người giao: ${creatorName}
+Dự án: ${project.name || 'N/A'}
+Hạn chót: ${task.plannedDueAt ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(task.plannedDueAt)) : 'Chưa có'}
+--------------------
+Vui lòng vào hệ thống để xem chi tiết và xác nhận nhận việc.
+
+🔗 Link công việc:
+${taskLink}
+`;
+                // Call sendZalo action (no need to await if background notification is ok)
+                sendZalo(payload.assignee, zaloMessage).catch(err => {
+                    console.error(`[createTask ${task._id}] Failed to send Zalo notification to ${payload.assignee}:`, err);
+                });
+
+            } catch (notifyErr) {
+                console.error(`[createTask ${task._id}] Error preparing Zalo notification for ${payload.assignee}:`, notifyErr);
+                // Log error but proceed
+            }
+        }
+        // -----------------------------
 
         await logActivity({
             actor: uid,
@@ -298,21 +481,26 @@ export async function createTask(projectId, payload) {
             project: projectId,
             task: task._id,
             type: 'task.created',
-            payload: { title: task.title },
+            payload: { title: task.title, status: task.status },
         });
 
-        // Revalidate project tasks page and related paths
-        const { revalidatePath } = await import('next/cache');
+        // Revalidate paths and tags
         revalidatePath(`/projects/${projectId}/tasks`);
         revalidatePath(`/projects/${projectId}`);
-        revalidatePath(`/tasks`); // Personal tasks page
-
+        revalidatePath(`/tasks`);
+        // Revalidate specific tags if using tag-based caching elsewhere
         await revalidateMany([
             tags.project(projectId),
             tags.task(task._id),
         ]);
 
-        return asPlainTask(task.toObject());
+        // Fetch the created task again with populated project name for the return value
+        const createdTask = await Task.findById(task._id)
+            .populate('project', 'name') // Only populate necessary fields
+            .lean();
+
+        return asPlainTask(createdTask); // Ensure plain object is returned
+
     }, { requireAuth: true });
 }
 
@@ -320,6 +508,7 @@ export async function createTask(projectId, payload) {
  * Update task
  */
 export async function updateTask(taskId, payload) {
+    'use server';
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -359,7 +548,12 @@ export async function updateTask(taskId, payload) {
             tags.task(task._id),
         ]);
 
-        return asPlainTask(task.toObject());
+        // Populate project to get name
+        const updatedTask = await Task.findById(task._id)
+            .populate('project', 'name')
+            .lean();
+
+        return asPlainTask(updatedTask);
     }, { requireAuth: true });
 }
 
@@ -367,6 +561,7 @@ export async function updateTask(taskId, payload) {
  * Delete task (soft delete)
  */
 export async function deleteTask(taskId) {
+    'use server';
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -407,6 +602,7 @@ export async function deleteTask(taskId) {
  * Update task status
  */
 export async function updateTaskStatus(taskId, status) {
+    'use server';
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -459,6 +655,7 @@ export async function updateTaskStatus(taskId, status) {
  * Assign task to user
  */
 export async function assignTask(taskId, assigneeId) {
+    'use server';
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -477,6 +674,31 @@ export async function assignTask(taskId, assigneeId) {
 
         const oldAssignee = task.assignee;
         task.assignee = assigneeId;
+
+        // [THÊM] Logic tự động cho subtask
+        if (task.parentTask && assigneeId) {
+            // Lấy parent task để check parent owner
+            const parentTask = await Task.findById(task.parentTask).lean();
+
+            // Chỉ tự động IN_PROGRESS khi assignee chính là parent owner
+            if (parentTask && parentTask.assignee && String(parentTask.assignee) === String(assigneeId)) {
+                // Parent owner tự giao cho mình → Tự động chuyển IN_PROGRESS
+                task.status = TASK_STATUS.IN_PROGRESS;
+                task.startedAt = new Date();
+                task.assigneeConfirm = {
+                    required: false,
+                    confirmedBy: assigneeId,
+                    confirmedAt: new Date()
+                };
+            } else {
+                // TẤT CẢ trường hợp khác → Cần xác nhận
+                task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                task.assigneeConfirm = {
+                    required: true
+                };
+            }
+        }
+
         await task.save();
 
         await logActivity({
@@ -526,7 +748,7 @@ export async function updateKanbanOrder(taskIds) {
         assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
         // Update kanbanOrder for each task
-        const updatePromises = taskIds.map((taskId, index) => 
+        const updatePromises = taskIds.map((taskId, index) =>
             Task.findByIdAndUpdate(taskId, { kanbanOrder: index })
         );
 
@@ -541,9 +763,10 @@ export async function updateKanbanOrder(taskIds) {
 }
 
 /**
- * List subtasks of a parent task
+ * List all subtasks of a parent task
  */
 export async function listSubtasks(parentTaskId) {
+    'use server';
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -567,8 +790,8 @@ export async function listSubtasks(parentTaskId) {
             parentTask: parentTaskId,
             deletedAt: null,
         })
-        .sort({ listOrder: 1, createdAt: 1 })
-        .lean();
+            .sort({ listOrder: 1, createdAt: 1 })
+            .lean();
 
         return {
             ok: true,

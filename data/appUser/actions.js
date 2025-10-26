@@ -307,3 +307,92 @@ export async function updateUserSettings(settings) {
         { requireAuth: true }
     );
 }
+
+const EXTERNAL_API_URL = "https://account.s4h.edu.vn/api/useruid";
+
+/**
+ * Cập nhật UID của người dùng ở cả 2 nơi:
+ * 1. Cơ sở dữ liệu nội bộ (model AppUser)
+ * 2. Hệ thống tài khoản bên ngoài (qua API)
+ *
+ * @param {string} externalUserId - ID của người dùng (dùng để tìm local AppUser và gửi cho API)
+ * @param {string} newUid - Chuỗi UID mới cần cập nhật
+ * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+ */
+export async function updateUserUid(externalUserId, newUid) {
+  // --- 1. Validate đầu vào ---
+  if (!externalUserId) {
+    return { success: false, error: "External User ID is required." };
+  }
+  if (!newUid || typeof newUid !== "string") {
+    return { success: false, error: "New UID is required and must be a string." };
+  }
+
+  try {
+    // --- 2. Cập nhật cơ sở dữ liệu nội bộ (Local) ---
+    await connectDB();
+
+    const updatedLocalUser = await AppUser.findOneAndUpdate(
+      { externalUserId: externalUserId }, // Điều kiện tìm kiếm
+      { $set: { uid: newUid } }, // Dữ liệu cập nhật
+      { new: true, runValidators: true } // Tùy chọn: trả về doc mới và chạy validators
+    );
+
+    if (!updatedLocalUser) {
+      // Không tìm thấy user nội bộ để cập nhật
+      return { success: false, error: `Local AppUser not found for externalId: ${externalUserId}` };
+    }
+
+    // --- 3. Gọi API bên ngoài để đồng bộ ---
+    const apiResponse = await fetch(EXTERNAL_API_URL, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        // "Authorization": "Bearer YOUR_API_TOKEN_IF_NEEDED", // Thêm nếu API cần xác thực
+      },
+      body: JSON.stringify({
+        externalUserId: externalUserId,
+        uid: newUid,
+      }),
+    });
+
+    if (!apiResponse.ok) {
+      // Nếu gọi API thất bại, trả về lỗi
+      // Cân nhắc: Bạn có thể muốn "rollback" thay đổi ở local,
+      // nhưng việc đó phức tạp. Hiện tại, chúng ta chỉ báo lỗi.
+      const errorData = await apiResponse.json().catch(() => ({}));
+      return {
+        success: false,
+        error: `Failed to sync with external API: ${apiResponse.statusText}`,
+        details: errorData,
+        localUser: updatedLocalUser, // Trả về user local đã được cập nhật
+      };
+    }
+
+    const externalData = await apiResponse.json();
+
+    // --- 4. Thành công ---
+    
+    // Xóa cache cho các trang liên quan (ví dụ: trang hồ sơ)
+    // revalidatePath("/profile"); 
+    // revalidatePath(`/admin/users/${externalUserId}`);
+
+    return {
+      success: true,
+      data: {
+        localUser: updatedLocalUser,
+        externalSync: externalData,
+      },
+    };
+
+  } catch (error) {
+    console.error("updateUserUid Action Error:", error);
+    
+    // Xử lý lỗi nếu UID đã tồn tại (do 'unique: true' trên model)
+    if (error.code === 11000) {
+      return { success: false, error: "This UID is already in use locally." };
+    }
+    
+    return { success: false, error: error.message || "An unknown server error occurred." };
+  }
+}
