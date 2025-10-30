@@ -20,7 +20,7 @@ export const STATUS_META = {
 export const PRIORITY_META = {
     [PRIORITY.URGENT]: { label: 'Khẩn cấp', color: '#ef4444', order: 10 },
     [PRIORITY.HIGH]: { label: 'Cao', color: '#f59e0b', order: 20 },
-    [PRIORITY.NORMAL]: { label: 'Bình thường', color: '#3b82f6', order: 30 },
+    [PRIORITY.MEDIUM]: { label: 'Bình thường', color: '#3b82f6', order: 30 },
     [PRIORITY.LOW]: { label: 'Thấp', color: '#94a3b8', order: 40 },
 };
 

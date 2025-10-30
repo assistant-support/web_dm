@@ -1,66 +1,71 @@
 // data/project/processors/analytics.js
 // Project analytics aggregation
+// Tối ưu: Đã cache getProjectAnalytics và viết lại getProjectMemberStats để loại bỏ N+1 query.
 
+import mongoose from 'mongoose';
+import { unstable_cache as cache } from 'next/cache';
 import Task from '@/model/task.model.js';
 import { connectDB } from '@/lib/db.js';
+import * as tags from '@/data/_shared/tags.js'; // Cần cho caching
+
+const O = (id) => new mongoose.Types.ObjectId(String(id));
 
 /**
- * Get project analytics - tasks, members, time stats
+ * Hàm gốc lấy project analytics (không cache)
  */
-export async function getProjectAnalytics(projectId) {
+async function _getProjectAnalytics(projectId) {
     await connectDB();
+    console.log(`[Cache Miss] Running _getProjectAnalytics for ${projectId}`);
 
+    const pid = O(projectId); // Chuyển projectId sang ObjectId
     const now = new Date();
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    // Aggregate task statistics
-    const taskStats = await Task.aggregate([
-        {
-            $match: {
-                project: projectId,
-                deletedAt: null,
-            }
-        },
+    const taskStatsPipeline = [
+        { $match: { project: pid, deletedAt: null } },
         {
             $group: {
                 _id: null,
                 totalTasks: { $sum: 1 },
                 completedTasks: {
-                    $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] }
+                    // Giả định 'completed' là trạng thái hoàn thành cuối cùng
+                    $sum: { $cond: [{ $in: ['$status', ['completed', 'approved']] }, 1, 0] }
                 },
                 inProgressTasks: {
-                    $sum: { $cond: [{ $in: ['$status', ['in-progress', 'in-review']] }, 1, 0] }
+                    // Bao gồm các trạng thái đang thực hiện
+                    $sum: { $cond: [{ $in: ['$status', ['in_progress', 'completed_await_review']] }, 1, 0] }
                 },
                 todoTasks: {
-                    $sum: { $cond: [{ $eq: ['$status', 'todo'] }, 1, 0] }
+                    // Bao gồm các trạng thái chưa bắt đầu
+                    $sum: { $cond: [{ $in: ['$status', ['draft', 'pending_approval', 'waiting_confirm']] }, 1, 0] }
                 },
                 overdueTasks: {
                     $sum: {
                         $cond: [
                             {
                                 $and: [
-                                    { $ne: ['$status', 'done'] },
+                                    // Chưa hoàn thành
+                                    { $not: { $in: ['$status', ['completed', 'approved', 'cancelled', 'rejected']] } },
+                                    // Có deadline và đã qua deadline
                                     { $lt: ['$dueDate', now] },
                                     { $ne: ['$dueDate', null] }
                                 ]
                             },
-                            1,
-                            0
+                            1, 0
                         ]
                     }
                 },
             }
         }
-    ]);
+    ];
 
-    // Monthly trend (last 6 months)
-    const monthlyTrend = await Task.aggregate([
+    const monthlyTrendPipeline = [
         {
             $match: {
-                project: projectId,
+                project: pid,
                 deletedAt: null,
-                createdAt: { $gte: sixMonthsAgo }
+                createdAt: { $gte: sixMonthsAgo } // Chỉ lấy task tạo trong 6 tháng gần đây
             }
         },
         {
@@ -70,14 +75,25 @@ export async function getProjectAnalytics(projectId) {
                     month: { $month: '$createdAt' }
                 },
                 created: { $sum: 1 },
+                // Tính completed dựa trên scoredAt hoặc completedAt trong tháng đó
                 completed: {
-                    $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] }
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $in: ['$status', ['completed', 'approved']] },
+                                    // Kiểm tra ngày hoàn thành/chấm điểm có trong tháng group không
+                                    { $eq: [{ $year: { $ifNull: ['$scoredAt', '$completedAt'] } }, '$_id.year'] },
+                                    { $eq: [{ $month: { $ifNull: ['$scoredAt', '$completedAt'] } }, '$_id.month'] }
+                                ]
+                            },
+                            1, 0
+                        ]
+                    }
                 }
             }
         },
-        {
-            $sort: { '_id.year': 1, '_id.month': 1 }
-        },
+        { $sort: { '_id.year': 1, '_id.month': 1 } },
         {
             $project: {
                 _id: 0,
@@ -87,59 +103,112 @@ export async function getProjectAnalytics(projectId) {
                 completed: 1
             }
         }
+    ];
+
+    const [taskStatsResult, monthlyTrend] = await Promise.all([
+        Task.aggregate(taskStatsPipeline),
+        Task.aggregate(monthlyTrendPipeline)
     ]);
 
-    const stats = taskStats[0] || {
-        totalTasks: 0,
-        completedTasks: 0,
-        inProgressTasks: 0,
-        todoTasks: 0,
-        overdueTasks: 0,
+    const stats = taskStatsResult[0] || {
+        totalTasks: 0, completedTasks: 0, inProgressTasks: 0, todoTasks: 0, overdueTasks: 0,
     };
 
     return {
         tasks: stats,
-        trend: monthlyTrend,
-        completionRate: stats.totalTasks > 0 
-            ? Math.round((stats.completedTasks / stats.totalTasks) * 100) 
+        trend: monthlyTrend.map(item => ({
+            ...item,
+            // Format month thành YYYY-MM
+            ym: `${item.year}-${String(item.month).padStart(2, '0')}`
+        })),
+        completionRate: stats.totalTasks > 0
+            ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
             : 0,
     };
 }
 
 /**
- * Get member statistics for project
+ * Lấy project analytics (đã cache)
+ */
+export const getProjectAnalytics = cache(
+    _getProjectAnalytics,
+    ['project-analytics'], // Key part
+    {
+        tags: (projectId) => [tags.projectAnalytics(projectId)], // Cần thêm tag này vào tags.js
+        revalidate: 3600 // Cache 1 giờ
+    }
+);
+
+/**
+ * Lấy thống kê task theo member cho project (ĐÃ TỐI ƯU)
  */
 export async function getProjectMemberStats(projectId, memberIds) {
     await connectDB();
-
-    const stats = {};
-
-    for (const userId of memberIds) {
-        const userTasks = await Task.aggregate([
-            {
-                $match: {
-                    project: projectId,
-                    assignee: userId,
-                    deletedAt: null,
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    total: { $sum: 1 },
-                    completed: {
-                        $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] }
-                    },
-                    inProgress: {
-                        $sum: { $cond: [{ $in: ['$status', ['in-progress', 'in-review']] }, 1, 0] }
-                    },
-                }
-            }
-        ]);
-
-        const userStats = userTasks[0] || { total: 0, completed: 0, inProgress: 0 };
-        stats[userId] = userStats;
+    if (!memberIds || memberIds.length === 0) {
+        return {};
     }
 
-    return stats;
+    const pid = O(projectId);
+
+    const memberStatsPipeline = [
+        {
+            $match: {
+                project: pid,
+                deletedAt: null,
+                // Chỉ xét task có assignee nằm trong danh sách members
+                assignee: { $in: memberIds }
+            }
+        },
+        {
+            $group: {
+                _id: '$assignee', // Group theo assignee
+                total: { $sum: 1 },
+                completed: {
+                    $sum: { $cond: [{ $in: ['$status', ['completed', 'approved']] }, 1, 0] }
+                },
+                inProgress: {
+                    $sum: { $cond: [{ $in: ['$status', ['in_progress', 'completed_await_review']] }, 1, 0] }
+                },
+                // Thêm các stats khác nếu cần, ví dụ điểm, overdue...
+                overdue: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $not: { $in: ['$status', ['completed', 'approved', 'cancelled', 'rejected']] } },
+                                    { $lt: ['$dueDate', new Date()] },
+                                    { $ne: ['$dueDate', null] }
+                                ]
+                            },
+                            1, 0
+                        ]
+                    }
+                }
+            }
+        }
+    ];
+
+    const results = await Task.aggregate(memberStatsPipeline);
+
+    // Chuyển kết quả aggregation thành object map userId -> stats
+    const statsMap = results.reduce((acc, item) => {
+        acc[item._id] = {
+            total: item.total || 0,
+            completed: item.completed || 0,
+            inProgress: item.inProgress || 0,
+            overdue: item.overdue || 0,
+            // Tính các tỷ lệ nếu cần
+            completionRate: item.total > 0 ? Math.round((item.completed / item.total) * 100) : 0,
+        };
+        return acc;
+    }, {});
+
+    // Đảm bảo mọi memberId đều có entry trong kết quả (dù không có task nào)
+    memberIds.forEach(id => {
+        if (!statsMap[id]) {
+            statsMap[id] = { total: 0, completed: 0, inProgress: 0, overdue: 0, completionRate: 0 };
+        }
+    });
+
+    return statsMap;
 }

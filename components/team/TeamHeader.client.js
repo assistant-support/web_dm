@@ -20,7 +20,7 @@ export default function TeamHeader({ team, isManager }) {
 
     return (
         <>
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="bg-white rounded-lg border border-gray-200">
                 <div className="p-6">
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">

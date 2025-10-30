@@ -1,22 +1,23 @@
 // data/team/processors/team-analytics.js
-// Tính toán analytics tổng quan cho team
 
 import mongoose from 'mongoose';
+import { unstable_cache as cache } from 'next/cache'; 
 import Project from '@/model/project.model.js';
 import Task from '@/model/task.model.js';
 import Team from '@/model/team.model.js';
+import * as tags from '@/data/_shared/tags.js';
 
 const O = (id) => new mongoose.Types.ObjectId(String(id));
 
 /**
- * Lấy analytics tổng quan cho team
+ * Lấy analytics tổng quan cho team (Hàm logic gốc)
  * @param {string} teamId - Team ID
  * @returns {Object} Analytics data
  */
-export async function getTeamAnalytics(teamId) {
+async function _getTeamAnalytics(teamId) {
+    console.log(`[Cache Miss] Running _getTeamAnalytics for ${teamId}`);
     const tid = O(teamId);
-    
-    // 1. Team info
+
     const team = await Team.findById(tid).lean();
     if (!team) {
         throw new Error('Team không tồn tại');
@@ -24,11 +25,9 @@ export async function getTeamAnalytics(teamId) {
 
     const activeMembersCount = team.members?.filter(m => m.role).length || 0;
 
-    // 2. Total projects
     const totalProjects = await Project.countDocuments({ team: tid });
     const activeProjects = await Project.countDocuments({ team: tid, isActive: true });
 
-    // 3. Total points (all time) - aggregate từ tasks
     const allTimePointsPipeline = [
         {
             $lookup: {
@@ -61,7 +60,6 @@ export async function getTeamAnalytics(teamId) {
     const allTimePoints = allTimeResult[0]?.totalPoints || 0;
     const allTimeTasks = allTimeResult[0]?.totalTasks || 0;
 
-    // 4. Current month stats
     const now = new Date();
     const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const [year, month] = currentYm.split('-').map(Number);
@@ -104,7 +102,6 @@ export async function getTeamAnalytics(teamId) {
     const monthlyTasks = monthlyResult[0]?.monthlyTasks || 0;
     const monthlyDuration = monthlyResult[0]?.monthlyDuration || 0;
 
-    // 5. Last 6 months trend (cho chart)
     const last6MonthsTrend = [];
     for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -171,3 +168,12 @@ export async function getTeamAnalytics(teamId) {
         trend: last6MonthsTrend
     };
 }
+
+export const getTeamAnalytics = cache(
+    _getTeamAnalytics,
+    ['team-analytics'], 
+    {
+        tags: (teamId) => [tags.teamAnalytics(teamId)],
+        revalidate: 3600
+    }
+);

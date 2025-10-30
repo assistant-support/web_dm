@@ -33,7 +33,7 @@
 .check-mark {
     position: absolute;
     height: 6px;
-    background-color: var(--green);
+    background-color: #28a745;
     border-radius: 3px;
     transform-origin: left center;
 }

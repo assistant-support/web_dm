@@ -1,10 +1,6 @@
 // app/(auth)/(main)/projects/page.js
-// Trang danh sách projects của user
-
 import { listMyProjects } from '@/data/project/actions/list.js';
 import ProjectsPageClient from '@/components/project/ProjectsPageClient.client.js';
-
-export const dynamic = 'force-dynamic';
 
 export default async function ProjectsPage() {
     const result = await listMyProjects();
@@ -27,8 +23,7 @@ export default async function ProjectsPage() {
             </div>
         );
     }
-
     const { projects, count } = result.data;
 
-    return <ProjectsPageClient initialProjects={projects} initialCount={count} />;
+    return <ProjectsPageClient initialProjects={projects} />;
 }

@@ -5,67 +5,85 @@
 
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import UserDisplay from '@/components/ui/user-display';
+import UserDisplay from '@/components/ui/user-display'; // Chỉ cần import UserDisplay
 import { getActivityConfig, formatActivityMessage } from '@/lib/activity-types';
 
-/**
- * ActivityItem - Hiển thị một activity log entry
- * @param {Object} props
- * @param {Object} props.activity - Activity object
- * @param {string} props.activity.actor - User ID người thực hiện
- * @param {string} props.activity.type - Loại hoạt động
- * @param {Object} props.activity.payload - Dữ liệu bổ sung
- * @param {string} props.activity.createdAt - Timestamp
- * @param {boolean} [props.showPayload=false] - Có hiển thị payload raw không
- */
-export default function ActivityItem({ activity, showPayload = false }) {
+export default function ActivityItem({
+    activity,
+    userInfo, // User info cho actor (người thực hiện)
+    showPayload = false // Giữ lại tùy chọn này cho debug nếu cần
+}) {
     const config = getActivityConfig(activity.type);
     const Icon = config.icon;
-    const message = formatActivityMessage(activity.type, activity.payload);
 
+    // Hàm này giờ trả về message chi tiết hơn (đã dịch)
+    const actionMessage = formatActivityMessage(activity.type, activity.payload);
+
+    const timeAgo = formatDistanceToNow(new Date(activity.createdAt), {
+        addSuffix: true,
+        locale: vi
+    });
+
+    // Lấy targetUserId nếu có (cho member actions, assignee changes)
+    const targetUserId = activity.payload?.userId;
+    if (actionMessage == 'hoạt động không xác định') {
+        console.log(activity);
+
+    }
     return (
-        <div className="flex gap-3">
-            {/* Icon */}
-            <div className={`flex-shrink-0 w-10 h-10 rounded-full ${config.bg} flex items-center justify-center`}>
-                <Icon className={`h-5 w-5 ${config.color}`} />
-            </div>
+        <div className="grid grid-cols-[auto,1fr,auto] items-start gap-x-3">
+            {/* Cột 1: Icon */}
 
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                        {/* User + Action */}
-                        <div className="flex items-center gap-2 flex-wrap">
+
+            {/* Cột 2: Nội dung chính */}
+            <div className="min-w-0 pt-0.5 flex gap-3 items-center">
+                <div className={`flex-shrink-0 w-10 h-10 rounded-full ${config.bg} flex items-center justify-center mt-0.5`}>
+                    <Icon className={`h-5 w-5 ${config.color}`} />
+                </div>
+                <div className='flex-col'>
+                    <div className="text-sm flex flex-wrap items-center gap-x-1"> {/* Dùng flex-wrap */}
+                        {/* Actor */}
+                        <UserDisplay
+                            showAvatar={false}
+                            userId={activity.actor}
+                            userInfo={userInfo}
+                            showJobTitle={false}
+                            size="sm"
+                            inline
+                            className="font-medium text-gray-900"
+                        />
+                        {/* Action Message */}
+                        <span className="text-gray-600">{actionMessage}</span>
+
+                        {/* Target User (nếu có) */}
+                        {targetUserId && (
+                            // Render tên target user ngay sau action message
                             <UserDisplay
-                                userId={activity.actor}
+                                userId={targetUserId}
+                                showAvatar={false}
                                 showJobTitle={false}
-                                size="xs"
+                                size="sm"
                                 inline
+                                className="font-medium text-gray-900"
                             />
-                            <span className="text-sm text-gray-600">{message}</span>
-                        </div>
-
-                        {/* Payload details (optional) */}
-                        {showPayload && activity.payload && Object.keys(activity.payload).length > 0 && (
-                            <div className="mt-1 text-xs text-gray-500">
-                                {Object.entries(activity.payload).map(([key, value]) => (
-                                    <div key={key} className="inline-block mr-3">
-                                        <span className="font-medium">{key}:</span> {String(value)}
-                                    </div>
-                                ))}
-                            </div>
                         )}
                     </div>
-
-                    {/* Timestamp */}
-                    <span className="text-xs text-gray-500 flex-shrink-0">
-                        {formatDistanceToNow(new Date(activity.createdAt), {
-                            addSuffix: true,
-                            locale: vi
-                        })}
-                    </span>
+                    <div className="text-xs text-gray-500 whitespace-nowrap pt-1">
+                        {timeAgo}
+                    </div>
                 </div>
+                {/* Payload Raw (for debug) */}
+                {showPayload && activity.payload && Object.keys(activity.payload).length > 0 && (
+                    <div className="mt-1 text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-200 overflow-x-auto">
+                        <pre className="whitespace-pre-wrap break-all">
+                            <code>{JSON.stringify(activity.payload, null, 2)}</code>
+                        </pre>
+                    </div>
+                )}
             </div>
+
+            {/* Cột 3: Thời gian */}
+
         </div>
     );
 }

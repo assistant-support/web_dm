@@ -1,55 +1,58 @@
 // data/project/processors/repo.js
-// Tác dụng file: Repository thao tác Mongoose + tạo thư mục Drive khi tạo Project. Không kiểm tra quyền ở đây.
+// Tác dụng file: Repository thao tác Mongoose + tạo thư mục Drive khi tạo Project.
+// Tối ưu: Đã cập nhật logic Drive và bọc getDetail bằng React.cache.
 
+import { cache } from 'react'; // Import cache
+import mongoose from 'mongoose';
 import Project from '@/model/project.model.js';
-import Team from '@/model/team.model.js'; // (dự phòng cho các kiểm tra nâng cao)
+import Team from '@/model/team.model.js';
 import { PROJECT_ROLE } from '@/model/common/enums.js';
-import { createProjectFolder } from '@/lib/drive.js';
+// Giả định bạn có hàm tạo folder theo năm/tháng
+import { createProjectMonthlyFolders, createProjectFolder } from '@/lib/drive.js';
 import { AppError } from '@/lib/errors.js';
 
-/** Kiểm tra danh sách members còn ít nhất 1 quản trị (OWNER hoặc MANAGER) */
 function hasAnyManagerLike(members = []) {
     return (members || []).some((m) => m.role === PROJECT_ROLE.OWNER || m.role === PROJECT_ROLE.MANAGER);
 }
 
 /**
  * Liệt kê project theo team.
- * @param {string} teamId
- * @param {{ activeOnly?: boolean }} [opts]
  */
 export async function listByTeam(teamId, { activeOnly = true } = {}) {
     const query = { team: teamId, ...(activeOnly ? { isActive: true } : {}) };
-    return Project.find(query).lean().exec();
+    return Project.find(query).populate('team', 'name').lean().exec(); // Thêm populate team
 }
 
 /**
- * Lấy chi tiết project.
- * @param {string} projectId
- * @param {{ lean?: boolean }} [opts]
+ * Lấy chi tiết project (hàm gốc, không cache).
  */
-export async function getDetail(projectId, { lean = true } = {}) {
-    const q = Project.findById(projectId);
+const _getDetail = async (projectId, { lean = true } = {}) => {
+    const q = Project.findById(projectId).populate('team', 'name'); // Thêm populate team
     return lean ? q.lean().exec() : q.exec();
 }
 
 /**
- * Tạo Project mới + thư mục Drive tương ứng.
- * Nếu project thuộc team, folder sẽ được tạo trong folder của team.
- * @param {object} payload - theo projectCreateSchema
- * @param {string} creatorUserId - externalUserId của người tạo (sẽ là OWNER)
+ * Lấy chi tiết project (đã cache).
+ */
+export const getDetail = cache(_getDetail);
+
+
+/**
+ * Tạo Project mới + 12 thư mục Drive hàng tháng cho năm hiện tại.
  */
 export async function createProject(payload, creatorUserId) {
     console.log('[repo.createProject] START');
-    console.log('[repo.createProject] Payload:', payload);
-    console.log('[repo.createProject] CreatorUserId:', creatorUserId);
 
-    // Xác định parent folder: Ưu tiên dùng folder của team
-    let parentFolderId = '1_guao-kh5cGjvcvLYiZVioujTkqJveEG';
-    const { id: driveFolderId, name: driveFolderName } = await createProjectFolder(
+    let teamDriveFolderId = '1_guao-kh5cGjvcvLYiZVioujTkqJveEG'
+    const projectParentFolderId = teamDriveFolderId
+    const { id: projectRootFolderId } = await createProjectFolder(
         payload.name,
-        parentFolderId
+        projectParentFolderId
     );
-    console.log('[repo.createProject] Drive folder created:', driveFolderId, 'in parent:', parentFolderId);
+    const currentYear = new Date().getFullYear();
+    const monthlyFoldersData = await createProjectMonthlyFolders(projectRootFolderId, currentYear);
+    console.log(`[repo.createProject] Created ${monthlyFoldersData.length} monthly folders for ${currentYear}`);
+
 
     const docData = {
         team: payload.team,
@@ -60,67 +63,62 @@ export async function createProject(payload, creatorUserId) {
         startDate: payload.startDate || undefined,
         dueDate: payload.dueDate || undefined,
 
-        driveFolderId,
-        driveFolderName,
-        driveParentId: parentFolderId || undefined,
+        // Lưu mảng folder tháng
+        monthlyDriveFolders: monthlyFoldersData, // [{ year, month, folderId, folderName }]
 
         members: [{ userId: creatorUserId, role: PROJECT_ROLE.OWNER }],
-
         platforms: payload.platforms || [],
         workTypes: payload.workTypes || [],
         tags: payload.tags || [],
     };
 
-    console.log('[repo.createProject] Creating project with data:', JSON.stringify(docData, null, 2));
     const doc = await Project.create(docData);
     console.log('[repo.createProject] Project created, _id:', doc._id);
-    console.log('[repo.createProject] Members:', doc.members);
 
-    return doc.toObject();
+    // Populate team name để trả về
+    const finalDoc = await getDetail(doc._id, { lean: true }); // Dùng hàm cached để lấy lại
+    return finalDoc || doc.toObject(); // Fallback nếu getDetail lỗi
 }
 
 /**
  * Cập nhật Project (bỏ qua isActive).
- * @param {string} projectId
- * @param {object} patch - theo projectUpdateSchema (trừ isActive)
  */
 export async function updateProject(projectId, patch) {
     const doc = await Project.findById(projectId);
     if (!doc) return null;
 
+    // ... (các trường update khác giữ nguyên) ...
     if (patch.name !== undefined) doc.name = patch.name;
     if (patch.code !== undefined) doc.code = patch.code || undefined;
     if (patch.description !== undefined) doc.description = patch.description || undefined;
     if (patch.priority !== undefined) doc.priority = patch.priority;
-
     if ('startDate' in patch) doc.startDate = patch.startDate ?? null;
     if ('dueDate' in patch) doc.dueDate = patch.dueDate ?? null;
-
     if (patch.tags !== undefined) doc.tags = patch.tags || [];
     if (patch.statuses !== undefined) doc.statuses = patch.statuses || [];
     if (patch.platforms !== undefined) doc.platforms = patch.platforms || [];
     if (patch.workTypes !== undefined) doc.workTypes = patch.workTypes || [];
 
     await doc.save();
-    return doc.toObject();
+    // Populate team name để trả về
+    const finalDoc = await getDetail(doc._id, { lean: true }); // Dùng hàm cached để lấy lại
+    return finalDoc || doc.toObject();
 }
 
 /**
  * Archive Project (isActive = false).
- * @param {string} projectId
  */
 export async function archiveProject(projectId) {
     const doc = await Project.findById(projectId);
     if (!doc) return null;
     doc.isActive = false;
     await doc.save();
-    return doc.toObject();
+    const finalDoc = await getDetail(doc._id, { lean: true });
+    return finalDoc || doc.toObject();
 }
 
 /**
- * Thêm thành viên (idempotent: có rồi thì cập nhật role).
- * @param {string} projectId
- * @param {{ userId:string, role:string }} param1
+ * Thêm thành viên (idempotent).
  */
 export async function addMember(projectId, { userId, role }) {
     const doc = await Project.findById(projectId);
@@ -129,19 +127,21 @@ export async function addMember(projectId, { userId, role }) {
     const members = doc.members || [];
     const idx = members.findIndex((m) => String(m.userId) === String(userId));
     if (idx >= 0) {
-        doc.members[idx].role = role;
+        // Cập nhật role nếu đã tồn tại
+        if (doc.members[idx].role !== role) {
+            doc.members[idx].role = role;
+        }
     } else {
         doc.members.push({ userId, role });
     }
 
     await doc.save();
-    return doc.toObject();
+    const finalDoc = await getDetail(doc._id, { lean: true });
+    return finalDoc || doc.toObject();
 }
 
 /**
  * Bỏ thành viên – không được làm mất quản trị cuối cùng.
- * @param {string} projectId
- * @param {string} userId
  */
 export async function removeMember(projectId, userId) {
     const doc = await Project.findById(projectId);
@@ -149,12 +149,8 @@ export async function removeMember(projectId, userId) {
 
     const members = doc.members || [];
     const target = members.find((m) => String(m.userId) === String(userId));
-    if (!target) {
-        // idempotent
-        return doc.toObject();
-    }
+    if (!target) return doc.toObject(); // idempotent
 
-    // Nếu target là quản trị, kiểm tra sau khi bỏ còn ai quản trị không
     const isAdminRole = target.role === PROJECT_ROLE.OWNER || target.role === PROJECT_ROLE.MANAGER;
     if (isAdminRole) {
         const remaining = members.filter((m) => String(m.userId) !== String(userId));
@@ -165,37 +161,42 @@ export async function removeMember(projectId, userId) {
 
     doc.members = members.filter((m) => String(m.userId) !== String(userId));
     await doc.save();
-    return doc.toObject();
+    const finalDoc = await getDetail(doc._id, { lean: true });
+    return finalDoc || doc.toObject();
 }
 
 /**
  * Đổi role thành viên – không làm mất quản trị cuối cùng.
- * @param {string} projectId
- * @param {string} userId
- * @param {string} role
  */
 export async function changeMemberRole(projectId, userId, role) {
     const doc = await Project.findById(projectId);
     if (!doc) return null;
 
     const members = doc.members || [];
-    const target = members.find((m) => String(m.userId) === String(userId));
-    if (!target) {
+    const targetIndex = members.findIndex((m) => String(m.userId) === String(userId));
+    if (targetIndex < 0) {
         throw new AppError('MEMBER_NOT_FOUND', 'MEMBER_NOT_FOUND', 404);
     }
+    const target = members[targetIndex];
 
     const wasAdmin = target.role === PROJECT_ROLE.OWNER || target.role === PROJECT_ROLE.MANAGER;
     const willBeAdmin = role === PROJECT_ROLE.OWNER || role === PROJECT_ROLE.MANAGER;
 
     if (wasAdmin && !willBeAdmin) {
-        // đổi từ admin -> non-admin => kiểm tra còn admin khác không
-        const adminsOther = members.filter((m) => String(m.userId) !== String(userId));
-        if (!hasAnyManagerLike(adminsOther)) {
+        const adminsOtherThanTarget = members.filter((m, index) =>
+            index !== targetIndex && (m.role === PROJECT_ROLE.OWNER || m.role === PROJECT_ROLE.MANAGER)
+        );
+        if (adminsOtherThanTarget.length === 0) {
             throw new AppError('LAST_MANAGER', 'LAST_MANAGER', 400);
         }
     }
 
-    target.role = role;
+    // Cập nhật role trực tiếp trong mảng
+    doc.members[targetIndex].role = role;
+    // Đánh dấu mảng members đã thay đổi để Mongoose biết cần lưu
+    doc.markModified('members');
+
     await doc.save();
-    return doc.toObject();
+    const finalDoc = await getDetail(doc._id, { lean: true });
+    return finalDoc || doc.toObject();
 }

@@ -1,63 +1,63 @@
 // components/ui/user-display/index.js
 // Mục đích: Component hiển thị thông tin user (tên, avatar) từ userId
+// Tối ưu: Ưu tiên nhận `userInfo` từ prop để tránh fetch.
+// Giữ lại logic fetch (useEffect) làm dự phòng.
 
 'use client';
 
 import { useState, useEffect } from 'react';
 import Avatar from '@/components/ui/avatar';
 import { driveImage } from '@/functions';
-import { getUserDisplayInfo } from '@/lib/user-display'; 
-
-/**
- * UserDisplay - Hiển thị user với avatar và tên
- * Tự động fetch thông tin user từ API dựa trên userId.
- * @param {Object} props
- * @param {string} props.userId - ID của user cần hiển thị
- * @param {boolean} [props.showAvatar=true] - Hiển thị avatar
- * @param {'xs'|'sm'|'md'|'lg'} [props.avatarSize] - Kích thước avatar (ghi đè size)
- * @param {'xs'|'sm'|'md'|'lg'} [props.size='sm'] - Kích thước tổng thể (cho cả avatar và text)
- * @param {boolean} [props.showJobTitle=false] - Hiển thị chức vụ (nếu có)
- * @param {boolean} [props.inline=false] - Hiển thị dạng inline-flex
- * @param {string} [props.className] - Custom CSS classes
- */
+import { getUserDisplayInfo } from '@/lib/user-display';
 
 export default function UserDisplay({
     userId,
+    userInfo: initialUserInfo, // Tối ưu: Nhận userInfo đã được fetch trước
     showAvatar = true,
     avatarSize,
     size = 'sm',
     showJobTitle = false,
     inline = false,
-    className = ''
+    className = '',
+    fullcontent = null,
+    isSelf = false,
 }) {
-    const [userInfo, setUserInfo] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    // Tối ưu: Nếu có `initialUserInfo`, dùng nó và bỏ qua state
+    const [userInfo, setUserInfo] = useState(initialUserInfo || null);
+    // Tối ưu: Chỉ loading khi *không* có `initialUserInfo` và *có* `userId`
+    const [isLoading, setIsLoading] = useState(!initialUserInfo && !!userId);
 
     useEffect(() => {
-        // 1. Xử lý trường hợp không có userId
-        if (!userId) {
-            setUserInfo(null); // Đảm bảo userInfo rỗng
-            setIsLoading(false); // Không cần tải gì
-            return;
+        // Tối ưu: Nếu đã có `initialUserInfo` hoặc không có `userId`, không làm gì cả
+        if (initialUserInfo || !userId) {
+            // Nếu userId thay đổi và không có info, đảm bảo state là loading
+            if (!initialUserInfo && userId) {
+                setUserInfo(null);
+                setIsLoading(true);
+            } else if (!userId) {
+                setUserInfo(null);
+                setIsLoading(false);
+                return;
+            } else {
+                // Cập nhật state nếu prop thay đổi (hiếm gặp)
+                setUserInfo(initialUserInfo);
+                setIsLoading(false);
+                return;
+            }
         }
 
-        // 2. Reset state khi userId thay đổi để fetch lại
-        setIsLoading(true);
-        setUserInfo(null);
-
-        // 3. Lấy thông tin user từ cached server action (thay vì fetch API)
+        // Logic fetch dự phòng: Chỉ chạy khi KHÔNG có `initialUserInfo`
         const fetchUserInfo = async () => {
             try {
                 const data = await getUserDisplayInfo(userId);
                 setUserInfo({
-                    name: data.name || userId, // Fallback về userId nếu không có tên
+                    name: data.name || userId,
                     jobTitle: data.jobTitle || '',
                     avatar: data.avatar || null,
                     color: data.color || null,
                 });
             } catch (error) {
                 console.error('Error fetching user info:', error);
-                // Lỗi, hiển thị userId như tên
                 setUserInfo({ name: userId, jobTitle: '', avatar: null, color: null });
             } finally {
                 setIsLoading(false);
@@ -65,9 +65,8 @@ export default function UserDisplay({
         };
 
         fetchUserInfo();
-    }, [userId]); // Chỉ chạy lại khi userId thay đổi
+    }, [userId, initialUserInfo]); // Phụ thuộc vào cả `userId` và `initialUserInfo`
 
-    // Render khi không có userId
     if (!userId) {
         return (
             <span className={`text-gray-400 italic ${className}`}>
@@ -76,12 +75,9 @@ export default function UserDisplay({
         );
     }
 
-    // ----- Các biến dùng chung -----
     const finalAvatarSize = avatarSize || size;
     const containerClass = inline ? 'inline-flex' : 'flex';
 
-    // ----- Render Skeleton Loading -----
-    // Hiển thị khung sườn với hiệu ứng pulse khi đang tải
     if (isLoading) {
         const skeletonAvatarSizeClass = {
             xs: 'h-5 w-5',
@@ -110,10 +106,7 @@ export default function UserDisplay({
                     <div className={`${skeletonAvatarSizeClass} rounded-full bg-gray-300`}></div>
                 )}
                 <div className={inline ? '' : 'flex-1 min-w-0'}>
-                    {/* Khung sườn cho tên */}
                     <div className={`${skeletonTextHeightClass} ${skeletonTextWidthClass} bg-gray-300 rounded-lg`}></div>
-                    
-                    {/* Khung sườn cho chức vụ (nếu bật) */}
                     {showJobTitle && (
                         <div className="h-3 w-16 bg-gray-300 rounded-lg mt-1"></div>
                     )}
@@ -122,13 +115,11 @@ export default function UserDisplay({
         );
     }
 
-    // ----- Render Dữ Liệu Đã Tải Xong -----
-    // Lúc này, isLoading=false và userInfo đã có dữ liệu (hoặc fallback)
-    const displayName = userInfo?.name || userId; // Luôn có giá trị
+    // Render khi đã có dữ liệu (hoặc fallback)
+    const displayName = userInfo?.name || userId;
     const jobTitle = userInfo?.jobTitle || '';
     const avatarUrl = userInfo?.avatar || null;
 
-    // Ánh xạ kích thước tổng thể sang kích thước chữ
     const textSizeClass = {
         xs: 'text-xs',
         sm: 'text-sm',
@@ -137,22 +128,26 @@ export default function UserDisplay({
     }[size] || 'text-sm';
 
     return (
-        <div className={`${containerClass} items-center gap-2 ${className}`}>
+        <div className={`${containerClass} items-center gap-4 ${className}`}>
             {showAvatar && (
                 <Avatar
                     userId={userId}
                     name={displayName}
-                    src={driveImage(avatarUrl)} // Sử dụng hàm driveImage
+                    src={driveImage(avatarUrl)}
                     size={finalAvatarSize}
                 />
             )}
-            <div className={inline ? '' : 'flex-1 min-w-0'}>
-                {/* Tên user */}
-                <span className={`${textSizeClass} font-medium text-gray-900`}>
-                    {displayName}
-                </span>
+            <div className={inline ? '' : 'flex-1 min-w-0 flex flex-col gap-2'}>
+                <div className={`${textSizeClass} font-medium text-gray-900`}>
+                    <span>    {displayName}</span>
+                    {isSelf && (
+                        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 ml-3">
+                            Bạn
+                        </span>
+                    )}
 
-                {/* Chức vụ (nếu bật và có dữ liệu) */}
+                </div>
+                {fullcontent}
                 {showJobTitle && jobTitle && (
                     <span className="text-xs text-gray-500 ml-1">
                         ({jobTitle})
@@ -167,6 +162,8 @@ export default function UserDisplay({
  * UserName - Component con, chỉ hiển thị tên (không avatar)
  */
 export function UserName({ userId, className = '' }) {
+    // Tối ưu: Không thể truyền `userInfo` vào đây vì không có sẵn
+    // Nó sẽ tự dùng logic fetch dự phòng (chấp nhận được)
     return (
         <UserDisplay
             userId={userId}
@@ -180,11 +177,12 @@ export function UserName({ userId, className = '' }) {
  * UserBadge - Component con, hiển thị dạng "badge" (avatar nhỏ + tên)
  */
 export function UserBadge({ userId, className = '' }) {
+    // Tối ưu: Tương tự UserName, sẽ tự fetch
     return (
         <UserDisplay
             userId={userId}
-            size="xs" // Mặc định size nhỏ cho badge
-            inline={true} // Mặc định inline
+            size="xs"
+            inline={true}
             className={className}
         />
     );

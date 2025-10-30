@@ -1,7 +1,7 @@
 // app/(auth)/(main)/teams/page.client.js
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, LayoutGrid, List, Users } from 'lucide-react';
 import DialogComponent from '@/components/ui/dialog';
 import TeamForm from '@/components/team/TeamForm.client';
@@ -10,24 +10,30 @@ import { useAsyncNotifier } from '@/hooks/loading.hook';
 import { useRouter } from 'next/navigation';
 
 export default function TeamsPageClient({ initialTeams, currentUserId }) {
-    const [teams, setTeams] = useState(initialTeams);
+    // State cho các thành phần UI (Dialog, View Mode)
     const [viewMode, setViewMode] = useState('card'); // 'card' or 'list'
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+
     const { run, Overlays } = useAsyncNotifier();
     const router = useRouter();
 
-    const hasTeams = teams.length > 0;
+    // Dùng thẳng prop `initialTeams` làm nguồn dữ liệu
+    const hasTeams = initialTeams.length > 0;
 
-    // Sort teams: Active trước, sau đó theo updatedAt
-    const sortedTeams = [...teams].sort((a, b) => {
-        if (a.isActive !== b.isActive) {
-            return a.isActive ? -1 : 1;
-        }
-        return new Date(b.updatedAt) - new Date(a.updatedAt);
-    });
+    // Tối ưu: Dùng useMemo để tính toán lại `sortedTeams`
+    // chỉ khi prop `initialTeams` thay đổi.
+    const sortedTeams = useMemo(() => {
+        return [...initialTeams].sort((a, b) => {
+            if (a.isActive !== b.isActive) {
+                return a.isActive ? -1 : 1;
+            }
+            return new Date(b.updatedAt) - new Date(a.updatedAt);
+        });
+    }, [initialTeams]);
 
+    // Tối ưu: Sau khi tạo, chỉ cần đóng dialog và refresh.
+    // router.refresh() sẽ lấy `initialTeams` mới từ server.
     const handleCreateSuccess = (newTeam) => {
-        setTeams((prev) => [newTeam, ...prev]);
         setIsCreateDialogOpen(false);
         router.refresh();
     };
@@ -35,9 +41,8 @@ export default function TeamsPageClient({ initialTeams, currentUserId }) {
     return (
         <>
             <Overlays />
-            
+
             <div className="space-y-6 w-full">
-                {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-xl font-bold text-gray-900">Nhóm làm việc</h1>
@@ -46,35 +51,31 @@ export default function TeamsPageClient({ initialTeams, currentUserId }) {
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
-                        {/* View Toggle */}
                         {hasTeams && (
                             <div className="flex items-center rounded-lg border border-gray-200 bg-white p-1">
                                 <button
                                     onClick={() => setViewMode('card')}
-                                    className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-                                        viewMode === 'card'
+                                    className={`rounded px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'card'
                                             ? 'bg-[var(--brand-600)] text-white'
                                             : 'text-gray-600 hover:text-gray-900'
-                                    }`}
+                                        }`}
                                     title="Xem dạng thẻ"
                                 >
                                     <LayoutGrid className="h-4 w-4" />
                                 </button>
                                 <button
                                     onClick={() => setViewMode('list')}
-                                    className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-                                        viewMode === 'list'
+                                    className={`rounded px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'list'
                                             ? 'bg-[var(--brand-600)] text-white'
                                             : 'text-gray-600 hover:text-gray-900'
-                                    }`}
+                                        }`}
                                     title="Xem dạng danh sách"
                                 >
                                     <List className="h-4 w-4" />
                                 </button>
                             </div>
                         )}
-                        
-                        {/* Create Button */}
+
                         <button
                             onClick={() => setIsCreateDialogOpen(true)}
                             className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-600)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[var(--brand-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 transition-all"
@@ -85,16 +86,19 @@ export default function TeamsPageClient({ initialTeams, currentUserId }) {
                     </div>
                 </div>
 
-                {/* Team List hoặc Empty State */}
                 {hasTeams ? (
                     viewMode === 'card' ? (
                         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {sortedTeams.map((team) => (
-                                <TeamCard
+                                <div
                                     key={team._id}
-                                    team={team}
-                                    currentUserId={currentUserId}
-                                />
+                                    onMouseEnter={() => router.prefetch(`/teams/${team._id}`)}
+                                >
+                                    <TeamCard
+                                        team={team}
+                                        currentUserId={currentUserId}
+                                    />
+                                </div>
                             ))}
                         </div>
                     ) : (
@@ -121,10 +125,11 @@ export default function TeamsPageClient({ initialTeams, currentUserId }) {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {sortedTeams.map((team) => (
-                                        <tr 
+                                        <tr
                                             key={team._id}
                                             className="hover:bg-gray-50 cursor-pointer transition-colors"
                                             onClick={() => router.push(`/teams/${team._id}`)}
+                                            onMouseEnter={() => router.prefetch(`/teams/${team._id}`)}
                                         >
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center">
@@ -145,11 +150,10 @@ export default function TeamsPageClient({ initialTeams, currentUserId }) {
                                                 <div className="text-sm text-gray-900">{team.members?.length || 0}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                                                    team.isActive 
+                                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${team.isActive
                                                         ? 'bg-green-100 text-green-800'
                                                         : 'bg-gray-100 text-gray-800'
-                                                }`}>
+                                                    }`}>
                                                     {team.isActive ? 'Hoạt động' : 'Không hoạt động'}
                                                 </span>
                                             </td>
@@ -186,7 +190,6 @@ export default function TeamsPageClient({ initialTeams, currentUserId }) {
                 )}
             </div>
 
-            {/* Create Team Dialog */}
             <DialogComponent
                 open={isCreateDialogOpen}
                 onOpenChange={setIsCreateDialogOpen}

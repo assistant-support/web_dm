@@ -1,10 +1,9 @@
 // app/(auth)/(main)/teams/loading.js
-// Mục đích: Loading skeleton cho teams page
+// Mục đích: Loading skeleton cho teams page (Không thay đổi)
 
 export default function TeamsLoading() {
     return (
         <div className="space-y-6 w-full">
-            {/* Header Skeleton */}
             <div className="flex items-center justify-between">
                 <div className="space-y-2">
                     <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
@@ -13,7 +12,6 @@ export default function TeamsLoading() {
                 <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
             </div>
 
-            {/* Grid Skeleton */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
                     <div

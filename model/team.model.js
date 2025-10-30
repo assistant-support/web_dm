@@ -1,4 +1,4 @@
-// cấu trúc thư mục hiện tại: /model/team.model.js
+// cấu trúc thư mục hiện tại: @/model/team.model.js
 // Tác dụng file: Định nghĩa Mongoose Model Team (nhóm làm việc) và membership.
 
 import mongoose from 'mongoose';
@@ -14,17 +14,12 @@ const TeamSchema = new mongoose.Schema({
     description: String,
     members: { type: [TeamMembershipSchema], default: [] },
     isActive: { type: Boolean, default: true },
-    
-    // ---- Drive: tạo folder khi tạo team
-    driveFolderId: { type: String, index: true }, // ID folder của team trên Google Drive
-    driveFolderName: { type: String }, // Tên folder (để hiển thị)
-    driveParentId: { type: String }, // ID folder cha (thường là DRIVE_SHARED_DRIVE_ID)
+    driveFolderId: { type: String, index: true }, 
+    driveFolderName: { type: String }, 
+    driveParentId: { type: String }, 
 }, {
     timestamps: true,
     toJSON: { transform: (_d, r) => { delete r.__v; } }
 });
-
-// Tìm team theo user
-TeamSchema.index({ 'members.userId': 1 });
 
 export default mongoose.models.Team || mongoose.model('Team', TeamSchema);

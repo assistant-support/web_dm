@@ -1,5 +1,4 @@
 // data/team/actions/member-stats.js
-// Server action để lấy stats của members
 
 'use server';
 
@@ -7,7 +6,7 @@ import { z } from 'zod';
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert } from '@/lib/action-utils.js';
 import { getBatchMemberStats } from '@/data/team/processors/member-stats.js';
-import Team from '@/model/team.model.js';
+import { getById } from '@/data/team/processors/repo.js';
 import { isTeamMember } from '@/lib/permissions.js';
 
 /**
@@ -24,15 +23,13 @@ export async function getMembersStats(payload) {
                     ym: z.string().regex(/^\d{4}-\d{2}$/).optional(),
                 })
                 .parse(payload || {});
-
-            const team = await Team.findById(teamId).lean();
+            const team = await getById(teamId, { lean: true });
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(await isTeamMember(team, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
 
             const userIds = team.members.map(m => m.userId);
             const stats = await getBatchMemberStats(teamId, userIds, ym);
 
-            // Serialize để tránh lỗi MongoDB ObjectId
             return JSON.parse(JSON.stringify(stats));
         },
         { requireAuth: true }

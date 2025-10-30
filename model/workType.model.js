@@ -1,7 +1,3 @@
-// model/common/workType.model.js
-// Mục đích: Danh mục "Loại công việc" (Thiết kế banner, Dựng video, Viết bài, QA, Dev task…)
-// Có thể cấu hình checklist/điểm mặc định + các nền tảng áp dụng.
-
 import mongoose from 'mongoose';
 
 const DefaultChecklistItem = new mongoose.Schema({

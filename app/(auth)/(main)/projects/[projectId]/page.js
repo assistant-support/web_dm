@@ -1,40 +1,48 @@
 // app/(auth)/(main)/projects/[projectId]/page.js
-import { getProjectDetail } from '@/data/project/actions/list.js';
-import { listByProject } from '@/data/task/actions/server.js';
-import { FolderOpen, Users, Clock, CheckCircle, Calendar } from 'lucide-react';
+import { FolderOpen, Users, Clock, CheckCircle, Calendar, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { getProjectDetail } from '@/data/project/actions/list.js';
+import { getProjectAnalytics } from '@/data/project/processors/analytics.js';
+import { t } from '@/lib/i18n-vi';
+import { PRIORITY } from '@/model/common/enums.js';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+// Define priorityMap using enum keys and t function
+const priorityMap = {
+    [PRIORITY.LOW]: { label: t('taskPriority.low'), icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
+    [PRIORITY.NORMAL]: { label: t('taskPriority.normal'), icon: CheckCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
+    [PRIORITY.HIGH]: { label: t('taskPriority.high'), icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-100' },
+    [PRIORITY.URGENT]: { label: t('taskPriority.urgent'), icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-100' },
+};
 
 export default async function ProjectOverviewPage({ params }) {
     const { projectId } = await params;
-    const result = await getProjectDetail(projectId);
-    
-    if (!result.ok) {
-        return <div>Error loading project</div>;
+
+    // Fetch project details and analytics in parallel
+    const [projectResult, analyticsResult] = await Promise.all([
+        getProjectDetail(projectId), // This hits React.cache (from layout)
+        getProjectAnalytics(projectId) // This hits its own unstable_cache
+    ]);
+
+    if (!projectResult.ok) {
+        return <div className="text-red-600">{t('error.loadFailed')}: {projectResult.message}</div>;
     }
 
-    const project = result.data;
-
-    // Get tasks to count
-    const tasksResult = await listByProject(projectId, {});
-    const tasks = tasksResult.ok ? tasksResult.data : [];
-    const completedTasks = tasks.filter(t => t.status === 'completed').length;
+    const project = projectResult.data;
+    const taskStats = analyticsResult.tasks || { totalTasks: 0, completedTasks: 0 };
 
     const quickStats = [
         {
-            label: 'Tổng tasks',
-            value: tasks.length,
+            label: t('task.tasks'), // "Nhiệm vụ"
+            value: taskStats.totalTasks,
             icon: FolderOpen,
             href: `/projects/${projectId}/tasks`,
             color: 'text-blue-600',
             bg: 'bg-blue-100'
         },
         {
-            label: 'Thành viên',
+            label: t('project.members'), // "Thành viên"
             value: project.members?.length || 0,
             icon: Users,
             href: `/projects/${projectId}/members`,
@@ -42,14 +50,16 @@ export default async function ProjectOverviewPage({ params }) {
             bg: 'bg-green-100'
         },
         {
-            label: 'Hoàn thành',
-            value: completedTasks,
+            label: t('taskStatus.completed'), // "Hoàn thành"
+            value: taskStats.completedTasks,
             icon: CheckCircle,
-            href: `/projects/${projectId}/analytics`,
+            href: `/projects/${projectId}/tasks?status=completed`,
             color: 'text-purple-600',
             bg: 'bg-purple-100'
         }
     ];
+
+    const priorityInfo = project.priority ? priorityMap[project.priority] : null;
 
     return (
         <div className="space-y-6 w-full">
@@ -80,66 +90,59 @@ export default async function ProjectOverviewPage({ params }) {
             {/* Project Details */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Thông tin dự án</h3>
-                
+
                 <div className="space-y-4">
-                    {/* Description */}
                     {project.description && (
                         <div>
-                            <label className="text-sm font-medium text-gray-600">Mô tả</label>
+                            <label className="text-sm font-medium text-gray-600">{t('common.description')}</label>
                             <p className="text-sm text-gray-900 mt-1">{project.description}</p>
                         </div>
                     )}
 
-                    {/* Dates */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {project.startDate && (
                             <div>
                                 <label className="text-sm font-medium text-gray-600 flex items-center gap-2">
                                     <Calendar className="h-4 w-4" />
-                                    Ngày bắt đầu
+                                    {t('common.startDate')}
                                 </label>
-                                <p className="text-sm text-gray-900 mt-1">
+                                <p className="text-sm text-gray-900 mt-1 ml-6">
                                     {format(new Date(project.startDate), 'dd/MM/yyyy', { locale: vi })}
                                 </p>
                             </div>
                         )}
-                        {project.endDate && (
+                        {project.dueDate && (
                             <div>
                                 <label className="text-sm font-medium text-gray-600 flex items-center gap-2">
                                     <Calendar className="h-4 w-4" />
-                                    Ngày kết thúc
+                                    {t('common.dueDate')}
                                 </label>
-                                <p className="text-sm text-gray-900 mt-1">
-                                    {format(new Date(project.endDate), 'dd/MM/yyyy', { locale: vi })}
+                                <p className="text-sm text-gray-900 mt-1 ml-6">
+                                    {format(new Date(project.dueDate), 'dd/MM/yyyy', { locale: vi })}
                                 </p>
+                            </div>
+                        )}
+                        {priorityInfo && (
+                            <div>
+                                <label className="text-sm font-medium text-gray-600 flex items-center gap-2">
+                                    <priorityInfo.icon className={`h-4 w-4 ${priorityInfo.color}`} />
+                                    {t('common.priority')}
+                                </label>
+                                <div className="mt-1 ml-6">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${priorityInfo.bg} ${priorityInfo.color}`}>
+                                        {priorityInfo.label}
+                                    </span>
+                                </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Priority */}
-                    {project.priority && (
-                        <div>
-                            <label className="text-sm font-medium text-gray-600">Độ ưu tiên</label>
-                            <div className="mt-1">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    project.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                    project.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-green-100 text-green-800'
-                                }`}>
-                                    {project.priority === 'high' ? 'Cao' : 
-                                     project.priority === 'medium' ? 'Trung bình' : 'Thấp'}
-                                </span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Tags */}
                     {project.tags && project.tags.length > 0 && (
                         <div>
-                            <label className="text-sm font-medium text-gray-600">Tags</label>
+                            <label className="text-sm font-medium text-gray-600">{t('task.tags')}</label>
                             <div className="flex flex-wrap gap-2 mt-1">
                                 {project.tags.map((tag, index) => (
-                                    <span 
+                                    <span
                                         key={index}
                                         className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                                     >
@@ -150,10 +153,9 @@ export default async function ProjectOverviewPage({ params }) {
                         </div>
                     )}
 
-                    {/* Team */}
                     {project.team && (
                         <div>
-                            <label className="text-sm font-medium text-gray-600">Team</label>
+                            <label className="text-sm font-medium text-gray-600">{t('team.title')}</label>
                             <p className="text-sm text-gray-900 mt-1">{project.team.name}</p>
                         </div>
                     )}

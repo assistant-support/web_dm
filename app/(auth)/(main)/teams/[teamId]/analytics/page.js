@@ -5,11 +5,8 @@ import { notFound } from 'next/navigation';
 import TeamAnalytics from '@/components/team/TeamAnalytics.client.js';
 import TeamLeaderboard from '@/components/team/TeamLeaderboard.client.js';
 
-// Force dynamic rendering
-export const dynamic = 'force-dynamic';
-
 export default async function TeamAnalyticsPage({ params }) {
-    const teamId = await params?.teamId;
+    const { teamId } = await params;
     if (!teamId) return notFound();
 
     // Current month for leaderboard
@@ -18,10 +15,7 @@ export default async function TeamAnalyticsPage({ params }) {
 
     return (
         <div className="space-y-6">
-            {/* Analytics Dashboard */}
             <TeamAnalytics teamId={teamId} />
-
-            {/* Leaderboard Section */}
             <TeamLeaderboard teamId={teamId} initialYm={currentYm} />
         </div>
     );

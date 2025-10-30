@@ -14,7 +14,7 @@ import { checkUserUid } from '@/data/appUser/uid-actions';
 
 const apps = [
     { name: 'Digital Marketing', href: '#', icon: 'https://lh3.googleusercontent.com/d/1PNcTJhUTzndZaHAe4s19sbjZyV6S80d0' },
-    { name: 'Checkin', href: '#', icon: '/logo.jpg' },
+    { name: 'Checkin', href: 'https://checkin.s4h.edu.vn', icon: 'https://lh3.googleusercontent.com/d/1_fJwUYjDMT939e7v0JqExeHluwl58FnW' },
 ];
 
 export function AppSwitcher() {

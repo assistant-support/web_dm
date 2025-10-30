@@ -1,5 +1,4 @@
 // data/team/actions/management.js
-// Server actions cho quản lý team (archive, delete)
 
 'use server';
 
@@ -7,6 +6,7 @@ import { z } from 'zod';
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
 import Team from '@/model/team.model.js';
+import { getById } from '@/data/team/processors/repo.js'; 
 import Project from '@/model/project.model.js';
 import Task from '@/model/task.model.js';
 import { isTeamManager } from '@/lib/permissions.js';
@@ -26,7 +26,8 @@ export async function toggleArchive(payload) {
                 })
                 .parse(payload || {});
 
-            const team = await Team.findById(teamId);
+            // Tối ưu: Dùng getById (lean: false để lấy Mongoose doc)
+            const team = await getById(teamId, { lean: false });
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(isTeamManager(team, uid), 'Chỉ manager mới có thể archive team', 'FORBIDDEN', 403);
 
@@ -35,7 +36,6 @@ export async function toggleArchive(payload) {
 
             await revalidateMany([tags.team(teamId)]);
 
-            // Serialize để tránh lỗi MongoDB ObjectId
             return JSON.parse(JSON.stringify({
                 isActive: team.isActive,
                 message: team.isActive ? 'Đã kích hoạt lại team' : 'Đã lưu trữ team'
@@ -60,11 +60,11 @@ export async function deleteTeam(payload) {
                 })
                 .parse(payload || {});
 
-            const team = await Team.findById(teamId);
+            // Tối ưu: Dùng getById (lean: false để lấy Mongoose doc)
+            const team = await getById(teamId, { lean: false });
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(isTeamManager(team, uid), 'Chỉ manager mới có thể xóa team', 'FORBIDDEN', 403);
 
-            // Kiểm tra confirmation text
             assert(
                 confirmText.toLowerCase() === team.name.toLowerCase(),
                 'Tên team không khớp',
@@ -72,7 +72,6 @@ export async function deleteTeam(payload) {
                 400
             );
 
-            // Kiểm tra có projects không
             const projectCount = await Project.countDocuments({ team: teamId });
             assert(
                 projectCount === 0,
@@ -81,10 +80,9 @@ export async function deleteTeam(payload) {
                 400
             );
 
-            // Kiểm tra có tasks không (các tasks không thuộc project nào)
-            const taskCount = await Task.countDocuments({ 
+            const taskCount = await Task.countDocuments({
                 team: teamId,
-                project: null 
+                project: null
             });
             assert(
                 taskCount === 0,
@@ -93,12 +91,11 @@ export async function deleteTeam(payload) {
                 400
             );
 
-            // Xóa team
+            // Dùng `findByIdAndDelete` vì `team` là Mongoose doc
             await Team.findByIdAndDelete(teamId);
 
             await revalidateMany([tags.team(teamId)]);
 
-            // Serialize để tránh lỗi MongoDB ObjectId
             return JSON.parse(JSON.stringify({
                 message: 'Đã xóa team thành công'
             }));
@@ -122,30 +119,30 @@ export async function transferOwnership(payload) {
                 })
                 .parse(payload || {});
 
-            const team = await Team.findById(teamId);
+            // Tối ưu: Dùng getById (lean: false để lấy Mongoose doc)
+            const team = await getById(teamId, { lean: false });
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(isTeamManager(team, uid), 'Chỉ manager mới có thể chuyển quyền', 'FORBIDDEN', 403);
 
-            // Kiểm tra newManager có trong team không
             const newManager = team.members.find(m => String(m.userId) === String(newManagerUserId));
             assert(newManager, 'Người dùng không phải thành viên của team', 'INVALID_INPUT', 400);
 
-            // Đổi role: current manager -> member, new -> manager
             team.members = team.members.map(m => {
-                if (String(m.userId) === String(uid)) {
-                    return { ...m, role: 'member' };
+                // Chuyển Mongoose sub-document về plain object để map an toàn
+                const memberObj = m.toObject ? m.toObject() : m;
+                if (String(memberObj.userId) === String(uid)) {
+                    return { ...memberObj, role: 'member' };
                 }
-                if (String(m.userId) === String(newManagerUserId)) {
-                    return { ...m, role: 'manager' };
+                if (String(memberObj.userId) === String(newManagerUserId)) {
+                    return { ...memberObj, role: 'manager' };
                 }
-                return m;
+                return memberObj;
             });
 
             await team.save();
 
             await revalidateMany([tags.team(teamId)]);
 
-            // Serialize để tránh lỗi MongoDB ObjectId
             return JSON.parse(JSON.stringify({
                 message: 'Đã chuyển quyền quản lý thành công'
             }));

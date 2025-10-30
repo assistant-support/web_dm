@@ -6,7 +6,6 @@
 import { useState } from 'react';
 import { MoreVertical, Trash2, UserCog, Briefcase, Calendar, Trophy, CheckCircle2 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import Avatar from '@/components/ui/avatar/index.js';
 import UserDisplay, { UserName } from '@/components/ui/user-display';
 import Badge from '@/components/ui/badge/index.js';
 import { ConfirmDialog } from '@/components/ui/dialog/index.js';
@@ -15,17 +14,15 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 
-/**
- * MemberRow Component
- * @param {Object} props
- * @param {Object} props.member - Member data {userId, role, createdAt}
- * @param {string} props.teamId - Team ID
- * @param {boolean} props.isManager - Current user là manager không
- * @param {string} props.currentUserId - ID của current user
- * @param {Object} props.stats - Member stats {projectsCount, tasksCompleted, currentMonthPoints, joinedAt}
- * @param {boolean} props.isLoadingStats - Loading state cho stats
- */
-export default function MemberRow({ member, teamId, isManager, currentUserId, stats, isLoadingStats }) {
+export default function MemberRow({
+    member,
+    teamId,
+    isManager,
+    currentUserId,
+    userInfo, // Tối ưu: Nhận userInfo
+    stats,
+    isLoadingStats
+}) {
     const router = useRouter();
     const { run, Overlays } = useAsyncNotifier();
     const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
@@ -53,7 +50,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
 
     const handleChangeRole = async (newRole) => {
         const roleName = newRole === 'manager' ? 'Quản lý' : 'Thành viên';
-        
+
         const result = await run(
             async () => await changeRole(teamId, { userId: member.userId, role: newRole }),
             {
@@ -75,27 +72,47 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
             <Overlays />
             <div className="py-4 px-6 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
-                    {/* Left: User info */}
                     <div className="flex items-center gap-4 flex-1 min-w-0">
+                        {/* Tối ưu: Truyền userInfo vào UserDisplay */}
                         <UserDisplay
                             userId={member.userId}
+                            userInfo={userInfo} // <--- ĐÂY
                             showJobTitle={true}
-                            size="md"
+                            size="lg"
+                            isSelf={isSelf}
+                            fullcontent={!isLoadingStats && stats && (
+                                <div className="flex items-center gap-6 text-sm text-gray-600">
+                                    <div className="flex items-center gap-1.5" title="Số dự án tham gia">
+                                        <Briefcase className="h-3.5 w-3.5 text-blue-600" />
+                                        <span>{stats.projectsCount} dự án</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5" title="Số tasks đã hoàn thành">
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                                        <span>{stats.tasksCompleted} tasks</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5" title="Điểm tháng này">
+                                        <Trophy className="h-3.5 w-3.5 text-yellow-600" />
+                                        <span className="font-medium">{stats.currentMonthPoints} pts</span>
+                                    </div>
+                                    {stats.joinedAt && (
+                                        <div className="flex items-center gap-1.5 text-gray-500" title="Ngày tham gia">
+                                            <Calendar className="h-3.5 w-3.5" />
+                                            <span>{format(new Date(stats.joinedAt), 'dd/MM/yyyy')}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         />
-                        {isSelf && (
-                            <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
-                                Bạn
-                            </span>
-                        )}
+                     
+
                     </div>
 
-                    {/* Right: Role badge & actions */}
                     <div className="flex items-center gap-3 flex-shrink-0">
-                        <Badge 
-                            variant="role" 
+                        <Badge
+                            variant="role"
                             role={member.role}
-                            className={member.role === 'manager' 
-                                ? 'bg-purple-100 text-purple-800 border-purple-200' 
+                            className={member.role === 'manager'
+                                ? 'bg-purple-100 text-purple-800 border-purple-200'
                                 : 'bg-gray-100 text-gray-700 border-gray-200'
                             }
                         >
@@ -141,29 +158,6 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                     </div>
                 </div>
 
-                {/* Stats row */}
-                {!isLoadingStats && stats && (
-                    <div className="mt-3 ml-12 flex items-center gap-6 text-sm text-gray-600">
-                        <div className="flex items-center gap-1.5" title="Số dự án tham gia">
-                            <Briefcase className="h-3.5 w-3.5 text-blue-600" />
-                            <span>{stats.projectsCount} dự án</span>
-                        </div>
-                        <div className="flex items-center gap-1.5" title="Số tasks đã hoàn thành">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                            <span>{stats.tasksCompleted} tasks</span>
-                        </div>
-                        <div className="flex items-center gap-1.5" title="Điểm tháng này">
-                            <Trophy className="h-3.5 w-3.5 text-yellow-600" />
-                            <span className="font-medium">{stats.currentMonthPoints} pts</span>
-                        </div>
-                        {stats.joinedAt && (
-                            <div className="flex items-center gap-1.5 text-gray-500" title="Ngày tham gia">
-                                <Calendar className="h-3.5 w-3.5" />
-                                <span>{format(new Date(stats.joinedAt), 'dd/MM/yyyy')}</span>
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {isLoadingStats && (
                     <div className="mt-3 ml-12 flex items-center gap-2 text-sm text-gray-400">
@@ -176,7 +170,6 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                 )}
             </div>
 
-            {/* Remove Confirm Dialog */}
             <ConfirmDialog
                 open={isRemoveDialogOpen}
                 onOpenChange={setIsRemoveDialogOpen}
@@ -193,7 +186,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                 variant="danger"
             />
 
-            {/* Change Role Dialog */}
+            {/* ... Dialog đổi vai trò (giữ nguyên như cũ) ... */}
             {isChangeRoleDialogOpen && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -201,7 +194,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                             <h3 className="text-lg font-semibold text-gray-900">Đổi vai trò</h3>
                             <p className="text-sm text-gray-500 mt-1">Chọn vai trò mới cho thành viên</p>
                         </div>
-                        
+
                         <div className="p-6">
                             <div className="space-y-3">
                                 <button
@@ -226,7 +219,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                                         )}
                                     </div>
                                 </button>
-                                
+
                                 <button
                                     onClick={() => handleChangeRole('member')}
                                     disabled={member.role === 'member'}
@@ -251,7 +244,7 @@ export default function MemberRow({ member, teamId, isManager, currentUserId, st
                                 </button>
                             </div>
                         </div>
-                        
+
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg flex justify-end gap-3">
                             <button
                                 onClick={() => setIsChangeRoleDialogOpen(false)}

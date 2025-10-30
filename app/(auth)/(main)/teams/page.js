@@ -1,18 +1,14 @@
 // app/(auth)/(main)/teams/page.js
-// Mục đích: Trang danh sách teams với create dialog và view toggle
+// Mục đích: Trang danh sách teams (Server Component)
 
 import { listMy } from '@/data/team/actions/server.js';
 import { getCurrentUser } from '@/lib/request-user.js';
 import TeamsPageClient from './page.client.js';
 
-// Force dynamic rendering để luôn lấy data mới
-export const dynamic = 'force-dynamic';
-
 export default async function TeamsPage() {
     const user = await getCurrentUser();
     const result = await listMy();
-    
-    // Handle error
+
     if (!result.ok) {
         return (
             <div className="space-y-6 w-full flex flex-col">

@@ -1,13 +1,11 @@
 // data/team/actions/activities.js
-// Server action để lấy activity log của team
-
 'use server';
 
 import { z } from 'zod';
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert } from '@/lib/action-utils.js';
 import ActivityLog from '@/model/activityLog.model.js';
-import Team from '@/model/team.model.js';
+import { getById } from '@/data/team/processors/repo.js'; // SỬ DỤNG REPO
 import { isTeamMember } from '@/lib/permissions.js';
 
 /**
@@ -26,21 +24,19 @@ export async function getActivities(payload) {
                 })
                 .parse(payload || {});
 
-            const team = await Team.findById(teamId).lean();
+            // Tối ưu: Dùng getById từ repo (có React.cache)
+            const team = await getById(teamId, { lean: true });
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(await isTeamMember(team, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
 
-            // Lấy activities liên quan đến team
             const activities = await ActivityLog.find({ team: teamId })
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean();
 
-            // Đếm tổng số
             const total = await ActivityLog.countDocuments({ team: teamId });
 
-            // Serialize để tránh lỗi MongoDB ObjectId
             return JSON.parse(JSON.stringify({
                 items: activities,
                 total,

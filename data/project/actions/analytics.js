@@ -1,34 +1,37 @@
 // data/project/actions/analytics.js
 // Project analytics server actions
+// Tối ưu: Sử dụng repo.getDetail thay vì Project.findById
 
 'use server';
 
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert } from '@/lib/action-utils.js';
-import Project from '@/model/project.model.js';
 import ActivityLog from '@/model/activityLog.model.js';
+// Tối ưu: Import hàm repo
+import { getDetail as getProjectDetailRepo } from '@/data/project/processors/repo.js';
+// Tối ưu: Import hàm analytics đã cache
 import { getProjectAnalytics, getProjectMemberStats } from '@/data/project/processors/analytics.js';
 
 /**
- * Get project analytics
+ * Lấy project analytics
  */
 export async function getAnalytics(projectId) {
     return runAction(
         async ({ user }) => {
             await connectDB();
 
-            // Check if user is project member
-            const project = await Project.findById(projectId).lean();
+            // Tối ưu: Sử dụng hàm repo đã cache
+            const project = await getProjectDetailRepo(projectId, { lean: true });
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const isMember = project.members.some(
+            const isMember = (project.members || []).some(
                 m => String(m.userId) === String(user.externalUserId)
             );
             assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
+            // Tối ưu: Gọi hàm analytics đã cache
             const analytics = await getProjectAnalytics(projectId);
-            
-            // Serialize
+
             return JSON.parse(JSON.stringify(analytics));
         },
         { requireAuth: true }
@@ -36,26 +39,26 @@ export async function getAnalytics(projectId) {
 }
 
 /**
- * Get member statistics
+ * Lấy thống kê thành viên
  */
 export async function getMemberStats(projectId) {
     return runAction(
         async ({ user }) => {
             await connectDB();
 
-            // Check if user is project member
-            const project = await Project.findById(projectId).lean();
+            // Tối ưu: Sử dụng hàm repo đã cache
+            const project = await getProjectDetailRepo(projectId, { lean: true });
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const isMember = project.members.some(
+            const isMember = (project.members || []).some(
                 m => String(m.userId) === String(user.externalUserId)
             );
             assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-            const memberIds = project.members.map(m => m.userId);
+            const memberIds = (project.members || []).map(m => m.userId);
+            // Tối ưu: Gọi hàm stats đã sửa N+1
             const stats = await getProjectMemberStats(projectId, memberIds);
-            
-            // Serialize
+
             return JSON.parse(JSON.stringify(stats));
         },
         { requireAuth: true }
@@ -63,22 +66,23 @@ export async function getMemberStats(projectId) {
 }
 
 /**
- * Get project activities
+ * Lấy project activities
  */
 export async function getActivities({ projectId, limit = 20, skip = 0 }) {
     return runAction(
         async ({ user }) => {
             await connectDB();
 
-            // Check if user is project member
-            const project = await Project.findById(projectId).lean();
+            // Tối ưu: Sử dụng hàm repo đã cache
+            const project = await getProjectDetailRepo(projectId, { lean: true });
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const isMember = project.members.some(
+            const isMember = (project.members || []).some(
                 m => String(m.userId) === String(user.externalUserId)
             );
             assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
+            // Logic lấy activity giữ nguyên
             const activities = await ActivityLog.find({ project: projectId })
                 .sort({ createdAt: -1 })
                 .limit(limit)
@@ -87,7 +91,6 @@ export async function getActivities({ projectId, limit = 20, skip = 0 }) {
 
             const total = await ActivityLog.countDocuments({ project: projectId });
 
-            // Serialize
             return JSON.parse(JSON.stringify({
                 items: activities,
                 total,

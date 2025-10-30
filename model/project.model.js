@@ -1,6 +1,6 @@
-// cấu trúc thư mục hiện tại: /model/project.model.js
+// model/project.model.js
 // Tác dụng file: Định nghĩa Mongoose Model Project (thuộc Team, có membership).
-// - Khi tạo Project thực tế app sẽ tạo thư mục Drive và lưu metadata ở đây.
+// - Drive folder được quản lý theo cấu trúc 12 tháng/năm.
 
 import mongoose from 'mongoose';
 import { PROJECT_ROLE, PRIORITY } from '@/model/common/enums.js';
@@ -9,6 +9,15 @@ const ProjectMembershipSchema = new mongoose.Schema({
     userId: { type: String, required: true, index: true }, // external user id
     role: { type: String, enum: Object.values(PROJECT_ROLE), required: true },
 }, { _id: false, timestamps: true });
+
+// Schema con cho các folder hàng tháng trên Drive
+const MonthlyDriveFolderSchema = new mongoose.Schema({
+    year: { type: Number, required: true },
+    month: { type: Number, required: true, min: 1, max: 12 }, // 1 = January, 12 = December
+    folderId: { type: String, required: true },
+    folderName: { type: String }, // Ví dụ: "2025-10"
+}, { _id: false });
+
 
 const ProjectSchema = new mongoose.Schema({
     name: { type: String, required: true, trim: true, index: true },
@@ -26,17 +35,16 @@ const ProjectSchema = new mongoose.Schema({
     priority: { type: String, enum: Object.values(PRIORITY) },
     isActive: { type: Boolean, default: true },
 
-    // ---- Drive: tạo folder khi tạo project
-    driveFolderId: { type: String, required: true, index: true },
-    driveFolderName: { type: String }, // để hiển thị
-    driveParentId: { type: String }, // thư mục cha (ví dụ: 1 folder root của công ty)
+    // ---- Drive: Mảng lưu trữ các folder hàng tháng ----
+    // Khi tạo project, cần tạo 12 folder cho năm hiện tại và lưu vào đây.
+    monthlyDriveFolders: { type: [MonthlyDriveFolderSchema], default: [] },
 
     // ---- Giới hạn/cấu hình danh mục
     platforms: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Platform', index: true }],
     workTypes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'WorkType', index: true }],
 
     // ---- Báo cáo/tài liệu cấp dự án
-    assetsCount: { type: Number, default: 0 }, // số file đính kèm trực tiếp vào project (không qua task)
+    assetsCount: { type: Number, default: 0 },
 
     custom: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
 }, {
@@ -46,8 +54,8 @@ const ProjectSchema = new mongoose.Schema({
 
 // Lọc nhanh theo team & hoạt động
 ProjectSchema.index({ team: 1, isActive: 1 });
-// Tìm các project chứa user
-ProjectSchema.index({ 'members.userId': 1 });
+ProjectSchema.index({ 'monthlyDriveFolders.year': 1, 'monthlyDriveFolders.month': 1 });
+
 
 // Force delete cached model to pick up new enum values
 if (mongoose.models.Project) {

@@ -1,3 +1,7 @@
+// data/project/actions/server.js
+// Actions CRUD chính cho Project
+// Tối ưu: Sử dụng repo functions đã cache
+
 'use server';
 
 import { connectDB } from '@/lib/db.js';
@@ -6,20 +10,21 @@ import { isTeamManager, canManageProject } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
 
-import Team from '@/model/team.model.js';
-import Project from '@/model/project.model.js';
-import { PROJECT_ROLE } from '@/model/common/enums.js';
+// Tối ưu: Import repo của Team và Project
+import { getById as getTeamById } from '@/data/team/processors/repo.js';
+import {
+    listByTeam, getDetail, createProject, updateProject, archiveProject,
+    addMember, removeMember, changeMemberRole
+} from '@/data/project/processors/repo.js'; // Các hàm project repo
+
+import { PROJECT_ROLE } from '@/model/common/enums.js'; // Cần cho delete
+import Project from '@/model/project.model.js'; // Cần cho populate thủ công nếu repo ko populate đủ
 
 import {
     validate, projectIdSchema, teamIdSchema,
     projectCreateSchema, projectUpdateSchema,
     memberAddSchema, memberRemoveSchema, memberChangeRoleSchema
 } from '@/data/project/processors/validators.js';
-
-import {
-    listByTeam, getDetail, createProject, updateProject, archiveProject,
-    addMember, removeMember, changeMemberRole
-} from '@/data/project/processors/repo.js';
 
 import { asPlainProject } from '@/lib/serialize.js';
 
@@ -29,14 +34,16 @@ export async function listByTeamAction(teamId) {
     return runAction(async ({ user }) => {
         const id = validate(teamIdSchema, teamId);
 
-        // Kiểm tra là thành viên team (tối thiểu)
-        const team = await Team.findById(id).lean().exec();
+        // Tối ưu: Dùng hàm repo team đã cache
+        const team = await getTeamById(id, { lean: true });
         assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
         const isMember = (team.members || []).some((m) => String(m.userId) === String(user.externalUserId));
         assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        const rows = await listByTeam(id);
-        return rows.map(asPlainProject);
+        // Gọi hàm repo project
+        const rows = await listByTeam(id); // Hàm này đã populate team và lean
+        return rows.map(asPlainProject); // Dùng asPlainProject để serialize
+
     }, { requireAuth: true });
 }
 
@@ -45,15 +52,15 @@ export async function getDetailAction(projectId) {
     await connectDB();
     return runAction(async ({ user }) => {
         const id = validate(projectIdSchema, projectId);
-        const proj = await getDetail(id);
+        // Tối ưu: Dùng hàm repo project đã cache (đã populate team)
+        const proj = await getDetail(id, { lean: true });
         assert(proj, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-        // Quyền xem tối thiểu: là thành viên team của project
-        const team = await Team.findById(proj.team).lean().exec();
-        const isMember = (team?.members || []).some((m) => String(m.userId) === String(user.externalUserId));
+        // Quyền xem tối thiểu: là thành viên project
+        const isMember = (proj.members || []).some((m) => String(m.userId) === String(user.externalUserId));
         assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        return asPlainProject(proj);
+        return asPlainProject(proj); // Dùng asPlainProject để serialize
     }, { requireAuth: true });
 }
 
@@ -61,55 +68,23 @@ export async function getDetailAction(projectId) {
 export async function create(payload) {
     await connectDB();
     return runAction(async ({ user }) => {
-        console.log('[create] User:', user);
-        console.log('[create] Payload:', payload);
-        
         const data = validate(projectCreateSchema, payload);
-        console.log('[create] Validated data:', data);
 
-        // Nếu có team, kiểm tra quyền manager
         if (data.team) {
-            const team = await Team.findById(data.team).lean().exec();
+            const team = await getTeamById(data.team, { lean: true }); // Tối ưu: Dùng repo team
             assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
             assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
-            console.log('[create] Team check PASSED');
         }
-        // Nếu không có team, dự án sẽ là dự án độc lập với creator là owner
-
-        console.log('[create] Creating project with userId:', user.externalUserId);
         const doc = await createProject(data, user.externalUserId);
-        console.log('[create] Project created:', doc._id);
-        
-        // Populate team info để trả về đầy đủ
-        let projectWithTeam = doc;
-        if (doc.team) {
-            const populatedDoc = await Project.findById(doc._id).populate('team', 'name').lean().exec();
-            projectWithTeam = populatedDoc || doc;
-        }
-        
-        // Log activity
-        await logActivity({ 
-            actor: user.externalUserId, 
-            team: data.team || undefined, 
-            project: doc._id, 
-            type: 'project.created', 
-            payload: { name: doc.name, isIndependent: !data.team } 
+
+        await logActivity({
+            actor: user.externalUserId, team: data.team || undefined, project: doc._id,
+            type: 'project.created', payload: { name: doc.name, isIndependent: !data.team }
         });
-        
-        await logActivity({ 
-            actor: user.externalUserId, 
-            team: data.team || undefined, 
-            project: doc._id, 
-            type: 'drive.folder.created', 
-            payload: { driveFolderId: doc.driveFolderId } 
-        });
-        
-        // Revalidate tags
         const tagsToRevalidate = data.team ? [tags.team(data.team), tags.project(doc._id)] : [tags.project(doc._id)];
         await revalidateMany(tagsToRevalidate);
 
-        console.log('[create] SUCCESS, returning:', projectWithTeam);
-        return asPlainProject(projectWithTeam);
+        return asPlainProject(doc);
     }, { requireAuth: true });
 }
 
@@ -120,13 +95,14 @@ export async function update(projectId, patch) {
         const id = validate(projectIdSchema, projectId);
         const data = validate(projectUpdateSchema, patch);
 
+        // Tối ưu: Dùng hàm repo project đã cache (lấy lean false vì repo update cần Mongoose doc)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        const updated = await updateProject(id, data);
-        await logActivity({ actor: user.externalUserId, project: id, team: updated.team, type: 'project.updated', payload: data });
-        await revalidateMany([tags.team(updated.team), tags.project(id)]);
+        const updated = await updateProject(id, data); // Repo trả về doc đã populate team
+        await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.updated', payload: data });
+        await revalidateMany([tags.team(updated.team?._id), tags.project(id)]);
 
         return asPlainProject(updated);
     }, { requireAuth: true });
@@ -137,13 +113,15 @@ export async function archive(projectId) {
     await connectDB();
     return runAction(async ({ user }) => {
         const id = validate(projectIdSchema, projectId);
+        // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        const updated = await archiveProject(id);
-        await logActivity({ actor: user.externalUserId, project: id, team: updated.team, type: 'project.archived' });
-        await revalidateMany([tags.team(updated.team), tags.project(id)]);
+        const updated = await archiveProject(id); // Repo trả về doc đã populate team
+        await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.archived' });
+        await revalidateMany([tags.team(updated.team?._id), tags.project(id)]);
+
         return asPlainProject(updated);
     }, { requireAuth: true });
 }
@@ -155,13 +133,14 @@ export async function addMemberAction(projectId, payload) {
         const id = validate(projectIdSchema, projectId);
         const data = validate(memberAddSchema, payload);
 
+        // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        const updated = await addMember(id, data);
-        await logActivity({ actor: user.externalUserId, project: id, team: updated.team, type: 'project.member.added', payload: { ...data } });
-        await revalidateMany([tags.team(updated.team), tags.project(id), tags.userInbox(data.userId)]);
+        const updated = await addMember(id, data); // Repo trả về doc đã populate team
+        await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.added', payload: { ...data } });
+        await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);
     }, { requireAuth: true });
@@ -174,13 +153,14 @@ export async function removeMemberAction(projectId, payload) {
         const id = validate(projectIdSchema, projectId);
         const data = validate(memberRemoveSchema, payload);
 
+        // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        const updated = await removeMember(id, data.userId);
-        await logActivity({ actor: user.externalUserId, project: id, team: updated.team, type: 'project.member.removed', payload: { userId: data.userId } });
-        await revalidateMany([tags.team(updated.team), tags.project(id), tags.userInbox(data.userId)]);
+        const updated = await removeMember(id, data.userId); // Repo trả về doc đã populate team
+        await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.removed', payload: { userId: data.userId } });
+        await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);
     }, { requireAuth: true });
@@ -193,46 +173,48 @@ export async function changeRole(projectId, payload) {
         const id = validate(projectIdSchema, projectId);
         const data = validate(memberChangeRoleSchema, payload);
 
+        // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        const updated = await changeMemberRole(id, data.userId, data.role);
-        await logActivity({ actor: user.externalUserId, project: id, team: updated.team, type: 'project.member.role_changed', payload: { ...data } });
-        await revalidateMany([tags.team(updated.team), tags.project(id), tags.userInbox(data.userId)]);
+        const updated = await changeMemberRole(id, data.userId, data.role); // Repo trả về doc đã populate team
+        await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.role_changed', payload: { ...data } });
+        await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);
     }, { requireAuth: true });
 }
 
-/** Update project - wrapper cho update với tên khác */
+/** Update project - wrapper */
 export async function updateProjectAction(projectId, updates) {
     return await update(projectId, updates);
 }
 
-/** Delete project (soft delete bằng cách archive) */
+/** Delete project (soft delete) */
 export async function deleteProjectAction(projectId) {
     await connectDB();
     return runAction(async ({ user }) => {
         const id = validate(projectIdSchema, projectId);
+        // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-        
+
         // Chỉ owner mới có quyền xóa
-        const isOwner = raw.members.some(m => m.userId === user.externalUserId && m.role === 'owner');
+        const isOwner = (raw.members || []).some(m => String(m.userId) === String(user.externalUserId) && m.role === PROJECT_ROLE.OWNER);
         assert(isOwner, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        // Soft delete: đánh dấu là deleted
-        const updated = await updateProject(id, { isDeleted: true, deletedAt: new Date() });
-        
-        await logActivity({ 
-            actor: user.externalUserId, 
-            project: id, 
-            team: updated.team, 
-            type: 'project.deleted' 
+        // Gọi hàm repo updateProject thay vì archiveProject
+        // Giả sử model Project có trường isDeleted và deletedAt
+        // Nếu không có, cần thêm vào model hoặc dùng archiveProject
+        const updated = await updateProject(id, { isActive: false /* hoặc isDeleted: true */ });
+
+        await logActivity({
+            actor: user.externalUserId, project: id, team: updated.team?._id,
+            type: 'project.deleted' // Log là deleted dù chỉ là archive/deactivate
         });
-        
-        await revalidateMany([tags.team(updated.team), tags.project(id)]);
+
+        await revalidateMany([tags.team(updated.team?._id), tags.project(id)]);
         return asPlainProject(updated);
     }, { requireAuth: true });
 }

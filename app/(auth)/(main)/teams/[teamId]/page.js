@@ -1,38 +1,27 @@
 // app/(auth)/(main)/teams/[teamId]/page.js
-// Mục đích: Tab "Tổng quan" của team - hiển thị thống kê nhanh và quick links
+// Mục đích: Tab "Tổng quan" của team
+// Tối ưu: Đã BỎ `force-dynamic`.
+// `getByIdAction` sẽ dùng kết quả đã cache từ `React.cache` (được gọi ở layout.js).
 
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getByIdAction } from '@/data/team/actions/server.js';
 import { Users, Folder, BarChart3, Clock } from 'lucide-react';
 
-// Force dynamic rendering
-export const dynamic = 'force-dynamic';
-
 export default async function TeamOverviewPage({ params }) {
-
-    const { teamId } = await params
+    const { teamId } = await params;
     if (!teamId) return notFound();
 
     const result = await getByIdAction(teamId);
     if (!result.ok) return notFound();
-
     const team = JSON.parse(JSON.stringify(result.data));
 
-    // Quick stats
+    // Tính toán stats nhanh
     const memberCount = team.members?.length || 0;
     const managerCount = team.members?.filter(m => m.role === 'manager').length || 0;
 
     return (
         <div className="space-y-6 w-full flex flex-col">
-            {/* Description */}
-            {team.description && (
-                <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-2">Mô tả</h3>
-                    <p className="text-sm text-gray-600">{team.description}</p>
-                </div>
-            )}
-
             {/* Quick Stats */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="bg-[var(--brand-50)] rounded-lg p-4 border border-[var(--brand-200)]">
@@ -130,24 +119,6 @@ export default async function TeamOverviewPage({ params }) {
                         </div>
                     </Link>
                 </div>
-            </div>
-
-            {/* Team Info */}
-            <div className="border-t border-gray-200 pt-4">
-                <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
-                    <div>
-                        <dt className="text-sm font-medium text-gray-500">Ngày tạo</dt>
-                        <dd className="mt-1 text-sm text-gray-900">
-                            {new Date(team.createdAt).toLocaleDateString('vi-VN')}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-sm font-medium text-gray-500">Cập nhật lần cuối</dt>
-                        <dd className="mt-1 text-sm text-gray-900">
-                            {new Date(team.updatedAt).toLocaleDateString('vi-VN')}
-                        </dd>
-                    </div>
-                </dl>
             </div>
         </div>
     );

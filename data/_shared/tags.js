@@ -73,6 +73,20 @@ export function leaderboard(scope, ym) {
     return a && b ? `leaderboard:${a}:${b}` : '';
 }
 
+// ===================================
+// === HÀM MỚI ĐƯỢC THÊM VÀO ĐÂY ===
+// ===================================
+/**
+ * Tag cho dữ liệu cache của Team Analytics.
+ * @param {string|number} teamId
+ * @returns {string}
+ */
+export function teamAnalytics(teamId) {
+    const x = s(teamId);
+    return x ? `team-analytics:${x}` : '';
+}
+// ===================================
+
 /**
  * Gom nhóm tag liên quan tới task để revalidate đồng loạt.
  * @param {{ taskId?: string|number, projectId?: string|number, teamId?: string|number }} [ids]
@@ -91,4 +105,14 @@ export function taskBundle({ taskId, projectId, teamId } = {}) {
 export function projectBundle({ projectId, teamId } = {}) {
     const arr = [project(projectId), team(teamId)];
     return Array.from(new Set(arr.filter(Boolean)));
+}
+
+/**
+ * Tag cho dữ liệu cache của Project Analytics.
+ * @param {string|number} projectId
+ * @returns {string}
+ */
+export function projectAnalytics(projectId) {
+    const x = s(projectId);
+    return x ? `project-analytics:${x}` : '';
 }
