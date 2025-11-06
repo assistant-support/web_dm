@@ -36,14 +36,20 @@ const teamSchema = z.object({
  * @param {'create'|'edit'} props.mode - Chế độ form
  * @param {string} props.teamId - Team ID (cho edit mode)
  * @param {Function} props.onSuccess - Callback khi thành công
+ * @param {Function} props.onCancel - Callback khi hủy
  */
 export default function TeamForm({
     initialData,
     mode = 'create',
     teamId,
-    onSuccess
+    onSuccess,
+    onCancel
 }) {
-    const { run, Overlays } = useAsyncNotifier();
+    // Tắt notification overlay khi trong dialog, chỉ hiển thị loading
+    const { run, Overlays } = useAsyncNotifier({
+        enableNoti: false, // Tắt notification, chỉ dùng form errors
+        enableLoading: true, // Giữ loading overlay
+    });
 
     const form = useForm({
         resolver: zodResolver(teamSchema),
@@ -56,9 +62,6 @@ export default function TeamForm({
     });
 
     const onSubmit = async (data) => {
-        console.log('[TeamForm] onSubmit called with data:', data);
-        console.log('[TeamForm] Form errors before submit:', form.formState.errors);
-        
         const result = await run(
             async () => {
                 if (mode === 'create') {
@@ -69,25 +72,16 @@ export default function TeamForm({
             },
             {
                 loadingMessage: mode === 'create' ? 'Đang tạo nhóm...' : 'Đang cập nhật...',
-                successMessage: mode === 'create' ? 'Tạo nhóm thành công!' : 'Cập nhật nhóm thành công!',
-                errorMessage: mode === 'create' ? 'Không thể tạo nhóm' : 'Không thể cập nhật nhóm',
-                notify: 'success', // Chỉ notify khi thành công, lỗi sẽ hiển thị trong form
+                notify: 'none', // Không dùng notify, hiển thị errors trong form
             }
         );
 
-        // Debug: Log result để kiểm tra
-        console.log('[TeamForm] Server result:', JSON.stringify(result, null, 2));
-        console.log('[TeamForm] result.ok:', result?.ok, 'type:', typeof result?.ok);
-
-        // Xử lý kết quả - Explicit check để catch cả undefined
+        // Xử lý kết quả
         if (result?.ok !== true) {
-            console.log('[TeamForm] Error detected, issues:', result?.issues);
-            
             // Hiển thị validation errors trong form
             if (result?.issues && Array.isArray(result.issues)) {
                 result.issues.forEach((issue) => {
                     const fieldName = issue.path || issue.field;
-                    console.log('[TeamForm] Setting error for field:', fieldName, 'message:', issue.message);
                     if (fieldName) {
                         form.setError(fieldName, {
                             type: 'server',
@@ -99,18 +93,16 @@ export default function TeamForm({
             
             // Hiển thị general error nếu không có specific field errors
             if (!result?.issues || result.issues.length === 0) {
-                console.log('[TeamForm] No field-specific errors, setting root error');
                 form.setError('root.serverError', {
                     type: 'server',
                     message: result?.message || 'Đã xảy ra lỗi, vui lòng thử lại',
                 });
             }
             
-            return; // Không đóng popup
+            return; // Không đóng dialog
         }
 
         // Success case
-        console.log('[TeamForm] Success!');
         if (onSuccess) {
             onSuccess(result.data);
         }
@@ -163,6 +155,15 @@ export default function TeamForm({
                 )}
 
                 <FormActions>
+                    {onCancel && (
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={onCancel}
+                        >
+                            <p className='text-sm'>Hủy</p>
+                        </Button>
+                    )}
                     <Button
                         type="submit"
                         variant="primary"

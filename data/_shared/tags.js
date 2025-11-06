@@ -34,6 +34,15 @@ export function task(id) {
 }
 
 /**
+ * Tag chung cho tất cả tasks (không theo id cụ thể).
+ * Dùng để invalidate cache khi có thay đổi bất kỳ task nào.
+ * @returns {string}
+ */
+export function tasks() {
+    return 'tasks';
+}
+
+/**
  * Tag theo Workflow.
  * @param {string|number} id
  * @returns {string}

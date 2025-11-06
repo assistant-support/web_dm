@@ -36,7 +36,7 @@ export default function TaskList({
      */
     const { activeAndRecentTasks, olderCompletedTasks } = useMemo(() => {
         const oneDayAgo = new Date();
-        oneDayAgo.setDate(oneDayAgo.getDate() - 1); // Đặt mốc thời gian là 24 giờ trước
+        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
         const activeTasks = [];
         const recentlyCompletedTasks = [];
@@ -46,20 +46,16 @@ export default function TaskList({
             const isCompleted = task.status === TASK_STATUS.COMPLETED;
             if (isCompleted) {
                 const completedDate = task.completedAt ? new Date(task.completedAt) : null;
-                // Nếu có ngày hoàn thành và ngày đó lớn hơn hoặc bằng mốc 1 ngày trước
                 if (completedDate && completedDate >= oneDayAgo) {
                     recentlyCompletedTasks.push(task);
                 } else {
-                    // Nếu không có ngày hoàn thành hoặc ngày đó cũ hơn 1 ngày
                     olderCompletedTasks.push(task);
                 }
             } else {
-                // Bao gồm tất cả các task chưa hoàn thành
                 activeTasks.push(task);
             }
         });
 
-        // Kết hợp task hoạt động và hoàn thành gần đây
         const activeAndRecentTasks = [...activeTasks, ...recentlyCompletedTasks];
 
         return { activeAndRecentTasks, olderCompletedTasks };

@@ -28,12 +28,12 @@ export async function listMyProjects({ search = '', teamId = null } = {}) {
             }
             if (search && search.trim()) {
                 const regex = { $regex: search.trim(), $options: 'i' };
-                query.$or = [{ name: regex }, { code: regex }];
+                query.$or = [{ name: regex }];
             }
 
             // Cân nhắc chuyển logic query này vào repo nếu phức tạp hơn
             const projects = await Project.find(query)
-                .populate('team', 'name') // Giữ populate nếu cần tên team
+                .populate('team') // Populate toàn bộ team (bao gồm members)
                 .sort({ updatedAt: -1 })
                 .limit(100) // Giới hạn số lượng trả về
                 .lean();

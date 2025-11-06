@@ -15,7 +15,6 @@ import { create as createProject } from '@/data/project/actions/server.js';
 
 const projectSchema = z.object({
     name: z.string().min(1, 'Tên dự án là bắt buộc'),
-    code: z.string().optional(),
     description: z.string().optional(),
     team: z.string().optional(),
     priority: z.enum(['', 'low', 'medium', 'high', 'urgent']).optional(),
@@ -43,7 +42,6 @@ export default function ProjectFormWithTeam({ onSuccess }) {
         resolver: zodResolver(projectSchema),
         defaultValues: {
             name: '',
-            code: '',
             description: '',
             team: '',
             priority: '',
@@ -84,13 +82,12 @@ export default function ProjectFormWithTeam({ onSuccess }) {
 
             const payload = {
                 name: data.name.trim(),
-                code: data.code?.trim() || undefined,
-                description: data.description?.trim() || '',
-                team: data.team || undefined, // Nếu không chọn team thì undefined
+                description: data.description?.trim() || undefined,
+                team: data.team || undefined,
                 priority: data.priority || undefined,
                 startDate: data.startDate || undefined,
                 dueDate: data.dueDate || undefined,
-                tags,
+                tags: tags.length > 0 ? tags : undefined,
             };
 
             console.log('[ProjectForm] Payload to send:', payload);
@@ -151,14 +148,6 @@ export default function ProjectFormWithTeam({ onSuccess }) {
                         error={form.formState.errors.name?.message}
                         disabled={isSubmitting}
                         {...form.register('name')}
-                    />
-
-                    <Input
-                        label="Mã dự án"
-                        placeholder="VD: PRJ-001 (không bắt buộc)"
-                        error={form.formState.errors.code?.message}
-                        disabled={isSubmitting}
-                        {...form.register('code')}
                     />
 
                     <Textarea

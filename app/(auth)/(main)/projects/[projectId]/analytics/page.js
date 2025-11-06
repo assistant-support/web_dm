@@ -1,34 +1,44 @@
 // app/(auth)/(main)/projects/[projectId]/analytics/page.js
+import { notFound } from 'next/navigation';
 import ProjectAnalytics from '@/components/project/ProjectAnalytics.client.js';
-import MemberList from '@/components/project/MemberList.client.js';
 import { getProjectDetail } from '@/data/project/actions/list.js';
 
-export const dynamic = 'force-dynamic';
+// Revalidate every 3 seconds for real-time updates
+export const revalidate = 3;
 
-export default async function ProjectAnalyticsPage({ params }) {
+export async function generateMetadata({ params }) {
     const { projectId } = await params;
     const result = await getProjectDetail(projectId);
 
     if (!result.ok) {
-        return <div>Error loading analytics</div>;
+        return {
+            title: 'Project Not Found',
+        };
+    }
+
+    const project = result.data;
+    return {
+        title: `${project.name} - Analytics | Projects`,
+        description: `View analytics and statistics for ${project.name}`,
+    };
+}
+
+export default async function ProjectAnalyticsPage({ params }) {
+    const { projectId } = await params;
+    
+    if (!projectId) return notFound();
+
+    const result = await getProjectDetail(projectId);
+
+    if (!result.ok) {
+        return notFound();
     }
 
     const project = result.data;
 
     return (
         <div className="space-y-6">
-            {/* Analytics Dashboard */}
             <ProjectAnalytics projectId={projectId} />
-
-            {/* Member Stats */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Thống kê thành viên</h3>
-                <MemberList 
-                    projectId={projectId}
-                    members={project.members}
-                    showStats={true}
-                />
-            </div>
         </div>
     );
 }

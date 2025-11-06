@@ -3,7 +3,7 @@
 
 'use client';
 
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
 import clsx from 'clsx';
 
 /**
@@ -29,7 +29,9 @@ const Textarea = forwardRef(function Textarea(
     },
     ref
 ) {
-    const textareaId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
+    // useId() is safe for SSR - it generates consistent IDs on server and client
+    const internalId = useId();
+    const textareaId = id || internalId;
 
     return (
         <div className={clsx('w-full', className)}>

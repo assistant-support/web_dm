@@ -41,8 +41,23 @@ export async function approveTaskCreation(taskId, { approve, note, initialPoints
             task.approval.by = uid;
             task.approval.at = new Date();
             task.approval.note = note || '';
-            task.status = TASK_STATUS.DRAFT;
             task.initialPoints = Number(initialPoints) || 0;
+
+            // Determine next status based on assignee
+            if (task.assignee) {
+                if (task.assignee === uid) {
+                    // Người duyệt cũng là người thực hiện → Chuyển thẳng sang IN_PROGRESS
+                    task.status = TASK_STATUS.IN_PROGRESS;
+                    task.startedAt = new Date();
+                } else {
+                    // Có assignee khác → Cần xác nhận từ assignee
+                    task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                    task.assigneeConfirm.required = true;
+                }
+            } else {
+                // Chưa có assignee → Để ở DRAFT chờ assign
+                task.status = TASK_STATUS.DRAFT;
+            }
         } else {
             task.approval.status = APPROVAL_STATUS.REJECTED;
             task.approval.by = uid;
@@ -62,11 +77,24 @@ export async function approveTaskCreation(taskId, { approve, note, initialPoints
             payload: { initialPoints: task.initialPoints, note },
         });
 
+        // Determine who to notify based on status
+        let toUserIds = [task.createdBy];
+        
+        if (approve) {
+            if (task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && task.assignee) {
+                // Notify both creator and assignee
+                toUserIds = [task.createdBy, task.assignee].filter((id, index, arr) => id && arr.indexOf(id) === index);
+            } else if (task.status === TASK_STATUS.IN_PROGRESS && task.assignee && task.assignee !== task.createdBy) {
+                // Notify both creator and assignee (task started)
+                toUserIds = [task.createdBy, task.assignee].filter((id, index, arr) => id && arr.indexOf(id) === index);
+            }
+        }
+
         await notifyEvent(approve ? 'task.approval.approved' : 'task.approval.rejected', {
             taskId: String(task._id),
             projectId: String(task.project),
             byUserId: uid,
-            toUserIds: [task.createdBy],
+            toUserIds: toUserIds.filter(Boolean),
         });
 
         await revalidateMany([
@@ -153,8 +181,41 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
         assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 
         if (approve) {
+            const points = Number(finalPoints) || 0;
+            assert(points >= 0, 'Điểm phải là số không âm', 'BAD_REQUEST', 400);
+            
+            // Nếu là subtask, validate không vượt quá parent
+            if (task.parentTask) {
+                const parentTask = await Task.findById(task.parentTask);
+                if (parentTask) {
+                    assert(
+                        points <= parentTask.initialPoints, 
+                        `Điểm subtask (${points}) không được vượt quá điểm parent task (${parentTask.initialPoints})`,
+                        'BAD_REQUEST',
+                        400
+                    );
+                }
+            }
+            
+            // Nếu có subtasks, validate tổng điểm subtasks không vượt quá điểm task này
+            const subtasks = await Task.find({ 
+                parentTask: taskId, 
+                deletedAt: null,
+                status: TASK_STATUS.COMPLETED, // Chỉ tính subtasks đã hoàn thành
+            }).lean();
+            
+            if (subtasks.length > 0) {
+                const totalSubtaskPoints = subtasks.reduce((sum, st) => sum + (st.finalPoints || 0), 0);
+                assert(
+                    totalSubtaskPoints <= points,
+                    `Tổng điểm của các subtasks (${totalSubtaskPoints}) không được vượt quá điểm task này (${points})`,
+                    'BAD_REQUEST',
+                    400
+                );
+            }
+            
             task.status = TASK_STATUS.COMPLETED;
-            task.finalPoints = Number(finalPoints) || 0;
+            task.finalPoints = points;
             task.scoredBy = uid;
             task.scoredAt = new Date();
 

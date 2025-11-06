@@ -119,41 +119,59 @@ export function ConfirmDialog({
     };
 
     const confirmButtonClass = variant === 'danger'
-        ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
-        : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500';
+        ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500 text-white'
+        : 'bg-[var(--brand-600)] hover:bg-[var(--brand-700)] focus:ring-[var(--brand-500)] text-white';
 
     return (
-        <DialogComponent
-            open={open}
-            onOpenChange={onOpenChange}
-            title={title}
-            description={description}
-            size="sm"
-            footer={
-                <>
-                    <button
-                        type="button"
-                        onClick={handleCancel}
-                        disabled={loading}
-                        className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
-                    >
-                        {cancelText}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleConfirm}
-                        disabled={loading}
-                        className={clsx(
-                            'rounded-lg px-5 py-2.5 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 transition-colors shadow-sm',
-                            confirmButtonClass
+        <Dialog.Root open={open} onOpenChange={onOpenChange}>
+            <Dialog.Portal>
+                <Dialog.Overlay className="fixed inset-0 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
+                <Dialog.Content
+                    className={clsx(
+                        'fixed left-[50%] top-[50%] z-50 w-full max-w-md translate-x-[-50%] translate-y-[-50%]',
+                        'bg-white rounded-lg shadow-lg',
+                        'data-[state=open]:animate-in data-[state=closed]:animate-out',
+                        'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+                        'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95'
+                    )}
+                    onPointerDownOutside={(e) => e.preventDefault()}
+                >
+                    {/* Header */}
+                    <div className="p-6 pb-4">
+                        <Dialog.Title className="text-lg font-semibold text-gray-900">
+                            {title}
+                        </Dialog.Title>
+                        {description && (
+                            <Dialog.Description className="mt-2 text-sm text-gray-600 leading-relaxed">
+                                {description}
+                            </Dialog.Description>
                         )}
-                    >
-                        {loading ? 'Đang xử lý...' : confirmText}
-                    </button>
-                </>
-            }
-        >
-            {/* Body sẽ là description */}
-        </DialogComponent>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-lg">
+                        <button
+                            type="button"
+                            onClick={handleCancel}
+                            disabled={loading}
+                            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)] focus:ring-offset-2 disabled:opacity-50 transition-colors"
+                        >
+                            {cancelText}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirm}
+                            disabled={loading}
+                            className={clsx(
+                                'rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 transition-colors shadow-sm',
+                                confirmButtonClass
+                            )}
+                        >
+                            {loading ? 'Đang xử lý...' : confirmText}
+                        </button>
+                    </div>
+                </Dialog.Content>
+            </Dialog.Portal>
+        </Dialog.Root>
     );
 }

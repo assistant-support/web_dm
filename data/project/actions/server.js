@@ -19,9 +19,10 @@ import {
 
 import { PROJECT_ROLE } from '@/model/common/enums.js'; // Cần cho delete
 import Project from '@/model/project.model.js'; // Cần cho populate thủ công nếu repo ko populate đủ
+import Team from '@/model/team.model.js'; // Import Team model
 
 import {
-    validate, projectIdSchema, teamIdSchema,
+    validate, validateAsync, projectIdSchema, teamIdSchema,
     projectCreateSchema, projectUpdateSchema,
     memberAddSchema, memberRemoveSchema, memberChangeRoleSchema
 } from '@/data/project/processors/validators.js';
@@ -131,15 +132,36 @@ export async function addMemberAction(projectId, payload) {
     await connectDB();
     return runAction(async ({ user }) => {
         const id = validate(projectIdSchema, projectId);
-        const data = validate(memberAddSchema, payload);
+        const data = await validateAsync(memberAddSchema, payload);
 
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
+        // **CHO PHÉP THÊM NGƯỜI NGOÀI TEAM** - Chỉ log warning
+        let isOutsider = false;
+        if (raw.team) {
+            const team = await Team.findById(raw.team).lean();
+            if (team) {
+                const userInTeam = (team.members || []).some((m) => String(m.userId) === String(data.userId));
+                if (!userInTeam) {
+                    isOutsider = true;
+                    console.warn(`[PROJECT] Adding outsider ${data.userId} to project ${id} (team: ${raw.team})`);
+                }
+            }
+        }
+
         const updated = await addMember(id, data); // Repo trả về doc đã populate team
-        await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.added', payload: { ...data } });
+        
+        await logActivity({ 
+            actor: user.externalUserId, 
+            project: id, 
+            team: updated.team?._id, 
+            type: isOutsider ? 'project.member.added.outsider' : 'project.member.added', 
+            payload: { ...data, isOutsider } 
+        });
+        
         await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);

@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Clock, BarChart3, Settings } from 'lucide-react';
+import { Home, Users, Clock, Settings } from 'lucide-react';
 
 export default function ProjectTabs({ projectId, isOwnerOrManager }) {
     const pathname = usePathname();
@@ -13,7 +13,6 @@ export default function ProjectTabs({ projectId, isOwnerOrManager }) {
         { id: 'tasks', label: 'Tasks', href: `/projects/${projectId}/tasks`, icon: Clock },
         { id: 'members', label: 'Thành viên', href: `/projects/${projectId}/members`, icon: Users },
         { id: 'activity', label: 'Hoạt động', href: `/projects/${projectId}/activity`, icon: Clock },
-        { id: 'analytics', label: 'Thống kê', href: `/projects/${projectId}/analytics`, icon: BarChart3 },
     ];
 
     // Only show settings tab to owner/manager

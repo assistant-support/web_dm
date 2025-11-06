@@ -58,7 +58,6 @@ function Stat({ label, value }) {
  */
 export default async function ProjectHeader({ project, members = [], stats, initialTab = 'list' }) {
     const title = project?.name || 'Project';
-    const code = project?.code || null;
     const desc = (project?.description || '').trim();
 
     const c = stats?.taskCounts || {
@@ -73,12 +72,7 @@ export default async function ProjectHeader({ project, members = [], stats, init
         <header className="rounded-xl border bg-white p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <h1 className="truncate text-lg font-semibold">{title}</h1>
-                        {code ? (
-                            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{code}</span>
-                        ) : null}
-                    </div>
+                    <h1 className="truncate text-lg font-semibold">{title}</h1>
                     {desc ? (
                         <p className="mt-1 max-w-3xl text-sm text-slate-600">{desc}</p>
                     ) : (

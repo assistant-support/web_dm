@@ -40,7 +40,7 @@ export default function SubtaskList({
                 <h3 className="text-base font-semibold text-gray-800">
                     Nhiệm vụ con ({subtasks.length})
                 </h3>
-                {canCreateSubtask || isAssignee && (
+                {(canCreateSubtask || isAssignee) && (
                     <Button
                         variant="ghost"
                         size="sm"

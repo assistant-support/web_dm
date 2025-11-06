@@ -27,12 +27,6 @@ export default function TeamTabs({ teamId, isManager }) {
             icon: Clock,
             current: pathname === `/teams/${teamId}/activity`,
         },
-        {
-            name: 'Phân tích',
-            href: `/teams/${teamId}/analytics`,
-            icon: BarChart3,
-            current: pathname === `/teams/${teamId}/analytics`,
-        },
     ];
 
     // Only show settings for managers

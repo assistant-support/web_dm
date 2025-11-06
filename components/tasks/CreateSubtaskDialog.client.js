@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DialogComponent from '@/components/ui/dialog';
 import { Input, Textarea, Select, Checkbox } from '@/components/ui/input';
@@ -40,9 +40,15 @@ export default function CreateSubtaskDialog({
         })
         .filter(Boolean);
     
-    // Lấy ngày hôm nay và ngày mai
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Calculate dates only on client side to avoid hydration mismatch
+    const [defaultDates, setDefaultDates] = useState({ today: '', tomorrow: '' });
+    
+    useEffect(() => {
+        const now = Date.now();
+        const today = new Date(now).toISOString().split('T')[0];
+        const tomorrow = new Date(now + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        setDefaultDates({ today, tomorrow });
+    }, []);
     
     const [formData, setFormData] = useState({
         title: '',
@@ -51,12 +57,23 @@ export default function CreateSubtaskDialog({
         assignee: '',
         workType: parentTask?.workType || '',
         platforms: parentTask?.platforms || [],
-        plannedStartAt: today, // Mặc định: hôm nay
-        plannedDueAt: tomorrow, // Mặc định: ngày mai
+        plannedStartAt: '', // Will be set after mount
+        plannedDueAt: '', // Will be set after mount
         tags: '',
         initialPoints: 0,
         estimatedHours: '',
     });
+
+    // Update dates once mounted
+    useEffect(() => {
+        if (defaultDates.today && defaultDates.tomorrow) {
+            setFormData(prev => ({
+                ...prev,
+                plannedStartAt: prev.plannedStartAt || defaultDates.today,
+                plannedDueAt: prev.plannedDueAt || defaultDates.tomorrow,
+            }));
+        }
+    }, [defaultDates]);
 
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));

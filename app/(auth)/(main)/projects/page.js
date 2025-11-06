@@ -2,6 +2,9 @@
 import { listMyProjects } from '@/data/project/actions/list.js';
 import ProjectsPageClient from '@/components/project/ProjectsPageClient.client.js';
 
+// Revalidate every 3 seconds for real-time updates
+export const revalidate = 3;
+
 export default async function ProjectsPage() {
     const result = await listMyProjects();
 

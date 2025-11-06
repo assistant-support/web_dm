@@ -1,125 +1,71 @@
-// app/(auth)/(main)/teams/[teamId]/page.js
-// Mục đích: Tab "Tổng quan" của team
-// Tối ưu: Đã BỎ `force-dynamic`.
-// `getByIdAction` sẽ dùng kết quả đã cache từ `React.cache` (được gọi ở layout.js).
+// app/(auth)/(main)/teams/[teamId]/analytics/page.js
+// Tab "Phân tích" - Xem thống kê và bảng xếp hạng
 
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
-import { getByIdAction } from '@/data/team/actions/server.js';
-import { Users, Folder, BarChart3, Clock } from 'lucide-react';
+import { Suspense } from 'react';
+import { getCachedTeamById } from '@/data/team/actions/cached.js';
+import { getAnalytics } from '@/data/team/actions/analytics.js';
+import TeamAnalytics from '@/components/team/TeamAnalytics.js';
+import TeamLeaderboard from '@/components/team/TeamLeaderboard.client.js';
 
-export default async function TeamOverviewPage({ params }) {
+// Revalidate every 3 seconds for real-time updates
+export const revalidate = 3;
+
+// Metadata for SEO
+export async function generateMetadata({ params }) {
+    const { teamId } = await params;
+    const result = await getCachedTeamById(teamId);
+
+    if (!result.ok) {
+        return {
+            title: 'Team Not Found',
+        };
+    }
+
+    const team = result.data;
+    return {
+        title: `${team.name} - Phân tích | Teams`,
+        description: `Xem thống kê và bảng xếp hạng của team ${team.name}`,
+    };
+}
+
+export default async function TeamAnalyticsPage({ params }) {
     const { teamId } = await params;
     if (!teamId) return notFound();
 
-    const result = await getByIdAction(teamId);
-    if (!result.ok) return notFound();
-    const team = JSON.parse(JSON.stringify(result.data));
+    // Fetch analytics data on server
+    let analyticsData = null;
+    try {
+        const result = await getAnalytics({ teamId });
+        if (result.ok) {
+            analyticsData = JSON.parse(JSON.stringify(result.data));
+        }
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+    }
 
-    // Tính toán stats nhanh
-    const memberCount = team.members?.length || 0;
-    const managerCount = team.members?.filter(m => m.role === 'manager').length || 0;
+    // Current month for leaderboard
+    const now = new Date();
+    const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     return (
-        <div className="space-y-6 w-full flex flex-col">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="bg-[var(--brand-50)] rounded-lg p-4 border border-[var(--brand-200)]">
-                    <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-[var(--brand-100)] flex items-center justify-center">
-                            <Users className="h-5 w-5 text-[var(--brand-600)]" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Thành viên</p>
-                            <p className="text-2xl font-bold text-gray-900">{memberCount}</p>
+        <div className="space-y-6">
+            <Suspense fallback={
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                    <div className="animate-pulse space-y-4">
+                        <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-24 bg-gray-200 rounded"></div>
+                            ))}
                         </div>
                     </div>
                 </div>
+            }>
+                <TeamAnalytics analytics={analyticsData} />
+            </Suspense>
 
-                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                    <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                            <BarChart3 className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Quản lý</p>
-                            <p className="text-2xl font-bold text-gray-900">{managerCount}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                            <Folder className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Trạng thái</p>
-                            <p className="text-sm font-semibold text-gray-900">
-                                {team.isActive ? 'Đang hoạt động' : 'Đã lưu trữ'}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Quick Links */}
-            <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-3">Liên kết nhanh</h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <Link
-                        href={`/teams/${team._id}/members`}
-                        className="group flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-[var(--brand-600)] hover:bg-[var(--brand-50)] transition-all duration-200"
-                    >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-[var(--brand-100)] flex items-center justify-center group-hover:bg-[var(--brand-600)] transition-colors">
-                            <Users className="h-5 w-5 text-[var(--brand-600)] group-hover:text-white transition-colors" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900 group-hover:text-[var(--brand-700)]">Thành viên</h3>
-                            <p className="text-xs text-gray-500 mt-0.5">Quản lý thành viên nhóm</p>
-                        </div>
-                    </Link>
-
-                    <Link
-                        href={`/teams/${team._id}/activity`}
-                        className="group flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-purple-600 hover:bg-purple-50 transition-all duration-200"
-                    >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-600 transition-colors">
-                            <Clock className="h-5 w-5 text-purple-600 group-hover:text-white transition-colors" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900 group-hover:text-purple-700">Hoạt động</h3>
-                            <p className="text-xs text-gray-500 mt-0.5">Xem lịch sử hoạt động</p>
-                        </div>
-                    </Link>
-
-                    <Link
-                        href={`/teams/${team._id}/analytics`}
-                        className="group flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-green-600 hover:bg-green-50 transition-all duration-200"
-                    >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center group-hover:bg-green-600 transition-colors">
-                            <BarChart3 className="h-5 w-5 text-green-600 group-hover:text-white transition-colors" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900 group-hover:text-green-700">Phân tích</h3>
-                            <p className="text-xs text-gray-500 mt-0.5">Xem thống kê và bảng xếp hạng</p>
-                        </div>
-                    </Link>
-
-                    <Link
-                        href={`/teams/${team._id}/projects`}
-                        className="group flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-blue-600 hover:bg-blue-50 transition-all duration-200"
-                    >
-                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                            <Folder className="h-5 w-5 text-blue-600 group-hover:text-white transition-colors" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-semibold text-gray-900 group-hover:text-blue-700">Dự án</h3>
-                            <p className="text-xs text-gray-500 mt-0.5">Xem dự án của nhóm</p>
-                        </div>
-                    </Link>
-                </div>
-            </div>
+            <TeamLeaderboard teamId={teamId} initialYm={currentYm} />
         </div>
     );
 }

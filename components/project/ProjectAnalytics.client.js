@@ -1,31 +1,52 @@
-// components/project/ProjectAnalytics.client.js
 'use client';
 
 import { useState, useEffect } from 'react';
 import { BarChart3, CheckCircle, Clock, AlertCircle, TrendingUp } from 'lucide-react';
+import {
+    Chart as ChartJS,
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    Title,
+    Tooltip,
+    Legend
+} from 'chart.js';
+import { Bar } from 'react-chartjs-2';
 import { getAnalytics } from '@/data/project/actions/analytics.js';
+import { t } from '@/lib/i18n-vi';
 
-export default function ProjectAnalytics({ projectId }) {
-    const [analytics, setAnalytics] = useState(null);
-    const [loading, setLoading] = useState(true);
+ChartJS.register(
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    Title,
+    Tooltip,
+    Legend
+);
+
+export default function ProjectAnalytics({ projectId, initialAnalytics }) {
+    const [analytics, setAnalytics] = useState(initialAnalytics);
+    const [loading, setLoading] = useState(!initialAnalytics);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        loadAnalytics();
-    }, [projectId]);
-
-    const loadAnalytics = async () => {
-        setLoading(true);
-        try {
-            const result = await getAnalytics(projectId);
-            if (result.ok) {
-                setAnalytics(result.data);
-            }
-        } catch (error) {
-            console.error('Load analytics error:', error);
-        } finally {
+        if (!initialAnalytics) {
+            setLoading(true);
+            getAnalytics(projectId)
+                .then(result => {
+                    if (result.ok) {
+                        setAnalytics(result.data);
+                    } else {
+                        setError(result.message || t('error.loadFailed'));
+                    }
+                })
+                .catch(err => setError(err.message || t('error.unexpected')))
+                .finally(() => setLoading(false));
+        } else {
+            setAnalytics(initialAnalytics);
             setLoading(false);
         }
-    };
+    }, [projectId, initialAnalytics]);
 
     if (loading) {
         return (
@@ -34,151 +55,209 @@ export default function ProjectAnalytics({ projectId }) {
                     <div className="h-6 bg-gray-200 rounded w-1/3"></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {[...Array(4)].map((_, i) => (
-                            <div key={i} className="h-24 bg-gray-200 rounded"></div>
+                            <div key={i} className="h-24 bg-gray-200 rounded-lg"></div>
                         ))}
                     </div>
+                    <div className="h-48 bg-gray-200 rounded-lg"></div>
                 </div>
             </div>
         );
     }
 
+    if (error) {
+        return (
+            <div className="bg-white rounded-lg border border-red-200 p-6">
+                <h3 className="text-lg font-semibold text-red-700 mb-2">{t('common.error')}</h3>
+                <p className="text-sm text-red-600">{error}</p>
+            </div>
+        );
+    }
+
     if (!analytics) {
-        return null;
+        return (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900">{t('project.analytics')}</h3>
+                <p className="text-sm text-gray-500 mt-2">{t('common.noData')}</p>
+            </div>
+        );
     }
 
     const { tasks, trend, completionRate } = analytics;
 
-    // Stats cards config
-    const statsCards = [
-        {
-            label: 'Tổng số task',
-            value: tasks.totalTasks,
-            icon: BarChart3,
-            color: 'bg-blue-100 text-blue-600',
-            bgColor: 'bg-blue-50',
-            borderColor: 'border-blue-200',
-        },
-        {
-            label: 'Hoàn thành',
-            value: tasks.completedTasks,
-            icon: CheckCircle,
-            color: 'bg-green-100 text-green-600',
-            bgColor: 'bg-green-50',
-            borderColor: 'border-green-200',
-        },
-        {
-            label: 'Đang thực hiện',
-            value: tasks.inProgressTasks,
-            icon: Clock,
-            color: 'bg-yellow-100 text-yellow-600',
-            bgColor: 'bg-yellow-50',
-            borderColor: 'border-yellow-200',
-        },
-        {
-            label: 'Quá hạn',
-            value: tasks.overdueTasks,
-            icon: AlertCircle,
-            color: 'bg-red-100 text-red-600',
-            bgColor: 'bg-red-50',
-            borderColor: 'border-red-200',
-        },
-    ];
-
-    // Calculate max value for chart scaling
     const maxValue = Math.max(
         ...trend.map(t => Math.max(t.created, t.completed)),
         1
     );
 
-    return (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Thống kê dự án</h3>
-                    <p className="text-sm text-gray-600 mt-0.5">
-                        Tỷ lệ hoàn thành: {completionRate}%
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                    <TrendingUp className="h-5 w-5 text-green-600" />
-                    <span className="text-sm font-semibold text-green-700">
-                        {completionRate}%
-                    </span>
-                </div>
-            </div>
+    const chartData = {
+        labels: trend.map(item => `T${item.month}/${item.year}`),
+        datasets: [
+            {
+                label: 'Tạo mới',
+                data: trend.map(item => item.created),
+                backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                borderColor: 'rgb(59, 130, 246)',
+                borderWidth: 1,
+                borderRadius: 8,
+            },
+            {
+                label: 'Hoàn thành',
+                data: trend.map(item => item.completed),
+                backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                borderColor: 'rgb(16, 185, 129)',
+                borderWidth: 1,
+                borderRadius: 8,
+            }
+        ]
+    };
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {statsCards.map((stat, index) => {
-                    const Icon = stat.icon;
-                    return (
-                        <div
-                            key={index}
-                            className={`${stat.bgColor} border ${stat.borderColor} rounded-lg p-4`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className={`flex-shrink-0 w-10 h-10 rounded-lg ${stat.color} flex items-center justify-center`}>
-                                    <Icon className="h-5 w-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-sm text-gray-600">{stat.label}</p>
-                                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                                </div>
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+                align: 'end',
+                labels: {
+                    usePointStyle: true,
+                    pointStyle: 'circle',
+                    padding: 15,
+                    font: {
+                        size: 13,
+                        family: 'Inter, system-ui, sans-serif',
+                        weight: '500'
+                    },
+                    color: '#374151'
+                }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                padding: 16,
+                titleFont: {
+                    size: 14,
+                    weight: 'bold',
+                    family: 'Inter, system-ui, sans-serif'
+                },
+                bodyFont: {
+                    size: 13,
+                    family: 'Inter, system-ui, sans-serif'
+                },
+                bodySpacing: 8,
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1,
+                displayColors: true,
+                boxPadding: 6,
+                cornerRadius: 8,
+                callbacks: {
+                    title: function(context) {
+                        return `📅 ${context[0].label}`;
+                    },
+                    label: function(context) {
+                        const label = context.dataset.label || '';
+                        const value = context.parsed.y;
+                        const icon = label === 'Tạo mới' ? '📝' : '✅';
+                        return `${icon} ${label}: ${value} công việc`;
+                    },
+                    afterBody: function(context) {
+                        const created = context[0].chart.data.datasets[0].data[context[0].dataIndex];
+                        const completed = context[0].chart.data.datasets[1].data[context[0].dataIndex];
+                        const percentage = created > 0 ? Math.round((completed / created) * 100) : 0;
+                        return `\n📊 Tỷ lệ: ${percentage}%`;
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    display: false
+                },
+                ticks: {
+                    font: {
+                        size: 12,
+                        weight: '500'
+                    },
+                    color: '#4B5563',
+                    padding: 8
+                },
+                border: {
+                    display: false
+                }
+            },
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: 'rgba(229, 231, 235, 0.8)',
+                    drawBorder: false
+                },
+                ticks: {
+                    font: {
+                        size: 12
+                    },
+                    color: '#6B7280',
+                    stepSize: Math.ceil(maxValue / 5),
+                    padding: 10,
+                    callback: function(value) {
+                        return value + ' CV';
+                    }
+                },
+                border: {
+                    display: false
+                }
+            }
+        },
+        interaction: {
+            mode: 'index',
+            intersect: false
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">
+                    📈 Xu hướng hoàn thành công việc
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                    Theo dõi tiến độ tạo mới và hoàn thành công việc theo tháng
+                </p>
+            </div>
+            {trend.length > 0 ? (
+                <div className="p-6">
+                    <div style={{ height: '350px' }}>
+                        <Bar data={chartData} options={chartOptions} />
+                    </div>
+                    <div className="mt-6 pt-4 border-t border-gray-200">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                            <div className="p-3 bg-gray-50 rounded-lg">
+                                <p className="text-xs text-gray-600 mb-1">Đang làm</p>
+                                <p className="text-lg font-semibold text-blue-600">{tasks.inProgressTasks}</p>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-lg">
+                                <p className="text-xs text-gray-600 mb-1">Quá hạn</p>
+                                <p className="text-lg font-semibold text-red-600">{tasks.overdueTasks}</p>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-lg">
+                                <p className="text-xs text-gray-600 mb-1">Trung bình/tháng</p>
+                                <p className="text-lg font-semibold text-gray-900">
+                                    {trend.length > 0 ? Math.round(trend.reduce((sum, t) => sum + t.created, 0) / trend.length) : 0}
+                                </p>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-lg">
+                                <p className="text-xs text-gray-600 mb-1">Hoàn thành/tháng</p>
+                                <p className="text-lg font-semibold text-green-600">
+                                    {trend.length > 0 ? Math.round(trend.reduce((sum, t) => sum + t.completed, 0) / trend.length) : 0}
+                                </p>
                             </div>
                         </div>
-                    );
-                })}
-            </div>
-
-            {/* Trend Chart */}
-            {trend.length > 0 && (
-                <div>
-                    <h4 className="text-sm font-medium text-gray-900 mb-4">
-                        Xu hướng 6 tháng gần đây
-                    </h4>
-                    <div className="space-y-2">
-                        {trend.map((item, index) => {
-                            const monthLabel = `Tháng ${item.month}/${item.year}`;
-                            const createdWidth = (item.created / maxValue) * 100;
-                            const completedWidth = (item.completed / maxValue) * 100;
-
-                            return (
-                                <div key={index} className="space-y-1">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-gray-600 font-medium">{monthLabel}</span>
-                                        <div className="flex items-center gap-4">
-                                            <span className="text-blue-600">Tạo: {item.created}</span>
-                                            <span className="text-green-600">Hoàn thành: {item.completed}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                                            <div
-                                                className="bg-blue-500 h-full rounded-full transition-all duration-300"
-                                                style={{ width: `${createdWidth}%` }}
-                                            />
-                                        </div>
-                                        <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                                            <div
-                                                className="bg-green-500 h-full rounded-full transition-all duration-300"
-                                                style={{ width: `${completedWidth}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
                     </div>
-                    <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-gray-200">
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                            <span className="text-sm text-gray-600">Task được tạo</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                            <span className="text-sm text-gray-600">Task hoàn thành</span>
-                        </div>
+                </div>
+            ) : (
+                <div className="p-6">
+                    <div className="text-center py-12 text-gray-500">
+                        <BarChart3 className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                        <p className="font-medium">Chưa có dữ liệu thống kê</p>
+                        <p className="text-sm mt-1">Dữ liệu sẽ hiển thị khi có công việc trong dự án</p>
                     </div>
                 </div>
             )}

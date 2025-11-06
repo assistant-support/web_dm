@@ -4,7 +4,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import MemberList from './MemberList.client';
+import MemberList from './MemberList';
 
 /**
  * MemberListWrapper - Wrapper component với router refresh

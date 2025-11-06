@@ -1,8 +1,14 @@
+/**
+ * @file components/tasks/CreateTaskDialog.client.js
+ * @description A client component form for creating a new task using a Server Action.
+ */
 'use client';
 
 // Imports
-import { useState, useEffect, useMemo, useContext } from 'react';
+import { useFormState, useFormStatus } from 'react-dom';
+import { useEffect, useState, useMemo, useContext } from 'react';
 import { useRouter } from 'next/navigation';
+import { createTask } from '@/data/task/actions/server';
 import DialogComponent from '@/components/ui/dialog';
 // 'Select' không còn được dùng, chỉ cần Input, Textarea, Checkbox
 import { Input, Textarea, Checkbox } from '@/components/ui/input';
@@ -10,7 +16,6 @@ import Dropdown, { DropdownContext } from '@/components/ui/dropdown';
 import { Info, User, Loader2, Search, ChevronDown } from 'lucide-react';
 import { WORK_TYPES } from '@/data/workTypes/constants';
 import { PRIORITY } from '@/model/common/enums.js';
-import { createTask } from '@/data/task/actions/server';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 import { truncateText } from '@/functions';
 
@@ -173,17 +178,20 @@ export default function CreateTaskDialog({
     const assigneeOptions = useMemo(() => {
         if (!canManage) return [];
         const defaultOption = { value: '', label: '-- Giao sau --', name: '-- Giao sau --' };
-        const memberOptions = projectMembers.map(member => {
-            const user = users.find(u => u.value === member.userId);
-            return user ? { value: user.value, label: user.label, name: user.name } : null;
-        }).filter(Boolean);
+        // Sử dụng users (team members) thay vì projectMembers
+        const memberOptions = users.map(user => ({
+            value: user.value,
+            label: user.label || user.name,
+            name: user.name
+        }));
         return [defaultOption, ...memberOptions];
-    }, [canManage, projectMembers, users]);
+    }, [canManage, users]);
 
     const filteredAssigneeOptions = useMemo(() => {
         if (!assigneeSearch) return assigneeOptions;
         return assigneeOptions.filter(opt =>
-            opt.name.toLowerCase().includes(assigneeSearch.toLowerCase())
+            opt.name.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+            opt.label.toLowerCase().includes(assigneeSearch.toLowerCase())
         );
     }, [assigneeOptions, assigneeSearch]);
 

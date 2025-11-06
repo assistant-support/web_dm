@@ -14,9 +14,9 @@ import { useAsyncNotifier } from '@/hooks/loading.hook';
  * @param {Object} props
  * @param {Object} props.team - Team data
  * @param {boolean} props.open - Dialog open state
- * @param {Function} props.onClose - Close dialog callback
+ * @param {Function} props.onOpenChange - Toggle dialog callback (receives boolean)
  */
-export default function EditTeamDialog({ team, open, onClose }) {
+export default function EditTeamDialog({ team, open, onOpenChange }) {
     const router = useRouter();
     const { run, Overlays } = useAsyncNotifier({
         defaultAutoCloseMsSuccess: 2000,
@@ -116,12 +116,12 @@ export default function EditTeamDialog({ team, open, onClose }) {
 
         // Success case
         router.refresh();
-        onClose();
+        onOpenChange(false);
     };
 
     const handleClose = () => {
         setErrors({});
-        onClose();
+        onOpenChange(false);
     };
 
     return (

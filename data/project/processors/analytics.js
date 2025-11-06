@@ -15,9 +15,8 @@ const O = (id) => new mongoose.Types.ObjectId(String(id));
  */
 async function _getProjectAnalytics(projectId) {
     await connectDB();
-    console.log(`[Cache Miss] Running _getProjectAnalytics for ${projectId}`);
-
-    const pid = O(projectId); // Chuyển projectId sang ObjectId
+    
+    const pid = O(projectId);
     const now = new Date();
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -114,17 +113,18 @@ async function _getProjectAnalytics(projectId) {
         totalTasks: 0, completedTasks: 0, inProgressTasks: 0, todoTasks: 0, overdueTasks: 0,
     };
 
-    return {
+    const result = {
         tasks: stats,
         trend: monthlyTrend.map(item => ({
             ...item,
-            // Format month thành YYYY-MM
             ym: `${item.year}-${String(item.month).padStart(2, '0')}`
         })),
         completionRate: stats.totalTasks > 0
             ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
             : 0,
     };
+
+    return result;
 }
 
 /**
@@ -132,17 +132,17 @@ async function _getProjectAnalytics(projectId) {
  */
 export const getProjectAnalytics = cache(
     _getProjectAnalytics,
-    ['project-analytics'], // Key part
+    ['project-analytics'],
     {
-        tags: (projectId) => [tags.projectAnalytics(projectId)], // Cần thêm tag này vào tags.js
-        revalidate: 3600 // Cache 1 giờ
+        tags: ['project-analytics'],
+        revalidate: 3 // Revalidate every 3 seconds for real-time data
     }
 );
 
 /**
- * Lấy thống kê task theo member cho project (ĐÃ TỐI ƯU)
+ * Hàm gốc lấy thống kê task theo member (không cache)
  */
-export async function getProjectMemberStats(projectId, memberIds) {
+async function _getProjectMemberStats(projectId, memberIds) {
     await connectDB();
     if (!memberIds || memberIds.length === 0) {
         return {};
@@ -212,3 +212,15 @@ export async function getProjectMemberStats(projectId, memberIds) {
 
     return statsMap;
 }
+
+/**
+ * Lấy thống kê task theo member cho project (ĐÃ CACHE)
+ */
+export const getProjectMemberStats = cache(
+    _getProjectMemberStats,
+    ['project-member-stats'],
+    {
+        tags: ['project-member-stats', 'tasks'],
+        revalidate: 3 // Revalidate every 3 seconds for real-time data
+    }
+);

@@ -20,15 +20,15 @@ export async function uploadFileToTaskAction(formData) {
 
         await connectDB();
 
-        const task = await Task.findById(taskId).select('drive').lean();
+        const task = await Task.findById(taskId).select('docs fileIds attachmentsCount').lean();
 
         if (!task) {
             return { success: false, error: 'Không tìm thấy Task với ID đã cho.' };
         }
 
-        const parentId = task.drive;
+        const parentId = task.docs?.driveFolderId;
         if (!parentId) {
-            return { success: false, error: 'Task này chưa được liên kết với thư mục Drive (thiếu ID trong trường "drive").' };
+            return { success: false, error: 'Task này chưa được liên kết với thư mục Drive. Vui lòng tạo folder Drive cho task trước.' };
         }
 
         const arrayBuffer = await file.arrayBuffer();

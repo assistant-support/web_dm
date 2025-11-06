@@ -6,8 +6,8 @@ import ProjectTabs from '@/components/project/ProjectTabs.client.js';
 import ProjectHeader from '@/components/project/ProjectHeader.client.js';
 import { canManageProject } from '@/lib/permissions.js'; // Sử dụng helper permission
 
-// Bỏ force-dynamic để bật cache
-// export const dynamic = 'force-dynamic';
+// Revalidate every 3 seconds for real-time updates
+export const revalidate = 3;
 
 export default async function ProjectDetailLayout({ children, params }) {
     const { projectId } = await params;
@@ -29,7 +29,7 @@ export default async function ProjectDetailLayout({ children, params }) {
             redirect('/projects');
         }
         // Lỗi khác
-        throw new Error(result.message || 'Lỗi tải dự án');
+        throw redirect('/projects');
     }
 
     // Action trả về data đã serialize (nếu dùng asPlainProject)
@@ -40,14 +40,14 @@ export default async function ProjectDetailLayout({ children, params }) {
     const userIsManager = canManageProject(project, user.externalUserId);
 
     return (
-        <div className='w-full flex flex-col gap-6'> {/* Tăng gap */}
+        <div className='w-full flex flex-col gap-3'> {/* Tăng gap */}
             <ProjectHeader project={project} canManage={userIsManager} />
             <ProjectTabs
                 projectId={projectId}
                 isOwnerOrManager={userIsManager}
             />
             {/* Bỏ overflow-scroll ở đây và để MyProjectsList tự xử lý scroll */}
-            <div className="flex-1 min-h-0"> {/* Thêm min-h-0 để flex hoạt động đúng */}
+            <div className="flex-1 min-h-0 overflow-hidden"> {/* Thêm min-h-0 để flex hoạt động đúng */}
                 {children}
             </div>
         </div>

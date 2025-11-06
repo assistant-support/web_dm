@@ -17,10 +17,10 @@ import { updateParentProgress } from '@/data/task/processors/progress.js';
 /**
  * ACTION: Parent task assignee duyệt subtask hoàn thành
  * @param {string} subtaskId - Subtask ID
- * @param {Object} params - { approve: boolean, note?: string }
+ * @param {Object} params - { approve: boolean, finalPoints?: number, note?: string }
  * @returns {Promise<Object>} - Plain subtask object
  */
-export async function approveSubtaskCompletion(subtaskId, { approve, note }) {
+export async function approveSubtaskCompletion(subtaskId, { approve, finalPoints, note }) {
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -35,8 +35,16 @@ export async function approveSubtaskCompletion(subtaskId, { approve, note }) {
         assert(parentTask.assignee === uid, 'Bạn không phải là người đứng chính task', 'FORBIDDEN', 403);
         
         if (approve) {
+            // Validate finalPoints
+            const points = Number(finalPoints) || 0;
+            assert(points >= 0, 'Điểm phải là số không âm', 'BAD_REQUEST', 400);
+            assert(points <= parentTask.initialPoints, `Điểm subtask (${points}) không được vượt quá điểm parent task (${parentTask.initialPoints})`, 'BAD_REQUEST', 400);
+            
             subtask.status = TASK_STATUS.COMPLETED;
+            subtask.finalPoints = points;
             subtask.completedAt = new Date();
+            subtask.scoredBy = uid;
+            subtask.scoredAt = new Date();
             
             // Update progress của parent
             await updateParentProgress(String(subtask.parentTask));
@@ -59,7 +67,11 @@ export async function approveSubtaskCompletion(subtaskId, { approve, note }) {
             project: subtask.project,
             task: subtask._id,
             type: approve ? 'subtask.approved' : 'subtask.rejected',
-            payload: { note: note || '', parentTaskId: String(subtask.parentTask) },
+            payload: { 
+                note: note || '', 
+                parentTaskId: String(subtask.parentTask),
+                finalPoints: subtask.finalPoints || 0,
+            },
         });
         
         await notifyEvent(approve ? 'subtask.approved' : 'subtask.rejected', {

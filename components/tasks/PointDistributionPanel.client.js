@@ -163,24 +163,37 @@ export default function PointDistributionPanel({ task, canManage = false }) {
             </div>
 
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-3 gap-3 p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                 <div>
-                    <p className="text-xs text-gray-600">Tổng điểm</p>
+                    <p className="text-xs text-gray-600 mb-1">Tổng điểm</p>
                     <p className="text-lg font-semibold text-gray-900">{totalAvailable}</p>
                 </div>
                 <div>
-                    <p className="text-xs text-gray-600">Đã chia</p>
+                    <p className="text-xs text-gray-600 mb-1">Đã chia</p>
                     <p className={`text-lg font-semibold ${isOverLimit ? 'text-red-600' : 'text-blue-600'}`}>
                         {totalDistributed}
                     </p>
                 </div>
                 <div>
-                    <p className="text-xs text-gray-600">Còn lại</p>
-                    <p className={`text-lg font-semibold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <p className="text-xs text-gray-600 mb-1">Còn lại</p>
+                    <p className={`text-lg font-semibold ${remaining < 0 ? 'text-red-600' : remaining === 0 ? 'text-blue-600' : 'text-green-600'}`}>
                         {remaining}
                     </p>
                 </div>
             </div>
+
+            {/* Validation Warning */}
+            {isOverLimit && (
+                <div className="p-3 bg-red-50 border-l-4 border-red-500 rounded-r flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="text-sm font-medium text-red-800">Vượt quá giới hạn điểm!</p>
+                        <p className="text-xs text-red-700 mt-1">
+                            Bạn đã chia {totalDistributed} điểm nhưng chỉ có {totalAvailable} điểm. Vui lòng giảm điểm chia cho các subtask.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Error/Success */}
             {error && (
@@ -262,11 +275,21 @@ export default function PointDistributionPanel({ task, canManage = false }) {
             )}
 
             {/* Info */}
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-xs text-blue-800">
-                    💡 <strong>Lưu ý:</strong> Sau khi chia điểm, mỗi subtask sẽ có điểm riêng. 
-                    Khi subtask hoàn thành và được duyệt, người thực hiện sẽ nhận được điểm đó.
-                </p>
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                    <div className="text-2xl">💡</div>
+                    <div className="flex-1 text-xs text-blue-900 space-y-2">
+                        <p>
+                            <strong>Hướng dẫn phân bổ điểm:</strong>
+                        </p>
+                        <ul className="list-disc list-inside space-y-1 ml-2">
+                            <li>Mỗi subtask sẽ có điểm riêng sau khi phân bổ</li>
+                            <li>Tổng điểm chia <strong>không được vượt quá</strong> {totalAvailable} điểm</li>
+                            <li>Khi subtask hoàn thành, người thực hiện nhận điểm tương ứng</li>
+                            <li>Nhấn "Chia đều" để tự động phân bổ đều cho các subtask</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
     );

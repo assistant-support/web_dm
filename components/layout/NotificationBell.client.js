@@ -14,30 +14,33 @@ import Dropdown from '@/components/ui/dropdown';
  */
 export default function NotificationBell({ currentUser }) {
     const [notifications, setNotifications] = useState([]);
+    const [mounted, setMounted] = useState(false);
 
-    // Mock notifications for demo
+    // Ensure client-side only rendering to avoid hydration issues
     useEffect(() => {
+        setMounted(true);
         // In production, fetch from API
+        const now = Date.now();
         const mockNotifications = [
             {
                 id: '1',
                 type: 'task.assigned',
                 message: 'Bạn được giao nhiệm vụ mới: "Thiết kế UI Dashboard"',
-                createdAt: new Date(Date.now() - 1000 * 60 * 5), // 5 mins ago
+                createdAt: new Date(now - 1000 * 60 * 5), // 5 mins ago
                 read: false,
             },
             {
                 id: '2',
                 type: 'comment.added',
                 message: 'Nguyễn Văn A đã bình luận trong nhiệm vụ "API Integration"',
-                createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 mins ago
+                createdAt: new Date(now - 1000 * 60 * 30), // 30 mins ago
                 read: false,
             },
             {
                 id: '3',
                 type: 'task.status.changed',
                 message: 'Nhiệm vụ "Testing Module" đã chuyển sang trạng thái "Hoàn thành"',
-                createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+                createdAt: new Date(now - 1000 * 60 * 60 * 2), // 2 hours ago
                 read: true,
             },
         ];
@@ -45,6 +48,19 @@ export default function NotificationBell({ currentUser }) {
     }, []);
 
     const unreadCount = notifications.filter(n => !n.read).length;
+
+    // Prevent hydration mismatch by not rendering until mounted
+    if (!mounted) {
+        return (
+            <button
+                className="relative p-2 text-[var(--brand-600)] hover:bg-gray-100 rounded-lg transition-colors"
+                title="Thông báo"
+                disabled
+            >
+                <Bell className="w-6 h-6" />
+            </button>
+        );
+    }
 
     const handleMarkAsRead = (id) => {
         setNotifications(prev =>

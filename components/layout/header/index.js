@@ -1,16 +1,16 @@
 // components/layout/header/index.js
-import { auth } from "@/auth";
 import Link from "next/link";
 import Image from "next/image";
 import { AppSwitcher, UserMenu } from "./client";
 import { getCurrentUserWithSync } from "@/lib/oauth-client";
 import SearchInput from "./SearchInput.client";
 import NotificationBell from "@/components/layout/NotificationBell.client";
+import { getSessionFromCookies } from "@/lib/session-helper";
 
 
 
 export default async function SiteHeader() {
-    const session = await auth();
+    const session = await getSessionFromCookies();
     let user = null;
 
     // Lấy user info từ OAuth và sync

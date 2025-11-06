@@ -29,6 +29,7 @@ export const Input = forwardRef(function Input(
     { label, error, required, helperText, className, id, type = 'text', variant = 'default', leftIcon, rightIcon, ...props },
     ref
 ) {
+    // useId() is safe for SSR - it generates consistent IDs on server and client
     const internalId = useId();
     const inputId = id || internalId;
 
@@ -82,6 +83,7 @@ export const Textarea = forwardRef(function Textarea(
     { label, error, required, helperText, className, id, ...props },
     ref
 ) {
+    // useId() is safe for SSR - it generates consistent IDs on server and client
     const internalId = useId();
     const textareaId = id || internalId;
 
@@ -124,6 +126,7 @@ export const Select = forwardRef(function Select(
     { label, error, required, helperText, className, id, children, ...props },
     ref
 ) {
+    // useId() is safe for SSR - it generates consistent IDs on server and client
     const internalId = useId();
     const selectId = id || internalId;
 
@@ -171,6 +174,7 @@ export const Checkbox = forwardRef(function Checkbox(
     { label, error, helperText, className, id, ...props },
     ref
 ) {
+    // useId() is safe for SSR - it generates consistent IDs on server and client
     const internalId = useId();
     const checkboxId = id || internalId;
 
@@ -216,6 +220,7 @@ const RadioGroupItem = forwardRef(function RadioGroupItem(
     { label, className, id, ...props },
     ref
 ) {
+    // useId() is safe for SSR - it generates consistent IDs on server and client
     const internalId = useId();
     const radioId = id || internalId;
 
@@ -241,6 +246,7 @@ const RadioGroupItem = forwardRef(function RadioGroupItem(
 RadioGroupItem.displayName = 'RadioGroup.Item';
 
 export const RadioGroup = ({ label, required, error, helperText, className, children }) => {
+    // useId() is safe for SSR - it generates consistent IDs on server and client
     const internalId = useId();
     const groupId = `radiogroup-${internalId}`;
 

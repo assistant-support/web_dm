@@ -77,7 +77,7 @@ export default function TeamLeaderboard({ teamId, initialYm }) {
     return (
         <>
             <Overlays />
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="bg-white rounded-md border border-gray-200">
                 {/* Header với filters */}
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="flex items-center justify-between gap-4 flex-wrap">

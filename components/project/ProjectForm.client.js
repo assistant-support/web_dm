@@ -35,7 +35,6 @@ export default function ProjectForm({ teamId, project = null, onSuccess }) {
     const form = useForm({
         defaultValues: {
             name: project?.name || '',
-            code: project?.code || '',
             description: project?.description || '',
             priority: project?.priority || '',
             startDate: project?.startDate ? new Date(project.startDate).toISOString().split('T')[0] : '',
@@ -52,7 +51,6 @@ export default function ProjectForm({ teamId, project = null, onSuccess }) {
 
         const payload = {
             name: data.name.trim(),
-            code: data.code?.trim() || undefined,
             description: data.description?.trim() || '',
             priority: data.priority || undefined,
             startDate: data.startDate || undefined,
@@ -111,16 +109,6 @@ export default function ProjectForm({ teamId, project = null, onSuccess }) {
                     {form.formState.errors.name && (
                         <p className="mt-1 text-sm text-red-600">{form.formState.errors.name.message}</p>
                     )}
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Mã Dự án
-                    </label>
-                    <Input 
-                        {...form.register('code')}
-                        placeholder="VD: PROJ-001" 
-                    />
                 </div>
 
                 <div>

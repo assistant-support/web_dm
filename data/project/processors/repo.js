@@ -20,14 +20,14 @@ function hasAnyManagerLike(members = []) {
  */
 export async function listByTeam(teamId, { activeOnly = true } = {}) {
     const query = { team: teamId, ...(activeOnly ? { isActive: true } : {}) };
-    return Project.find(query).populate('team', 'name').lean().exec(); // Thêm populate team
+    return Project.find(query).populate('team').lean().exec(); // Populate toàn bộ team
 }
 
 /**
  * Lấy chi tiết project (hàm gốc, không cache).
  */
 const _getDetail = async (projectId, { lean = true } = {}) => {
-    const q = Project.findById(projectId).populate('team', 'name'); // Thêm populate team
+    const q = Project.findById(projectId).populate('team'); // Populate toàn bộ team (bao gồm members)
     return lean ? q.lean().exec() : q.exec();
 }
 
@@ -57,7 +57,6 @@ export async function createProject(payload, creatorUserId) {
     const docData = {
         team: payload.team,
         name: payload.name,
-        code: payload.code || undefined,
         description: payload.description || undefined,
         priority: payload.priority || undefined,
         startDate: payload.startDate || undefined,
@@ -87,9 +86,8 @@ export async function updateProject(projectId, patch) {
     const doc = await Project.findById(projectId);
     if (!doc) return null;
 
-    // ... (các trường update khác giữ nguyên) ...
+    // Update các trường
     if (patch.name !== undefined) doc.name = patch.name;
-    if (patch.code !== undefined) doc.code = patch.code || undefined;
     if (patch.description !== undefined) doc.description = patch.description || undefined;
     if (patch.priority !== undefined) doc.priority = patch.priority;
     if ('startDate' in patch) doc.startDate = patch.startDate ?? null;

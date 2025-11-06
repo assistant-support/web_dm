@@ -57,14 +57,16 @@ function getColorFromId(userId) {
  * @param {Object} props
  * @param {string} props.userId - User ID để tạo màu
  * @param {string} props.name - Tên để hiển thị initials
- * @param {string} props.src - URL ảnh (optional, chưa implement)
+ * @param {string} props.src - URL ảnh (priority 1: avatar)
+ * @param {string} props.zaloavt - URL ảnh Zalo (priority 2: fallback)
  * @param {'xs'|'sm'|'md'|'lg'|'xl'} props.size - Kích thước avatar
  * @param {string} props.className - Custom classes
  */
 export default function Avatar({ 
     userId, 
     name = '', 
-    src, 
+    src,
+    zaloavt,
     size = 'md', 
     className 
 }) {
@@ -78,12 +80,15 @@ export default function Avatar({
 
     const initials = getInitials(name);
     const bgColor = getColorFromId(userId);
+    
+    // Priority: avatar > zaloavt > initials
+    const avatarUrl = src || zaloavt;
 
     // If has avatar URL, show image
-    if (src) {
+    if (avatarUrl) {
         return (
             <img
-                src={src}
+                src={avatarUrl}
                 alt={name || userId}
                 className={clsx(
                     'inline-flex items-center justify-center rounded-full object-cover',
@@ -92,6 +97,8 @@ export default function Avatar({
                 )}
                 title={name || userId}
                 onError={(e) => {
+                    // On error, hide image and show initials fallback
+                    e.target.style.display = 'none';
                     const fallback = e.target.nextElementSibling;
                     if (fallback) fallback.style.display = 'flex';
                 }}

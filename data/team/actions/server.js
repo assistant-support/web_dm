@@ -12,6 +12,7 @@ import { asPlainTeam } from '@/lib/serialize.js';
 
 import {
     validate,
+    validateAsync,
     teamIdSchema,
     teamCreateSchema,
     teamUpdateSchema,
@@ -160,14 +161,14 @@ export async function archive(teamId) {
     );
 }
 
-/** Thêm thành viên (chỉ manager) – idempotent */
+/** Thêm thành viên (chỉ manager) */
 export async function addMemberAction(teamId, payload) {
     'use server';
     return await runAction(
         async ({ user }) => {
             await connectDB();
             const id = validate(teamIdSchema, teamId);
-            const data = validate(memberAddSchema, payload);
+            const data = await validateAsync(memberAddSchema, payload);
 
             const team = await getById(id, { lean: false });
             assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);

@@ -11,9 +11,7 @@ import {
     Calendar,
     ArrowLeft,
     ChevronDown,
-    ChevronUp,
-    AlertTriangle,
-    CheckCircle
+    ChevronUp
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -34,7 +32,7 @@ const priorityMap = {
 export default function ProjectHeader({ project, canManage }) {
     const router = useRouter();
     const [showEditDialog, setShowEditDialog] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [isExpanded, setIsExpanded] = useState(false);
 
     // Kiểm tra overdue cần so sánh với Date object (không phải string)
     const isOverdue = project.dueDate && new Date(project.dueDate) < new Date();

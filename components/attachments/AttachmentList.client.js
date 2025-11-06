@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Paperclip, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import AttachmentItem from './AttachmentItem.client';
-import AttachmentUpload from './AttachmentUpload.client';
+import { AttachmentUpload } from './AttachmentUpload.client';
 import { listTaskAttachments, listProjectAttachments } from '@/data/attachment/actions/server';
 
 /**
@@ -23,7 +23,6 @@ export default function AttachmentList({
     const [error, setError] = useState('');
     const [showUpload, setShowUpload] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
-    console.log(attachments);
     
     const loadAttachments = async () => {
         try {
@@ -34,8 +33,12 @@ export default function AttachmentList({
                 ? await listTaskAttachments(taskId)
                 : await listProjectAttachments(projectId);
 
+            console.log('[AttachmentList] API Response:', result);
+
             // Extract data array from response
             const attachmentsData = result?.data || result || [];
+            console.log('[AttachmentList] Attachments Data:', attachmentsData);
+            
             setAttachments(Array.isArray(attachmentsData) ? attachmentsData : []);
         } catch (err) {
             console.error('Error loading attachments:', err);
@@ -51,23 +54,25 @@ export default function AttachmentList({
     }, [taskId, projectId, scope]);
 
     const handleUploaded = (newAttachment) => {
-        // Add to top of list
-        setAttachments((prev) => [newAttachment, ...prev]);
+        console.log('[AttachmentList] File uploaded:', newAttachment);
+        // Reload the list to get fresh data from server
+        loadAttachments();
         setShowUpload(false);
     };
 
     const handleDeleted = (attachmentId) => {
-        // Remove from list
-        setAttachments((prev) => prev.filter((a) => a._id !== attachmentId));
+        console.log('[AttachmentList] File deleted:', attachmentId);
+        // Reload the list to get fresh data from server
+        loadAttachments();
     };
 
     const canDeleteAttachment = (attachment) => {
         // User can delete if: is author OR has manage permission
-        return attachment.author === currentUser?.externalUserId || canManage;
+        return attachment.createdBy === currentUser?.externalUserId || canManage;
     };
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 bg-blue">
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b">
                 <button
@@ -126,8 +131,8 @@ export default function AttachmentList({
                         </div>
                     )}
 
-                    {/* Attachments list */}
-                    <div className="space-y-2">
+                    {/* Attachments list - Grid layout */}
+                    <div>
                         {loading ? (
                             <div className="flex items-center justify-center py-8 text-gray-500">
                                 <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -146,14 +151,17 @@ export default function AttachmentList({
                                 </p>
                             </div>
                         ) : (
-                            attachments.map((attachment) => (
-                                <AttachmentItem
-                                    key={attachment._id}
-                                    attachment={attachment}
-                                    canDelete={canDeleteAttachment(attachment)}
-                                    onDeleted={handleDeleted}
-                                />
-                            ))
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {attachments.map((attachment) => (
+                                    <AttachmentItem
+                                        key={attachment.id}
+                                        attachment={attachment}
+                                        canDelete={canDeleteAttachment(attachment)}
+                                        onDeleted={handleDeleted}
+                                        viewMode="grid"
+                                    />
+                                ))}
+                            </div>
                         )}
                     </div>
                 </>

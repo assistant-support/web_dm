@@ -3,13 +3,13 @@
 
 import { addDays, endOfMonth, format, startOfDay, startOfMonth, startOfWeek, isToday, isSameMonth } from 'date-fns'
 import { vi } from 'date-fns/locale'
-import { useMemo, useRef, useState } from 'react'
-import { useTaskBoardActions } from '@/hooks/task-board.hook'
+import { useMemo, useRef, useState, useTransition } from 'react'
+import { updateTaskPlan } from '@/actions/task.actions'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 
 export default function CalendarView({ tasks }) {
     const [anchor, setAnchor] = useState(new Date())
-    const { onUpdatePlan } = useTaskBoardActions()
+    const [isPending, startTransition] = useTransition()
 
     const first = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
     const last = addDays(endOfMonth(anchor), 6)
@@ -54,7 +54,15 @@ export default function CalendarView({ tasks }) {
             (1000 * 60 * 60 * 24)
         const newStart = startOfDay(day)
         const newDue = addDays(newStart, Math.round(dur))
-        await onUpdatePlan(t._id, formatISODate(newStart), formatISODate(newDue))
+        
+        // Call server action with optimistic update
+        startTransition(async () => {
+            const result = await updateTaskPlan(t._id, formatISODate(newStart), formatISODate(newDue))
+            if (result.error) {
+                console.error('Failed to update task plan:', result.error)
+                // Optionally show a toast notification
+            }
+        })
     }
     const onDragOver = (e) => e.preventDefault()
 

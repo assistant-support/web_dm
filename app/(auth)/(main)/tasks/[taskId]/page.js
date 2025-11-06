@@ -11,9 +11,6 @@ import { listForPicker } from '@/data/appUser/actions';
 import { getTaskWorkflow } from '@/data/workflow/actions/server.js';
 import { listByTaskAction, remove as removeComment } from '@/data/comment/actions/server';
 
-// [THÊM] Import hàm lấy chi tiết file từ Drive
-import { getFileMeta } from '@/lib/drive';
-
 // Placeholders
 const getWorkTypes = async () => Promise.resolve([]);
 const getPlatforms = async () => Promise.resolve([]);
@@ -54,7 +51,6 @@ export default async function TaskDetailPage({ params }) {
     }
 
     // --- [SỬA] BƯỚC 1: Fetch dữ liệu chính (Task) và các dữ liệu độc lập ---
-    // (Bỏ attachmentsResult ra khỏi Promise.all ban đầu)
     const [
         taskResult,
         usersResult,
@@ -79,29 +75,12 @@ export default async function TaskDetailPage({ params }) {
         return <ErrorDisplay message={taskResult.message} />;
     }
 
-    // Đã có task (với task.fileIds)
+    // Đã có task
     const task = JSON.parse(JSON.stringify(taskResult.data));
     const workflow = workflowResult || null;
     const comments = commentsResult.ok ? commentsResult.data : [];
 
-
-    // --- [THÊM] BƯỚC 2: Dùng task.fileIds để lấy chi tiết Attachments ---
-    let attachments = [];
-    if (task.fileIds && task.fileIds.length > 0) {
-
-        // Tạo một mảng các promise để gọi getFileMeta cho mỗi fileId
-        const filePromises = task.fileIds.map(fileId =>
-            getFileMeta(fileId).catch(err => {
-                // Nếu 1 file bị lỗi (VD: bị xóa), không làm hỏng cả trang
-                console.error(`[TaskPage] Lỗi không thể lấy meta cho file: ${fileId}`, err.message);
-                return null;
-            })
-        );
-
-        // Chờ tất cả các promise hoàn thành và lọc bỏ những file bị lỗi (null)
-        attachments = (await Promise.all(filePromises)).filter(Boolean);
-    }
-    // Giờ đây, 'attachments' là mảng đối tượng file đầy đủ [{ id, name, mimeType, webViewLink, ... }]
+    // Note: Attachments sẽ được fetch bởi AttachmentList component (client-side)
 
 
     // --- Standardize User Data (Giữ nguyên) ---
@@ -144,8 +123,8 @@ export default async function TaskDetailPage({ params }) {
     // --- Calculate Permissions & Prepare Props (Giữ nguyên) ---
     const currentUserId = currentUser.externalUserId;
     const hasManagePermission = project ? canManageProject(project, currentUserId) : false;
-    const isAssignee = task.assignee?.externalUserId === currentUserId;
-    const isCreator = task.createdBy?.externalUserId === currentUserId;
+    const isAssignee = task.assignee === currentUserId;
+    const isCreator = task.createdBy === currentUserId;
     const canEditTask = hasManagePermission || isCreator;
     const projectName = project?.name || '';
     const projectMembers = team?.members || [];
@@ -171,7 +150,7 @@ export default async function TaskDetailPage({ params }) {
                 subtasksCount={subtasks.length}
             />
             {/* 2. Main Content & Sidebar */}
-            <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden px-4 sm:px-6 lg:px-8 pb-6 pt-6 bg-gray-50/50">
+            <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden pb-6 pt-6 bg-gray-50/50">
                 <div className="flex-1 min-w-0 overflow-y-auto h-full custom-scrollbar">
                     <TaskMainContent
                         task={task}
@@ -187,9 +166,6 @@ export default async function TaskDetailPage({ params }) {
                         workTypes={workTypes}
                         platforms={platforms}
                         comments={comments}
-
-                        // [SỬA] Truyền mảng attachments đầy đủ xuống
-                        attachments={attachments}
                     />
                 </div>
                 <div className="lg:w-80 xl:w-96 flex-shrink-0 overflow-y-auto h-full custom-scrollbar">

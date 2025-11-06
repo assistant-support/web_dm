@@ -171,9 +171,9 @@ async function _getTeamAnalytics(teamId) {
 
 export const getTeamAnalytics = cache(
     _getTeamAnalytics,
-    ['team-analytics'], 
+    ['team-analytics'],
     {
-        tags: (teamId) => [tags.teamAnalytics(teamId)],
-        revalidate: 3600
+        tags: ['team-analytics'],
+        revalidate: 3 // Revalidate every 3 seconds for real-time data
     }
 );

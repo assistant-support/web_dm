@@ -1,15 +1,24 @@
-//
-// 📁 model/task.model.js
-// 📝 Tác dụng file: Định nghĩa Mongoose Schema và Model cho 'Task'.
-//    Đây là model trung tâm, quản lý cả task nội bộ dự án (scope=PROJECT)
-//    lẫn task công khai (scope=PUBLIC) và các nghiệp vụ liên quan
-//    (claim, outsource, chia điểm).
-//
+// @/model/task.model.js
+/**
+ * Tác dụng file: Định nghĩa Mongoose Model cho Task - Model trung tâm của hệ thống.
+ * Quản lý cả task nội bộ dự án (scope=PROJECT) và task công khai (scope=PUBLIC).
+ * Hỗ trợ claim, outsource, chia điểm, subtasks, collaborators, và workflow integration.
+ * 
+ * Các tính năng chính:
+ * - Task dự án (PROJECT): Thuộc team/project, có assignee, subtasks, approval workflow
+ * - Task công khai (PUBLIC): Đăng trên public board, claim mode (AUTO/REVIEW), chia điểm
+ * - Outsource: Chuyển task từ PROJECT → PUBLIC, theo dõi origin và điểm
+ * - Collaborators: Mời người ngoài vào task, không cần là member dự án
+ * - Time tracking: plannedDueAt, startedAt, completedAt, trackedDurationSec
+ * - Scoring: initialPoints (dự kiến), finalPoints (thực tế), điểm chia cho worker/payouts
+ */
+
 import mongoose from 'mongoose';
 import {
     TASK_STATUS, PRIORITY, APPROVAL_STATUS,
     TASK_SCOPE, CLAIM_MODE, CLAIM_STATUS
-} from '@/model/common/enums.js'; // Import các hằng số enum
+} from '@/model/common/enums.js';
+import { connectDB } from '@/lib/db.js';
 
 /**
  * -----------------------------------------------------------------------------
@@ -287,11 +296,67 @@ const TaskSchema = new mongoose.Schema({
  */
 
 /**
- * (Virtual) Kiểm tra xem task có phải là subtask hay không.
- * @returns {boolean} True nếu task có 'parentTask', ngược lại là false.
+ * Virtual field: Kiểm tra task có phải là subtask hay không.
+ * @returns {boolean} True nếu task có parentTask
  */
 TaskSchema.virtual('isSubtask').get(function () {
     return !!this.parentTask;
+});
+
+/**
+ * Virtual field: Kiểm tra task có quá hạn hay không.
+ * @returns {boolean} True nếu đã qua plannedDueAt và chưa hoàn thành
+ */
+TaskSchema.virtual('isOverdue').get(function () {
+    if (!this.plannedDueAt) return false;
+    if (this.status === TASK_STATUS.COMPLETED) return false;
+    return new Date(this.plannedDueAt) < new Date();
+});
+
+/**
+ * Virtual field: Số ngày còn lại đến deadline.
+ * @returns {number|null} Số ngày còn lại (âm nếu quá hạn), null nếu không có plannedDueAt
+ */
+TaskSchema.virtual('daysRemaining').get(function () {
+    if (!this.plannedDueAt) return null;
+    const now = new Date();
+    const due = new Date(this.plannedDueAt);
+    const diffTime = due - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+});
+
+/**
+ * Virtual field: Trạng thái hiển thị task (active hay archived).
+ * @returns {string} 'active' hoặc 'deleted'
+ */
+TaskSchema.virtual('archiveStatus').get(function () {
+    return this.deletedAt ? 'deleted' : 'active';
+});
+
+/**
+ * Virtual field: Tỷ lệ hoàn thành (dựa trên progress.percentage).
+ * @returns {number} Phần trăm hoàn thành (0-100)
+ */
+TaskSchema.virtual('completionRate').get(function () {
+    return this.progress?.percentage || 0;
+});
+
+/**
+ * Virtual field: Số lượng collaborators đã chấp nhận.
+ * @returns {number} Số collaborators đã acceptedAt
+ */
+TaskSchema.virtual('activeCollaboratorsCount').get(function () {
+    if (!this.collaborators) return 0;
+    return this.collaborators.filter(c => c.acceptedAt).length;
+});
+
+/**
+ * Virtual field: Kiểm tra task có Drive folder hay không.
+ * @returns {boolean} True nếu docs.enabled và có driveFolderId
+ */
+TaskSchema.virtual('hasDriveFolder').get(function () {
+    return this.docs?.enabled && !!this.docs?.driveFolderId;
 });
 
 /**
@@ -315,9 +380,6 @@ TaskSchema.index({ title: 'text', description: 'text' });
 // Tối ưu query tìm task theo người phối hợp (collaborator)
 TaskSchema.index({ 'collaborators.userId': 1, deletedAt: 1 });
 
-// Tối ưu query tìm task theo workflow
-TaskSchema.index({ workflowId: 1 });
-
 // Tối ưu query Kanban View (sắp xếp theo status và kanbanOrder)
 TaskSchema.index({ project: 1, status: 1, kanbanOrder: 1 });
 
@@ -339,24 +401,26 @@ TaskSchema.index({ remindAt: 1, reminderSent: 1 }, {
  */
 
 /**
- * (Static) Tạo một task PUBLIC mới (không thuộc dự án).
- * Task này ban đầu sẽ ở trạng thái DRAFT và chưa published.
+ * Static: Tạo task PUBLIC mới (không thuộc dự án).
+ * Task mới sẽ ở trạng thái DRAFT và chưa published.
  *
- * @param {object} payload - Dữ liệu đầu vào để tạo task.
- * @param {string} payload.title - Tiêu đề task.
- * @param {string} [payload.description] - Mô tả.
- * @param {string} payload.postedBy - ID người đăng (externalUserId).
- * @param {string} [payload.claimMode] - Chế độ claim (AUTO hoặc REVIEW).
- * @param {number} [payload.requiredPoints] - Điểm uy tín yêu cầu.
- * @param {boolean} [payload.docsEnabled] - Có bật Google Drive không.
- * @param {string} [payload.workType] - Mã loại công việc.
- * @param {Array<string>} [payload.platforms] - Danh sách ID Platforms.
- * @param {Array<string>} [payload.tags] - Danh sách tags.
- * @param {string} [payload.priority] - Độ ưu tiên.
- * @returns {Promise<Document<Task>>} Task PUBLIC đã được tạo.
+ * @param {object} payload - Dữ liệu đầu vào
+ * @param {string} payload.title - Tiêu đề task (bắt buộc)
+ * @param {string} [payload.description=''] - Mô tả chi tiết
+ * @param {string} payload.postedBy - External User ID người đăng (bắt buộc)
+ * @param {string} [payload.claimMode=AUTO] - Chế độ claim (AUTO hoặc REVIEW)
+ * @param {number} [payload.requiredPoints=0] - Điểm uy tín yêu cầu để claim
+ * @param {boolean} [payload.docsEnabled=false] - Có bật Google Drive không
+ * @param {string} [payload.workType] - Mã loại công việc
+ * @param {Array<string>} [payload.platforms=[]] - Danh sách Platform IDs
+ * @param {Array<string>} [payload.tags=[]] - Danh sách tags
+ * @param {string} [payload.priority] - Độ ưu tiên
+ * @returns {Promise<Task>} Task PUBLIC đã tạo
+ * @throws {Error} Nếu thiếu thông tin bắt buộc
  */
 TaskSchema.statics.createPublicTask = async function (payload) {
-    const Task = this; // 'this' là Model
+    await connectDB();
+    
     const {
         title, description = '',
         postedBy,
@@ -368,11 +432,18 @@ TaskSchema.statics.createPublicTask = async function (payload) {
         tags = [],
         priority,
     } = payload;
+    
+    if (!title) {
+        throw new Error('Task title is required');
+    }
+    if (!postedBy) {
+        throw new Error('PostedBy user ID is required');
+    }
 
-    return Task.create({
+    return await this.create({
         scope: TASK_SCOPE.PUBLIC,
         title, description,
-        createdBy: postedBy, // Người tạo cũng là người đăng
+        createdBy: postedBy,
         status: TASK_STATUS.DRAFT,
         priority, tags,
         workType, platforms,
@@ -380,7 +451,7 @@ TaskSchema.statics.createPublicTask = async function (payload) {
         approval: { required: false, status: APPROVAL_STATUS.NONE },
         assigneeConfirm: { required: false },
         public: {
-            published: false, // Mặc định là chưa đăng
+            published: false,
             postedBy,
             claimMode,
             requiredPoints,
@@ -390,37 +461,42 @@ TaskSchema.statics.createPublicTask = async function (payload) {
 };
 
 /**
- * (Static) Chuyển (outsource) một task từ PROJECT ra PUBLIC.
- * Hàm này sẽ:
- * 1. Tìm task gốc (PROJECT).
- * 2. Tạo một bản sao (PUBLIC) với các thông tin cơ bản.
- * 3. Cập nhật task gốc (PROJECT) để đánh dấu 'outsource'.
+ * Static: Chuyển (outsource) task từ PROJECT ra PUBLIC.
+ * Tạo bản sao task trên public board và link origin.
  *
- * @param {string|mongoose.Types.ObjectId} originalTaskId - ID của task gốc (scope=PROJECT).
- * @param {object} options - Tùy chọn khi đăng public.
- * @param {string} options.postedBy - ID người thực hiện hành động outsource (externalUserId).
- * @param {string} [options.claimMode] - Chế độ claim.
- * @param {number} [options.requiredPoints] - Điểm yêu cầu.
- * @param {boolean} [options.docsEnabled] - Có bật Google Drive cho task public không.
- * @returns {Promise<Document<Task>>} Task PUBLIC (bản sao) đã được tạo và publish.
- * @throws {Error} Nếu task gốc không tồn tại hoặc không phải task PROJECT.
+ * @param {string|mongoose.Types.ObjectId} originalTaskId - ID task gốc (scope=PROJECT)
+ * @param {object} options - Tùy chọn khi outsource
+ * @param {string} options.postedBy - External User ID người thực hiện (bắt buộc)
+ * @param {string} [options.claimMode=AUTO] - Chế độ claim
+ * @param {number} [options.requiredPoints=0] - Điểm yêu cầu
+ * @param {boolean} [options.docsEnabled=false] - Có bật Drive không
+ * @returns {Promise<Task>} Task PUBLIC (bản sao) đã tạo và publish
+ * @throws {Error} Nếu task gốc không tồn tại hoặc không phải PROJECT
  */
 TaskSchema.statics.publishFromProjectTask = async function (originalTaskId, {
     postedBy, claimMode = CLAIM_MODE.AUTO, requiredPoints = 0, docsEnabled = false
 }) {
-    const Task = this;
-    const original = await Task.findById(originalTaskId);
+    await connectDB();
+    
+    const original = await this.findById(originalTaskId);
 
-    if (!original) throw new Error('Task gốc không tồn tại.');
-    if (original.scope !== TASK_SCOPE.PROJECT) throw new Error('Chỉ chuyển từ task dự án.');
+    if (!original) {
+        throw new Error('Original task not found');
+    }
+    if (original.scope !== TASK_SCOPE.PROJECT) {
+        throw new Error('Can only outsource PROJECT tasks');
+    }
+    if (original.outsource?.isOutsourced) {
+        throw new Error('Task already outsourced');
+    }
 
     // Tạo task PUBLIC (bản sao)
-    const pub = await Task.create({
+    const pub = await this.create({
         scope: TASK_SCOPE.PUBLIC,
         title: original.title,
         description: original.description,
         createdBy: postedBy,
-        status: TASK_STATUS.DRAFT, // Bắt đầu ở DRAFT
+        status: TASK_STATUS.DRAFT,
         priority: original.priority,
         tags: original.tags,
         workType: original.workType,
@@ -428,13 +504,13 @@ TaskSchema.statics.publishFromProjectTask = async function (originalTaskId, {
         docs: { enabled: !!docsEnabled },
         approval: { required: false, status: APPROVAL_STATUS.NONE },
         assigneeConfirm: { required: false },
-        initialPoints: original.initialPoints, // Mang điểm dự kiến từ task gốc
+        initialPoints: original.initialPoints,
         public: {
-            published: true, // Đăng ngay lập tức
+            published: true,
             postedBy,
             claimMode,
             requiredPoints,
-            origin: { project: original.project, task: original._id }, // Link về task gốc
+            origin: { project: original.project, task: original._id },
             claims: []
         }
     });
@@ -446,6 +522,88 @@ TaskSchema.statics.publishFromProjectTask = async function (originalTaskId, {
     return pub;
 };
 
+/**
+ * Static: Tìm tất cả task của một project.
+ * @param {string|mongoose.Types.ObjectId} projectId - Project ID
+ * @param {boolean} includeDeleted - Có bao gồm task đã xóa không (mặc định: false)
+ * @returns {Promise<Task[]>} Danh sách task
+ */
+TaskSchema.statics.findByProject = async function (projectId, includeDeleted = false) {
+    await connectDB();
+    
+    const query = { project: projectId };
+    if (!includeDeleted) {
+        query.deletedAt = null;
+    }
+    
+    return await this.find(query).sort({ createdAt: -1 }).lean().exec();
+};
+
+/**
+ * Static: Tìm tất cả task được assign cho một user.
+ * @param {string} userId - External User ID
+ * @param {boolean} includeDeleted - Có bao gồm task đã xóa không (mặc định: false)
+ * @returns {Promise<Task[]>} Danh sách task
+ */
+TaskSchema.statics.findByAssignee = async function (userId, includeDeleted = false) {
+    await connectDB();
+    
+    const query = { assignee: userId };
+    if (!includeDeleted) {
+        query.deletedAt = null;
+    }
+    
+    return await this.find(query).sort({ createdAt: -1 }).lean().exec();
+};
+
+/**
+ * Static: Tìm tất cả public task đang published.
+ * @param {object} filters - Filters tùy chọn
+ * @param {string} [filters.workType] - Lọc theo workType
+ * @param {string} [filters.priority] - Lọc theo priority
+ * @param {number} [filters.limit=50] - Giới hạn số lượng
+ * @returns {Promise<Task[]>} Danh sách task public
+ */
+TaskSchema.statics.findPublishedTasks = async function (filters = {}) {
+    await connectDB();
+    
+    const query = {
+        scope: TASK_SCOPE.PUBLIC,
+        'public.published': true,
+        deletedAt: null
+    };
+    
+    if (filters.workType) {
+        query.workType = filters.workType;
+    }
+    if (filters.priority) {
+        query.priority = filters.priority;
+    }
+    
+    return await this.find(query)
+        .sort({ priority: 1, createdAt: -1 })
+        .limit(filters.limit || 50)
+        .lean()
+        .exec();
+};
+
+/**
+ * Static: Tìm subtasks của một task cha.
+ * @param {string|mongoose.Types.ObjectId} parentTaskId - Parent task ID
+ * @param {boolean} includeDeleted - Có bao gồm subtask đã xóa không (mặc định: false)
+ * @returns {Promise<Task[]>} Danh sách subtasks
+ */
+TaskSchema.statics.findSubtasks = async function (parentTaskId, includeDeleted = false) {
+    await connectDB();
+    
+    const query = { parentTask: parentTaskId };
+    if (!includeDeleted) {
+        query.deletedAt = null;
+    }
+    
+    return await this.find(query).sort({ listOrder: 1 }).lean().exec();
+};
+
 
 /**
  * -----------------------------------------------------------------------------
@@ -454,29 +612,37 @@ TaskSchema.statics.publishFromProjectTask = async function (originalTaskId, {
  */
 
 /**
- * (Method) Đăng công khai một task (scope PUBLIC).
- * Yêu cầu: task phải có scope = 'public'.
+ * Method: Đăng công khai một task PUBLIC.
+ * Chuyển published = true và status = DRAFT.
  *
- * @returns {Promise<Document<Task>>} Task instance đã cập nhật.
- * @throws {Error} Nếu task không phải scope PUBLIC.
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu task không phải scope PUBLIC
  */
 TaskSchema.methods.publishPublic = async function () {
-    if (this.scope !== TASK_SCOPE.PUBLIC) throw new Error('Chỉ task công khai mới publish.');
+    await connectDB();
+    
+    if (this.scope !== TASK_SCOPE.PUBLIC) {
+        throw new Error('Only PUBLIC tasks can be published');
+    }
 
     this.public.published = true;
-    this.status = TASK_STATUS.DRAFT; // Đảm bảo status là DRAFT khi publish
+    this.status = TASK_STATUS.DRAFT;
     await this.save();
     return this;
 };
 
 /**
- * (Method) Gỡ publish một task PUBLIC.
+ * Method: Gỡ publish một task PUBLIC.
  *
- * @returns {Promise<Document<Task>>} Task instance đã cập nhật.
- * @throws {Error} Nếu task không phải scope PUBLIC.
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu task không phải scope PUBLIC
  */
 TaskSchema.methods.unpublishPublic = async function () {
-    if (this.scope !== TASK_SCOPE.PUBLIC) throw new Error('Chỉ task công khai mới unpublish.');
+    await connectDB();
+    
+    if (this.scope !== TASK_SCOPE.PUBLIC) {
+        throw new Error('Only PUBLIC tasks can be unpublished');
+    }
 
     this.public.published = false;
     await this.save();
@@ -484,33 +650,46 @@ TaskSchema.methods.unpublishPublic = async function () {
 };
 
 /**
- * (Method) Người dùng claim (nhận) một task PUBLIC.
- * - Chế độ AUTO: Gán thẳng worker, chuyển status sang IN_PROGRESS.
- * - Chế độ REVIEW: Thêm vào danh sách 'claims' ở trạng thái PENDING.
+ * Method: Người dùng claim (nhận) task PUBLIC.
+ * - AUTO mode: Gán thẳng worker, chuyển status IN_PROGRESS
+ * - REVIEW mode: Thêm vào claims với status PENDING
  *
- * @param {string} userId - ID người claim (externalUserId).
- * @param {string} [note] - Ghi chú của người claim.
- * @returns {Promise<Document<Task>>} Task instance đã cập nhật.
- * @throws {Error} Nếu task chưa công khai hoặc đã có người nhận.
+ * @param {string} userId - External User ID người claim
+ * @param {string} [note=''] - Ghi chú của người claim
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu task chưa public hoặc đã có người nhận
  */
-TaskSchema.methods.claimPublic = async function (userId, note) {
+TaskSchema.methods.claimPublic = async function (userId, note = '') {
+    await connectDB();
+    
     if (this.scope !== TASK_SCOPE.PUBLIC || !this.public?.published) {
-        throw new Error('Task chưa công khai.');
+        throw new Error('Task is not published');
     }
     if (this.assignee || this.public.workerId) {
-        throw new Error('Task đã có người nhận.');
+        throw new Error('Task already claimed');
     }
 
     if (this.public.claimMode === CLAIM_MODE.AUTO) {
-        // Chế độ AUTO: Nhận ngay
+        // AUTO: Nhận ngay
         this.public.workerId = userId;
         this.assignee = userId;
         this.startedAt = new Date();
         this.status = TASK_STATUS.IN_PROGRESS;
-        this.public.claims.push({ userId, status: CLAIM_STATUS.ACCEPTED, decidedAt: new Date(), note });
+        this.public.claims.push({ 
+            userId, 
+            status: CLAIM_STATUS.ACCEPTED, 
+            decidedAt: new Date(), 
+            note 
+        });
     } else {
-        // Chế độ REVIEW: Chờ duyệt
-        // TODO: Cân nhắc kiểm tra xem user này đã claim chưa
+        // REVIEW: Chờ duyệt
+        const alreadyClaimed = this.public.claims.some(
+            c => String(c.userId) === String(userId) && c.status === CLAIM_STATUS.PENDING
+        );
+        if (alreadyClaimed) {
+            throw new Error('You already submitted a claim for this task');
+        }
+        
         this.public.claims.push({ userId, status: CLAIM_STATUS.PENDING, note });
     }
 
@@ -519,36 +698,43 @@ TaskSchema.methods.claimPublic = async function (userId, note) {
 };
 
 /**
- * (Method) Manager quyết định một claim (ở chế độ REVIEW).
+ * Method: Manager quyết định claim (REVIEW mode).
  *
- * @param {string|mongoose.Types.ObjectId} claimId - ID của claim (trong mảng public.claims).
- * @param {string} managerId - ID của manager (externalUserId).
- * @param {boolean} [accept=true] - Quyết định (true = chấp nhận, false = từ chối).
- * @param {string} [note] - Ghi chú của manager.
- * @returns {Promise<Document<Task>>} Task instance đã cập nhật.
- * @throws {Error} Nếu không tìm thấy claim, claim đã được xử lý, hoặc task đã có người nhận.
+ * @param {string|mongoose.Types.ObjectId} claimId - Claim ID trong public.claims
+ * @param {string} managerId - External User ID của manager
+ * @param {boolean} [accept=true] - True = chấp nhận, False = từ chối
+ * @param {string} [note=''] - Ghi chú của manager
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu claim không tồn tại, đã xử lý, hoặc task đã có người nhận
  */
-TaskSchema.methods.decideClaim = async function (claimId, managerId, accept = true, note) {
-    if (this.scope !== TASK_SCOPE.PUBLIC) throw new Error('Chỉ áp dụng cho task công khai.');
+TaskSchema.methods.decideClaim = async function (claimId, managerId, accept = true, note = '') {
+    await connectDB();
+    
+    if (this.scope !== TASK_SCOPE.PUBLIC) {
+        throw new Error('Only PUBLIC tasks have claims');
+    }
 
     const claim = this.public?.claims?.find(c => String(c._id) === String(claimId));
-    if (!claim) throw new Error('Claim không tồn tại.');
-    if (claim.status !== CLAIM_STATUS.PENDING) throw new Error('Claim đã được quyết định.');
+    if (!claim) {
+        throw new Error('Claim not found');
+    }
+    if (claim.status !== CLAIM_STATUS.PENDING) {
+        throw new Error('Claim already decided');
+    }
 
-    // Cập nhật thông tin claim
+    // Cập nhật claim
     claim.status = accept ? CLAIM_STATUS.ACCEPTED : CLAIM_STATUS.REJECTED;
     claim.decidedAt = new Date();
     claim.decidedBy = managerId;
-    claim.note = note || claim.note; // Ưu tiên note mới của manager
+    claim.note = note || claim.note;
 
     if (accept) {
-        // Nếu chấp nhận, gán task cho người này
         if (this.assignee || this.public.workerId) {
-            // Trường hợp hy hữu: manager duyệt 2 người cùng lúc
-            claim.status = CLAIM_STATUS.REJECTED; // Từ chối claim này
-            claim.note = 'Task đã bị người khác nhận trong lúc duyệt.';
+            // Task đã bị claim trong lúc duyệt
+            claim.status = CLAIM_STATUS.REJECTED;
+            claim.note = 'Task already claimed by someone else';
             await this.save();
-            throw new Error('Task đã có người nhận.');
+            throw new Error('Task already claimed');
         }
 
         this.public.workerId = claim.userId;
@@ -562,73 +748,66 @@ TaskSchema.methods.decideClaim = async function (claimId, managerId, accept = tr
 };
 
 /**
- * (Method) Duyệt hoàn thành task và chia điểm.
- * Áp dụng cho cả task PROJECT và PUBLIC.
- * - Nếu là task PUBLIC:
- * 1. Chia điểm cho worker (workerSplitPoints).
- * 2. Chia điểm cho các bên liên quan (payouts).
- * 3. Tính toán điểm còn lại (projectSplitPoints).
- * 4. Nếu task này là outsource, cập nhật 'finalPoints' cho task gốc.
+ * Method: Duyệt hoàn thành task và chia điểm.
+ * Áp dụng cho cả PROJECT và PUBLIC tasks.
+ * - PUBLIC: Chia điểm cho worker, payouts, và projectSplitPoints
+ * - Nếu outsource: Cập nhật finalPoints cho task gốc
  *
- * @param {string} managerUserId - ID người duyệt (externalUserId).
- * @param {object} options - Tùy chọn chia điểm.
- * @param {number} [options.totalPoints=0] - Tổng điểm cuối cùng (finalPoints) cho task.
- * @param {number} [options.workerSplitPoints=0] - (PUBLIC) Điểm chia cho người làm.
- * @param {Array<object>} [options.payouts=[]] - (PUBLIC) Điểm chia cho các bên khác.
- * @returns {Promise<Document<Task>>} Task instance đã cập nhật.
- * @throws {Error} Nếu task chưa ở trạng thái chờ duyệt, hoặc tổng điểm chia vượt quá tổng điểm.
+ * @param {string} managerUserId - External User ID người duyệt
+ * @param {object} options - Tùy chọn chia điểm
+ * @param {number} [options.totalPoints=0] - Tổng điểm cuối (finalPoints)
+ * @param {number} [options.workerSplitPoints=0] - Điểm cho worker (PUBLIC only)
+ * @param {Array<object>} [options.payouts=[]] - Điểm cho các bên khác [{userId, points}]
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu status không phải COMPLETED_AWAIT_REVIEW hoặc tổng điểm chia vượt quá
  */
 TaskSchema.methods.approveCompletionWithSplit = async function (managerUserId, {
     totalPoints = 0,
     workerSplitPoints = 0,
-    payouts = [] // [{userId, points}]
+    payouts = []
 }) {
-    // Chỉ duyệt task đang ở trạng thái chờ review
+    await connectDB();
+    
     if (this.status !== TASK_STATUS.COMPLETED_AWAIT_REVIEW) {
-        throw new Error('Task chưa ở trạng thái chờ duyệt hoàn thành.');
+        throw new Error('Task is not awaiting review');
     }
 
-    // Cập nhật thông tin chấm điểm
+    // Cập nhật chấm điểm
     this.finalPoints = Number(totalPoints) || 0;
     this.scoredBy = managerUserId;
     this.scoredAt = new Date();
     this.status = TASK_STATUS.COMPLETED;
 
-    // Xử lý chia điểm cho task PUBLIC
+    // Xử lý PUBLIC task: chia điểm
     if (this.scope === TASK_SCOPE.PUBLIC) {
         const worker = Math.max(0, Number(workerSplitPoints) || 0);
         const payoutsTotal = Array.isArray(payouts)
             ? payouts.reduce((s, p) => s + (Number(p.points) || 0), 0)
             : 0;
 
-        // Kiểm tra tổng chia
         if (worker + payoutsTotal > this.finalPoints) {
-            // Hoàn tác status để báo lỗi
-            this.status = TASK_STATUS.COMPLETED_AWAIT_REVIEW;
+            this.status = TASK_STATUS.COMPLETED_AWAIT_REVIEW; // Rollback
             await this.save();
-            throw new Error('Tổng điểm chia (worker + payouts) vượt quá tổng điểm task.');
+            throw new Error('Total split points exceed final points');
         }
 
-        // Điểm trả về dự án (nếu có)
         const projectPart = Math.max(0, this.finalPoints - worker - payoutsTotal);
 
         this.public.workerSplitPoints = worker;
         this.public.projectSplitPoints = projectPart;
         this.public.payouts = Array.isArray(payouts) ? payouts : [];
 
-        // Nếu task này là outsource, cập nhật điểm 'projectPart' về cho task gốc
+        // Nếu outsource: cập nhật task gốc
         const originId = this.public?.origin?.task;
         if (originId) {
-            // Dùng 'this.constructor' để gọi đến Model (VD: Task)
             await this.constructor.findByIdAndUpdate(
                 originId,
                 {
-                    finalPoints: projectPart, // Cập nhật điểm thực tế cho task gốc
+                    finalPoints: projectPart,
                     scoredBy: managerUserId,
                     scoredAt: new Date(),
-                    // Có thể cập nhật status của task gốc (VD: 'completed') nếu cần
                 },
-                { lean: true } // lean: true để tăng tốc độ, không cần trả về full document
+                { lean: true }
             );
         }
     }
@@ -637,9 +816,147 @@ TaskSchema.methods.approveCompletionWithSplit = async function (managerUserId, {
     return this;
 };
 
-// Xóa model cache (nếu có) để đảm bảo schema mới được áp dụng khi HMR (Hot Module Replacement)
+/**
+ * Method: Soft delete task (đánh dấu deletedAt).
+ *
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ */
+TaskSchema.methods.softDelete = async function () {
+    await connectDB();
+    
+    this.deletedAt = new Date();
+    await this.save();
+    return this;
+};
+
+/**
+ * Method: Khôi phục task đã xóa (xóa deletedAt).
+ *
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ */
+TaskSchema.methods.restore = async function () {
+    await connectDB();
+    
+    this.deletedAt = null;
+    await this.save();
+    return this;
+};
+
+/**
+ * Method: Thêm collaborator vào task.
+ *
+ * @param {string} userId - External User ID
+ * @param {string} invitedBy - External User ID người mời
+ * @param {string} [role='contributor'] - Vai trò ('contributor' hoặc 'reviewer')
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu user đã là collaborator
+ */
+TaskSchema.methods.addCollaborator = async function (userId, invitedBy, role = 'contributor') {
+    await connectDB();
+    
+    const exists = this.collaborators.some(c => String(c.userId) === String(userId));
+    if (exists) {
+        throw new Error('User is already a collaborator');
+    }
+    
+    this.collaborators.push({ userId, invitedBy, role });
+    await this.save();
+    return this;
+};
+
+/**
+ * Method: Xóa collaborator khỏi task.
+ *
+ * @param {string} userId - External User ID
+ * @returns {Promise<Task>} Task instance đã cập nhật
+ * @throws {Error} Nếu user không phải collaborator
+ */
+TaskSchema.methods.removeCollaborator = async function (userId) {
+    await connectDB();
+    
+    const exists = this.collaborators.some(c => String(c.userId) === String(userId));
+    if (!exists) {
+        throw new Error('User is not a collaborator');
+    }
+    
+    this.collaborators = this.collaborators.filter(c => String(c.userId) !== String(userId));
+    await this.save();
+    return this;
+};
+
+/**
+ * -----------------------------------------------------------------------------
+ * MIDDLEWARE (HOOKS)
+ * -----------------------------------------------------------------------------
+ */
+
+/**
+ * Pre-save middleware: Tự động cập nhật progress.percentage từ subtasks.
+ * Chỉ áp dụng khi task có subtasks.
+ */
+TaskSchema.pre('save', async function (next) {
+    if (this.isModified('progress.completed') || this.isModified('progress.total')) {
+        if (this.progress.total > 0) {
+            this.progress.percentage = Math.round(
+                (this.progress.completed / this.progress.total) * 100
+            );
+        } else {
+            this.progress.percentage = 0;
+        }
+    }
+    next();
+});
+
+/**
+ * Pre-save middleware: Validate claim mode requirements.
+ * PUBLIC task phải có claimMode nếu published.
+ */
+TaskSchema.pre('save', function (next) {
+    if (this.scope === TASK_SCOPE.PUBLIC && this.public?.published) {
+        if (!this.public.claimMode) {
+            return next(new Error('Public task must have a claim mode'));
+        }
+    }
+    next();
+});
+
+/**
+ * Pre-save middleware: Tự động set startedAt khi chuyển sang IN_PROGRESS.
+ */
+TaskSchema.pre('save', function (next) {
+    if (this.isModified('status') && this.status === TASK_STATUS.IN_PROGRESS) {
+        if (!this.startedAt) {
+            this.startedAt = new Date();
+        }
+    }
+    next();
+});
+
+/**
+ * Pre-save middleware: Tự động set completedAt khi chuyển sang COMPLETED.
+ */
+TaskSchema.pre('save', function (next) {
+    if (this.isModified('status') && this.status === TASK_STATUS.COMPLETED) {
+        if (!this.completedAt) {
+            this.completedAt = new Date();
+        }
+    }
+    next();
+});
+
+// ==================== MODEL EXPORT ====================
+
+/**
+ * Xóa model cũ khỏi cache để tránh lỗi HMR trong Next.js development.
+ */
 if (mongoose.models.Task) {
     delete mongoose.models.Task;
+    delete mongoose.connection.models.Task;
 }
 
+/**
+ * Export Task Model.
+ * Model trung tâm quản lý task (PROJECT và PUBLIC), subtasks, collaborators, 
+ * claim/outsource, timeline, và scoring system.
+ */
 export default mongoose.model('Task', TaskSchema);

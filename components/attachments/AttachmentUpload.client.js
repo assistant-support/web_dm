@@ -1,155 +1,120 @@
-// components/attachments/AttachmentUpload.client.js
+/**
+ * @file components/attachments/AttachmentUpload.client.js
+ * @description Client component to handle file uploads to Google Drive
+ */
 'use client';
 
-import { useState, useRef } from 'react';
-import { Upload, Paperclip, Loader2 } from 'lucide-react';
-import Button from '@/components/ui/button';
-import { upload as uploadAttachment } from '@/data/attachment/actions/server';
+import { useState } from 'react';
+import { createAttachment } from '@/data/attachment/actions/server';
+import { Upload, X, Loader2 } from 'lucide-react';
 
-/**
- * AttachmentUpload - File upload component
- */
-export default function AttachmentUpload({ taskId, projectId, scope = 'task', onUploaded }) {
-    const [isDragging, setIsDragging] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState('');
-    const [error, setError] = useState('');
-    const fileInputRef = useRef(null);
+export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
 
-    const handleFileSelect = async (files) => {
-        if (!files || files.length === 0) return;
+    const handleFileSelect = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setSelectedFile(file);
+            setError(null);
+        }
+    };
 
-        const file = files[0];
-
-        // Validate file size (max 10MB)
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        if (file.size > maxSize) {
-            setError('Tệp quá lớn. Kích thước tối đa: 10MB');
+    const handleUpload = async () => {
+        if (!selectedFile) {
+            setError('Vui lòng chọn tệp');
             return;
         }
 
-        setIsUploading(true);
-        setError('');
-        setUploadProgress(`Đang tải lên ${file.name}...`);
-
         try {
-            // Convert file to base64
-            const base64 = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const result = reader.result;
-                    // Remove data:mime;base64, prefix
-                    const base64Data = result.split(',')[1];
-                    resolve(base64Data);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
+            setUploading(true);
+            setError(null);
 
-            // Determine file kind
-            let kind = 'other';
-            if (file.type.startsWith('image/')) kind = 'image';
-            else if (file.type.startsWith('video/')) kind = 'video';
-            else if (file.type.includes('pdf') || file.type.includes('document')) kind = 'doc';
-
-            // Upload
-            const result = await uploadAttachment({
-                projectId,
-                taskId: scope === 'task' ? taskId : null,
-                scope,
-                file: {
-                    name: file.name,
-                    mime: file.type,
-                    base64: base64,
-                },
-                kind,
-            });
-
-            if (result) {
-                setUploadProgress('');
-                onUploaded?.(result);
-                // Reset file input
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                }
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            if (scope === 'task') {
+                formData.append('taskId', taskId);
+                formData.append('scope', 'task');
             } else {
-                setError('Không thể tải lên tệp');
+                formData.append('projectId', projectId);
+                formData.append('scope', 'project');
             }
+
+            // Upload to server
+            const result = await createAttachment(formData);
+
+            if (result.ok) {
+                // Success - notify parent
+                if (onUploaded) {
+                    onUploaded(result.data);
+                }
+                // Reset form
+                setSelectedFile(null);
+                const fileInput = document.getElementById('file-upload');
+                if (fileInput) fileInput.value = '';
+            } else {
+                throw new Error(result.message || 'Upload failed');
+            }
+
         } catch (err) {
             console.error('Upload error:', err);
-            setError(err.message || 'Có lỗi xảy ra khi tải lên tệp');
+            setError(err.message || 'Không thể tải lên tệp');
         } finally {
-            setIsUploading(false);
-            setUploadProgress('');
+            setUploading(false);
         }
     };
 
-    const handleDrop = (e) => {
-        e.preventDefault();
-        setIsDragging(false);
-
-        const files = e.dataTransfer?.files;
-        handleFileSelect(files);
-    };
-
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        setIsDragging(false);
-    };
-
-    const handleClick = () => {
-        fileInputRef.current?.click();
+    const handleCancel = () => {
+        setSelectedFile(null);
+        setError(null);
+        const fileInput = document.getElementById('file-upload');
+        if (fileInput) fileInput.value = '';
     };
 
     return (
-        <div className="space-y-2">
-            {/* Drop zone */}
-            <div
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onClick={handleClick}
-                className={`
-                    border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-                    ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'}
-                    ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
-                `}
-            >
+        <div className="space-y-3">
+            {/* File input */}
+            <div>
+                <label 
+                    htmlFor="file-upload" 
+                    className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                >
+                    <Upload className="w-5 h-5 text-gray-400 mr-2" />
+                    <span className="text-sm text-gray-600">
+                        {selectedFile ? selectedFile.name : 'Chọn tệp để tải lên'}
+                    </span>
+                </label>
                 <input
-                    ref={fileInputRef}
+                    id="file-upload"
                     type="file"
                     className="hidden"
-                    onChange={(e) => handleFileSelect(e.target.files)}
-                    disabled={isUploading}
-                    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                    onChange={handleFileSelect}
+                    disabled={uploading}
                 />
-
-                {isUploading ? (
-                    <div className="flex flex-col items-center gap-2">
-                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                        <p className="text-sm text-gray-600">{uploadProgress}</p>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center gap-2">
-                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
-                            <Upload className="w-6 h-6 text-gray-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-gray-700">
-                                Kéo thả tệp vào đây hoặc click để chọn
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Hỗ trợ: Hình ảnh, Video, PDF, Documents (tối đa 10MB)
-                            </p>
-                        </div>
-                    </div>
-                )}
             </div>
+
+            {/* Selected file preview */}
+            {selectedFile && (
+                <div className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
+                    <div className="flex items-center gap-2 flex-1">
+                        <Upload className="w-4 h-4 text-blue-600" />
+                        <span className="text-sm truncate">{selectedFile.name}</span>
+                        <span className="text-xs text-gray-500">
+                            ({(selectedFile.size / 1024).toFixed(1)} KB)
+                        </span>
+                    </div>
+                    <button
+                        onClick={handleCancel}
+                        className="text-gray-400 hover:text-gray-600"
+                        disabled={uploading}
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
 
             {/* Error message */}
             {error && (
@@ -158,18 +123,36 @@ export default function AttachmentUpload({ taskId, projectId, scope = 'task', on
                 </div>
             )}
 
-            {/* Quick upload button */}
-            {!isUploading && (
-                <Button
-                    type="button"
-                    onClick={handleClick}
-                    variant="outline"
-                    className="w-full flex items-center justify-center gap-2"
-                >
-                    <Paperclip className="w-4 h-4" />
-                    Chọn tệp từ máy tính
-                </Button>
+            {/* Upload button */}
+            {selectedFile && (
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleUpload}
+                        disabled={uploading}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {uploading ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Đang tải lên...
+                            </>
+                        ) : (
+                            <>
+                                <Upload className="w-4 h-4" />
+                                Tải lên
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={handleCancel}
+                        disabled={uploading}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        Hủy
+                    </button>
+                </div>
             )}
         </div>
     );
 }
+

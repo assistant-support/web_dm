@@ -136,26 +136,26 @@ export default function TaskSidebar({
     const mockActivity = [
         {
             id: 1,
-            userId: task.createdBy?.externalUserId,
+            userId: task.createdBy,
             action: "đã tạo nhiệm vụ.",
             time: task.createdAt
         },
         ...(task.assignee ? [{
             id: 2,
-            userId: task.createdBy?.externalUserId,
+            userId: task.createdBy,
             action: `đã gán cho`,
-            targetUser: task.assignee?.externalUserId,
+            targetUser: task.assignee,
             time: task.assigneeConfirm?.confirmedAt || task.createdAt
         }] : []),
         ...(task.assigneeConfirm?.confirmedAt ? [{
             id: 3,
-            userId: task.assignee?.externalUserId,
+            userId: task.assignee,
             action: "đã xác nhận nhiệm vụ.",
             time: task.assigneeConfirm.confirmedAt
         }] : []),
         ...(task.startedAt ? [{
             id: 4,
-            userId: task.assignee?.externalUserId,
+            userId: task.assignee,
             action: "đã bắt đầu làm việc.",
             time: task.startedAt
         }] : [])

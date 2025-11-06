@@ -44,7 +44,7 @@ import {
 } from '@/data/attachment/processors/drive-adapter.js';
 
 import {
-    createAttachment,
+    createAttachment as createAttachmentRepo,
     listByProject,
     listByTask,
     renameAttachment,
@@ -61,6 +61,142 @@ function getProjectManagerIds(project) {
 }
 
 // ---- Actions ----------------------------------------------------------------
+
+/**
+ * Create attachment from FormData (file upload from client)
+ */
+export async function createAttachment(formData) {
+    'use server';
+    await connectDB();
+    return runAction(
+        async ({ user }) => {
+            const uid = user.externalUserId;
+
+            // Extract data from FormData
+            const file = formData.get('file');
+            const taskId = formData.get('taskId');
+            let projectId = formData.get('projectId');
+            const scope = formData.get('scope');
+
+            assert(file, 'Thiếu file', 'VALIDATION', 400);
+            assert(scope, 'Thiếu scope', 'VALIDATION', 400);
+
+            // Convert file to buffer
+            const buffer = Buffer.from(await file.arrayBuffer());
+
+            // Validate task if scope is task
+            let task = null;
+            if (scope === 'task') {
+                assert(taskId, 'Thiếu taskId', 'VALIDATION', 400);
+                task = await Task.findById(taskId).lean();
+                assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+                // Get projectId from task if not provided
+                projectId = projectId || String(task.project);
+            } else {
+                assert(projectId, 'Thiếu projectId', 'VALIDATION', 400);
+            }
+
+            // Validate project
+            const project = await Project.findById(projectId).lean();
+            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+
+            // Verify task belongs to project if scope is task
+            if (scope === 'task') {
+                assert(
+                    String(task.project) === String(project._id),
+                    'Task không thuộc project',
+                    'BAD_REQUEST',
+                    400
+                );
+            }
+
+            // Check permissions
+            const allowMembers =
+                String(process.env.ATTACHMENTS_PROJECT_UPLOAD || '').toLowerCase() === 'members';
+
+            if (scope === 'project') {
+                assert(
+                    (await canManageProject(project, uid)) ||
+                    (allowMembers && (await canViewProject(project, uid))),
+                    'Bạn không có quyền upload vào project',
+                    'FORBIDDEN',
+                    403
+                );
+            } else {
+                const taskForPerm = task ? { ...task, project } : null;
+                assert(
+                    await canEditTask(taskForPerm, uid),
+                    'Bạn không có quyền upload vào task',
+                    'FORBIDDEN',
+                    403
+                );
+            }
+
+            // Determine parent folder
+            const parentId =
+                scope === 'project'
+                    ? await ensureProjectFolder(project)
+                    : await ensureTaskFolder({ project, task });
+
+            // Upload to Drive
+            const driveMeta = await uploadToDrive({
+                buffer,
+                name: file.name,
+                mime: file.type,
+                parentId,
+            });
+
+            // Create DB record
+            const created = await createAttachmentRepo({
+                scope,
+                projectId: String(project._id),
+                taskId: taskId ?? null,
+                file: {
+                    name: file.name,
+                    size: file.size,
+                    mime: file.type,
+                },
+                kind: 'other',
+                driveMeta,
+                createdBy: uid,
+            });
+
+            // Activity + Notify
+            const managerIds = getProjectManagerIds(project);
+            const recipientSet = new Set(managerIds);
+            if (task?.assignee) recipientSet.add(String(task.assignee));
+
+            await logActivity({
+                actor: uid,
+                project: String(project._id),
+                task: taskId ?? null,
+                type: 'attachment.added',
+                payload: {
+                    attachmentId: created.id,
+                    name: created.name,
+                    size: created.size,
+                    mime: created.mime,
+                    kind: created.kind,
+                },
+            });
+
+            await notifyEvent('attachment.added', {
+                projectId: String(project._id),
+                taskId: taskId ?? null,
+                attachmentId: created.id,
+                byUserId: uid,
+                toUserIds: Array.from(recipientSet),
+            });
+
+            await revalidateMany(
+                [tags.project(project._id), taskId && tags.task(taskId)].filter(Boolean)
+            );
+
+            return created;
+        },
+        { requireAuth: true }
+    );
+}
 
 export async function upload(payload) {
     await connectDB();
@@ -122,7 +258,7 @@ export async function upload(payload) {
             });
 
             // Tạo DB record (PlainAttachment)
-            const created = await createAttachment({
+            const created = await createAttachmentRepo({
                 scope: input.scope,
                 projectId: String(project._id),
                 taskId: input.taskId ?? null,

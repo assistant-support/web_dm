@@ -30,9 +30,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             client: { id_token_signed_response_alg: 'HS256' },
             issuer: process.env.MY_PROVIDER_URL || 'http://localhost:3000',
             profile(profile) {
-                // Ensure email is always present
+                // ⚠️ CRITICAL: Use externalUserId if available, otherwise fallback to sub
+                // OAuth provider might return MongoDB _id in `sub`, but we need externalUserId
+                const userId = profile.externalUserId || profile.external_user_id || profile.sub;
+                
+                console.log('[AUTH] Profile mapping:', {
+                    sub: profile.sub,
+                    externalUserId: profile.externalUserId,
+                    external_user_id: profile.external_user_id,
+                    finalUserId: userId
+                });
+                
                 return { 
-                    id: profile.sub, 
+                    id: userId, 
                     avt: profile.avt, 
                     name: profile.name, 
                     email: profile.email || 'unknown@example.com', 

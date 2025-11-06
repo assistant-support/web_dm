@@ -1,100 +1,45 @@
-// components/comments/CommentForm.client.js
+/**
+ * @file components/comments/CommentForm.client.js
+ * @description A client component form for adding comments using a Server Action.
+ */
 'use client';
 
-import { useState } from 'react';
-import { Send } from 'lucide-react';
-import Button from '@/components/ui/button';
-import { create as createComment } from '@/data/comment/actions/server';
+import { useFormState, useFormStatus } from 'react-dom';
+import { useEffect, useRef } from 'react';
+import { addComment } from '@/actions/comment.actions';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 
-/**
- * CommentForm - Form để tạo comment mới
- * @param {Object} props
- * @param {string} props.taskId - Task ID
- * @param {Function} props.onCommentAdded - Callback sau khi tạo comment thành công
- */
-export default function CommentForm({ taskId, onCommentAdded }) {
-    const [body, setBody] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState('');
+const initialState = { success: false, error: null };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        
-        if (!body.trim()) {
-            setError('Vui lòng nhập nội dung bình luận');
-            return;
+function SubmitButton() {
+    const { pending } = useFormStatus();
+    return <Button type="submit" disabled={pending}>{pending ? 'Posting...' : 'Post Comment'}</Button>;
+}
+
+export function CommentForm({ targetId, targetType }) {
+    const [state, formAction] = useFormState(addComment, initialState);
+    const formRef = useRef(null);
+
+    useEffect(() => {
+        if (state.success) {
+            formRef.current?.reset(); // Reset form on successful submission
         }
-
-        setIsSubmitting(true);
-        setError('');
-
-        try {
-            const result = await createComment({
-                taskId,
-                body: body.trim(),
-            });
-
-            if (result) {
-                setBody('');
-                onCommentAdded?.(result);
-            } else {
-                setError('Không thể tạo bình luận');
-            }
-        } catch (err) {
-            console.error('Error creating comment:', err);
-            setError('Có lỗi xảy ra khi tạo bình luận');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleKeyDown = (e) => {
-        // Ctrl+Enter hoặc Cmd+Enter để submit
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-            handleSubmit(e);
-        }
-    };
+    }, [state]);
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-2">
-            <div className="relative">
-                <textarea
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Viết bình luận... (Ctrl+Enter để gửi)"
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    disabled={isSubmitting}
-                />
-                
-                {/* Character count hint */}
-                {body.length > 0 && (
-                    <div className="absolute bottom-2 left-3 text-xs text-gray-400">
-                        {body.length} ký tự
-                    </div>
-                )}
-            </div>
-
-            {error && (
-                <div className="text-sm text-red-600">
-                    {error}
-                </div>
-            )}
-
-            <div className="flex items-center justify-between">
-                <div className="text-xs text-gray-500">
-                    Gõ @ để mention người khác
-                </div>
-                
-                <Button
-                    type="submit"
-                    disabled={!body.trim() || isSubmitting}
-                    className="flex items-center gap-2"
-                >
-                    <Send className="w-4 h-4" />
-                    {isSubmitting ? 'Đang gửi...' : 'Gửi bình luận'}
-                </Button>
+        <form ref={formRef} action={formAction} className="space-y-3">
+            <input type="hidden" name="targetId" value={targetId} />
+            <input type="hidden" name="targetType" value={targetType} />
+            <Textarea
+                name="content"
+                placeholder="Write a comment..."
+                required
+                rows={3}
+            />
+            {state.error && <p className="text-sm text-red-500">{state.error}</p>}
+            <div className="flex justify-end">
+                <SubmitButton />
             </div>
         </form>
     );

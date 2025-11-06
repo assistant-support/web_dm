@@ -119,6 +119,7 @@ export default function UserDisplay({
     const displayName = userInfo?.name || userId;
     const jobTitle = userInfo?.jobTitle || '';
     const avatarUrl = userInfo?.avatar || null;
+    const zaloAvatar = userInfo?.zaloavt || null;
 
     const textSizeClass = {
         xs: 'text-xs',
@@ -134,6 +135,7 @@ export default function UserDisplay({
                     userId={userId}
                     name={displayName}
                     src={driveImage(avatarUrl)}
+                    zaloavt={zaloAvatar}
                     size={finalAvatarSize}
                 />
             )}

@@ -53,10 +53,16 @@ export function UserMenu({ user }) {
     const [hasUid, setHasUid] = useState(true); // Giả định có UID, sẽ kiểm tra sau
     const [checkingUid, setCheckingUid] = useState(true);
     const [zaloInfo, setZaloInfo] = useState(null); // { zaloname, zaloavt, uid }
+    const [mounted, setMounted] = useState(false);
+
+    // Chỉ render sau khi client-side mounted để tránh hydration mismatch
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Kiểm tra UID khi component mount
     useEffect(() => {
-        if (user) {
+        if (user && mounted) {
             checkUserUid()
                 .then(result => {
                     if (result.ok) {
@@ -77,7 +83,7 @@ export function UserMenu({ user }) {
                     setCheckingUid(false);
                 });
         }
-    }, [user]);
+    }, [user, mounted]);
 
     // Handler khi cập nhật UID thành công
     const handleUidUpdateSuccess = (updatedInfo) => {
@@ -110,7 +116,8 @@ export function UserMenu({ user }) {
                                     height={40}
                                     className="rounded-full ring-2 ring-[var(--brand-600)]/20"
                                 />
-                                {!checkingUid && !hasUid && (
+                                {/* Chỉ hiển thị badge khi đã mounted để tránh hydration mismatch */}
+                                {mounted && !checkingUid && !hasUid && (
                                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                                         <span className="text-white text-xs font-bold">!</span>
                                     </div>
@@ -121,7 +128,8 @@ export function UserMenu({ user }) {
                                 <div className="w-10 h-10 rounded-full bg-[var(--brand-600)] flex items-center justify-center text-sm font-bold text-white">
                                     {getInitials(displayName)}
                                 </div>
-                                {!checkingUid && !hasUid && (
+                                {/* Chỉ hiển thị badge khi đã mounted để tránh hydration mismatch */}
+                                {mounted && !checkingUid && !hasUid && (
                                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
                                         <span className="text-white text-xs font-bold">!</span>
                                     </div>
@@ -152,8 +160,8 @@ export function UserMenu({ user }) {
                         </div>
                     </div>
 
-                    {/* Hiển thị thông tin Zalo nếu đã có UID */}
-                    {!checkingUid && hasUid && zaloInfo && (
+                    {/* Hiển thị thông tin Zalo nếu đã có UID - chỉ sau khi mounted */}
+                    {mounted && !checkingUid && hasUid && zaloInfo && (
                         <div className="mx-2 mb-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center gap-3 mb-2">
                                 {zaloInfo.zaloavt ? (
@@ -187,8 +195,8 @@ export function UserMenu({ user }) {
                         </div>
                     )}
 
-                    {/* Hiển thị cảnh báo nếu chưa có UID */}
-                    {!checkingUid && !hasUid && (
+                    {/* Hiển thị cảnh báo nếu chưa có UID - chỉ sau khi mounted */}
+                    {mounted && !checkingUid && !hasUid && (
                         <div className="mx-2 mb-2">
                             <button
                                 onClick={() => setShowUidDialog(true)}

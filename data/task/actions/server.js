@@ -25,10 +25,9 @@ export async function listByProject(projectId, filters = {}) {
         return runAction(async ({ user }) => {
             const uid = user.externalUserId;
             const project = await Project.findById(projectId).lean();
-            console.log("[DEBUG] Tìm thấy project:", project ? `_id: ${project._id}, team: ${project.team}` : "KHÔNG TÌM THẤY");
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
             const team = await Team.findById(project.team).lean();
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404); // Thêm assert cho team
+            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
             const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
             assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
             const query = {
@@ -38,10 +37,6 @@ export async function listByProject(projectId, filters = {}) {
                 parentTask: null,
             };
 
-            // Log các giá trị enum/const
-            console.log("[DEBUG] Giá trị TASK_SCOPE.PROJECT (dùng để lọc):", TASK_SCOPE.PROJECT);
-
-            // Filter logic (với filters = {} thì đoạn này sẽ bị bỏ qua)
             if (filters.status) {
                 query.status = Array.isArray(filters.status)
                     ? { $in: filters.status }
@@ -57,9 +52,62 @@ export async function listByProject(projectId, filters = {}) {
                 return []; // Trả về mảng rỗng như hành vi cũ
             }
             const tasks = await Task.aggregate([
-                matchStage, // Dùng lại $match đã debug
-                { $lookup: { from: 'projects', localField: 'project', foreignField: '_id', as: 'projectData' } },
-                { $addFields: { projectName: { $arrayElemAt: ['$projectData.name', 0] } } },
+                matchStage,
+                {
+                    $lookup: {
+                        from: 'projects',
+                        localField: 'project',
+                        foreignField: '_id',
+                        as: 'projectData'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'worktypes',
+                        let: { workTypeCode: '$workType' },
+                        pipeline: [
+                            { 
+                                $match: { 
+                                    $expr: { $eq: ['$code', '$$workTypeCode'] } 
+                                } 
+                            },
+                            {
+                                $project: {
+                                    name: 1,
+                                    code: 1,
+                                    _id: 0
+                                }
+                            }
+                        ],
+                        as: 'workTypeData'
+                    }
+                },
+                {
+                    $lookup: {
+                        from: 'platforms',
+                        localField: 'platforms',
+                        foreignField: '_id',
+                        pipeline: [
+                            {
+                                $project: {
+                                    _id: 1,
+                                    name: 1,
+                                    code: 1,
+                                    icon: 1,
+                                    color: 1
+                                }
+                            }
+                        ],
+                        as: 'platformsData'
+                    }
+                },
+                {
+                    $addFields: {
+                        projectName: { $arrayElemAt: ['$projectData.name', 0] },
+                        workTypeInfo: { $arrayElemAt: ['$workTypeData', 0] },
+                        platformsInfo: '$platformsData'
+                    }
+                },
                 {
                     $lookup: {
                         from: 'tasks',
@@ -72,7 +120,7 @@ export async function listByProject(projectId, filters = {}) {
                     }
                 },
                 { $addFields: { subtaskCount: { $ifNull: [{ $arrayElemAt: ['$subtaskCountArray.count', 0] }, 0] } } },
-                { $project: { subtaskCountArray: 0, projectData: 0 } },
+                { $project: { subtaskCountArray: 0, projectData: 0, workTypeData: 0, platformsData: 0 } },
                 { $sort: { listOrder: 1, createdAt: -1 } },
                 { $limit: filters.limit || 100 }
             ]);
@@ -352,7 +400,7 @@ export async function createTask(projectId, payload) {
         const uid = user.externalUserId; // Creator's ID
 
         // Verify project and team membership
-        const project = await Project.findById(projectId).lean(); // Use lean for reads
+        const project = await Project.findById(projectId); // Don't use lean, we need to save
         assert(project, 'PROJECT_NOT_FOUND', 'Dự án không tồn tại.', 404);
 
         const team = await Team.findById(project.team).lean(); // Use lean for reads
@@ -362,6 +410,43 @@ export async function createTask(projectId, payload) {
         assert(isMember, 'FORBIDDEN', 'Bạn không phải thành viên của nhóm này.', 403);
 
         const hasManagePermission = canManageProject(project, uid);
+
+        // **THÊM MỚI: Kiểm tra và thêm assignee vào project nếu chưa có**
+        if (payload.assignee && payload.assignee !== uid) {
+            // Kiểm tra assignee có trong team không
+            const assigneeInTeam = (team.members || []).some((m) => String(m.userId) === String(payload.assignee));
+            assert(assigneeInTeam, 'ASSIGNEE_NOT_IN_TEAM', 'Người được giao việc không thuộc team này.', 400);
+
+            // Kiểm tra assignee có trong project chưa
+            const assigneeInProject = (project.members || []).some((m) => String(m.userId) === String(payload.assignee));
+            
+            // Nếu chưa có trong project, tự động thêm vào với role 'member'
+            if (!assigneeInProject) {
+                project.members = project.members || [];
+                project.members.push({
+                    userId: payload.assignee,
+                    role: 'member',
+                    joinedAt: new Date()
+                });
+                await project.save();
+                
+                // Log activity
+                await logActivity({
+                    actor: uid,
+                    team: project.team,
+                    project: projectId,
+                    type: 'project.member.added',
+                    payload: { 
+                        addedUserId: payload.assignee, 
+                        reason: 'auto_added_on_task_assignment' 
+                    },
+                });
+
+                // Revalidate project members page
+                revalidatePath(`/projects/${projectId}/members`);
+                await revalidateMany([tags.project(projectId)]);
+            }
+        }
 
         // Determine status and workflow based on permissions
         let status = TASK_STATUS.DRAFT;
@@ -424,22 +509,48 @@ export async function createTask(projectId, payload) {
         await task.save(); // Save the new task document
 
         // Create Google Drive folder if requested
-        if (payload.createTaskFolder && project.driveFolderId) {
+        if (payload.createTaskFolder) {
             try {
-                const { createTaskFolder } = await import('@/lib/drive.js');
-                const folderResult = await createTaskFolder(task.title + '_' + Date.now(), project.driveFolderId);
+                // Xác định thư mục tháng dựa trên plannedStartAt
+                let targetFolderId = null;
+                
+                if (task.plannedStartAt && project.monthlyDriveFolders && project.monthlyDriveFolders.length > 0) {
+                    // Lấy năm và tháng từ plannedStartAt
+                    const startDate = new Date(task.plannedStartAt);
+                    const year = startDate.getFullYear();
+                    const month = startDate.getMonth() + 1;
+                    
+                    const monthFolder = project.monthlyDriveFolders.find(
+                        f => f.year === year && f.month === month
+                    );
+                    
+                    if (monthFolder && monthFolder.folderId) {
+                        targetFolderId = monthFolder.folderId;
+                    } else {
+                        targetFolderId = project.driveFolderId;
+                    }
+                } else {
+                    targetFolderId = project.driveFolderId;
+                }
+                
+                if (targetFolderId) {
+                    const { createTaskFolder } = await import('@/lib/drive.js');
+                    const folderResult = await createTaskFolder(
+                        task.title + '_' + Date.now(), 
+                        targetFolderId
+                    );
 
-                // Update task with folder info (fetch and save again)
-                const taskToUpdate = await Task.findById(task._id);
-                if (taskToUpdate) {
-                    taskToUpdate.docs = taskToUpdate.docs || {};
-                    taskToUpdate.docs.driveFolderId = folderResult.id;
-                    taskToUpdate.docs.driveFolderName = folderResult.name;
-                    await taskToUpdate.save();
+                    const taskToUpdate = await Task.findById(task._id);
+                    if (taskToUpdate) {
+                        taskToUpdate.docs = taskToUpdate.docs || {};
+                        taskToUpdate.docs.driveFolderId = folderResult.id;
+                        taskToUpdate.docs.driveFolderName = folderResult.name;
+                        await taskToUpdate.save();
+                    }
                 }
 
             } catch (driveErr) {
-                console.error(`[createTask ${_id}] Failed to create Drive folder:`, driveErr);
+                console.error(`[createTask ${task._id}] Failed to create Drive folder:`, driveErr);
                 // Log error but don't fail task creation
             }
         }

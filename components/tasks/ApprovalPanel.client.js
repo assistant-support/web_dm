@@ -6,12 +6,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, XCircle, Clock, Award } from 'lucide-react';
-import { Input, Textarea } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/input';
 import { 
     approveTaskCreation,
     confirmAssignment, 
     approveTaskCompletion 
 } from '@/data/task/actions/approval.server';
+import PointsApprovalModal from './PointsApprovalModal.client';
 
 /**
  * ApprovalPanel - Hiển thị panel phê duyệt tương ứng với status
@@ -31,11 +32,11 @@ export default function ApprovalPanel({
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [showPointsModal, setShowPointsModal] = useState(false);
+    const [pointsModalType, setPointsModalType] = useState('creation'); // 'creation' | 'completion'
     
     // Form states
     const [approvalNote, setApprovalNote] = useState('');
-    const [initialPoints, setInitialPoints] = useState(task.initialPoints || 0);
-    const [finalPoints, setFinalPoints] = useState(task.finalPoints || task.initialPoints || 0);
 
     // CASE 1: Task đang chờ duyệt tạo (Member created → Manager approve)
     const isPendingCreationApproval = task.status === 'pending_approval' && task.approval?.required;
@@ -46,20 +47,21 @@ export default function ApprovalPanel({
     // CASE 3: Task chờ duyệt hoàn thành (Member done → Manager final approve)
     const isPendingCompletionApproval = task.status === 'completed_await_review' && canApprove;
 
-    // Handle Creation Approval (Manager)
-    const handleCreationApproval = async (approve) => {
-        if (approve && initialPoints <= 0) {
-            setError('Vui lòng nhập số điểm cho công việc này');
-            return;
-        }
+    // Handle Creation Approval (Manager) - Open modal
+    const handleCreationApprovalClick = () => {
+        setPointsModalType('creation');
+        setShowPointsModal(true);
+    };
 
+    const handleCreationApprovalSubmit = async (points) => {
+        setShowPointsModal(false);
         setIsSubmitting(true);
         setError('');
 
         try {
             const result = await approveTaskCreation(task._id, {
-                approve,
-                initialPoints: approve ? initialPoints : undefined,
+                approve: true,
+                initialPoints: points,
                 note: approvalNote.trim() || undefined,
             });
 
@@ -72,6 +74,33 @@ export default function ApprovalPanel({
             router.refresh();
         } catch (err) {
             console.error('Approval error:', err);
+            setError(err.message || 'Có lỗi xảy ra');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCreationRejection = async () => {
+        if (!confirm('Bạn có chắc muốn từ chối công việc này?')) return;
+        
+        setIsSubmitting(true);
+        setError('');
+
+        try {
+            const result = await approveTaskCreation(task._id, {
+                approve: false,
+                note: approvalNote.trim() || undefined,
+            });
+
+            if (!result.ok) {
+                setError(result.message || 'Không thể từ chối');
+                return;
+            }
+
+            onUpdate?.(result.data);
+            router.refresh();
+        } catch (err) {
+            console.error('Rejection error:', err);
             setError(err.message || 'Có lỗi xảy ra');
         } finally {
             setIsSubmitting(false);
@@ -101,20 +130,21 @@ export default function ApprovalPanel({
         }
     };
 
-    // Handle Completion Approval (Manager)
-    const handleCompletionApproval = async (approve) => {
-        if (approve && (finalPoints < 0 || finalPoints > (task.initialPoints || 0))) {
-            setError(`Điểm phải từ 0 đến ${task.initialPoints || 0}`);
-            return;
-        }
+    // Handle Completion Approval (Manager) - Open modal
+    const handleCompletionApprovalClick = () => {
+        setPointsModalType('completion');
+        setShowPointsModal(true);
+    };
 
+    const handleCompletionApprovalSubmit = async (points) => {
+        setShowPointsModal(false);
         setIsSubmitting(true);
         setError('');
 
         try {
             const result = await approveTaskCompletion(task._id, {
-                approve,
-                finalPoints: approve ? finalPoints : undefined,
+                approve: true,
+                finalPoints: points,
                 note: approvalNote.trim() || undefined,
             });
 
@@ -127,6 +157,33 @@ export default function ApprovalPanel({
             router.refresh();
         } catch (err) {
             console.error('Completion approval error:', err);
+            setError(err.message || 'Có lỗi xảy ra');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCompletionRejection = async () => {
+        if (!confirm('Bạn có chắc muốn yêu cầu làm lại công việc này?')) return;
+        
+        setIsSubmitting(true);
+        setError('');
+
+        try {
+            const result = await approveTaskCompletion(task._id, {
+                approve: false,
+                note: approvalNote.trim() || undefined,
+            });
+
+            if (!result.ok) {
+                setError(result.message || 'Không thể từ chối');
+                return;
+            }
+
+            onUpdate?.(result.data);
+            router.refresh();
+        } catch (err) {
+            console.error('Rejection error:', err);
             setError(err.message || 'Có lỗi xảy ra');
         } finally {
             setIsSubmitting(false);
@@ -191,25 +248,6 @@ export default function ApprovalPanel({
                 <div className="space-y-3 pl-8">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            <Award className="h-4 w-4 inline mr-1" />
-                            Điểm ban đầu *
-                        </label>
-                        <Input
-                            type="number"
-                            min="0"
-                            value={initialPoints}
-                            onChange={(e) => setInitialPoints(parseInt(e.target.value) || 0)}
-                            placeholder="Nhập số điểm (VD: 100)"
-                            disabled={isSubmitting}
-                            className="max-w-xs"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Điểm sẽ được cộng cho người hoàn thành
-                        </p>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
                             Ghi chú (tùy chọn)
                         </label>
                         <Textarea
@@ -223,7 +261,7 @@ export default function ApprovalPanel({
 
                     <div className="flex gap-2">
                         <button
-                            onClick={() => handleCreationApproval(true)}
+                            onClick={handleCreationApprovalClick}
                             disabled={isSubmitting}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
@@ -231,7 +269,7 @@ export default function ApprovalPanel({
                             Phê duyệt
                         </button>
                         <button
-                            onClick={() => handleCreationApproval(false)}
+                            onClick={handleCreationRejection}
                             disabled={isSubmitting}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
                         >
@@ -269,26 +307,6 @@ export default function ApprovalPanel({
                 <div className="space-y-3 pl-8">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            <Award className="h-4 w-4 inline mr-1" />
-                            Điểm đạt được *
-                        </label>
-                        <Input
-                            type="number"
-                            min="0"
-                            max={task.initialPoints || 0}
-                            value={finalPoints}
-                            onChange={(e) => setFinalPoints(parseInt(e.target.value) || 0)}
-                            placeholder={`0 - ${task.initialPoints || 0}`}
-                            disabled={isSubmitting}
-                            className="max-w-xs"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Điểm ban đầu: {task.initialPoints || 0}. Bạn có thể chấm từ 0 đến {task.initialPoints || 0}.
-                        </p>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
                             Nhận xét (tùy chọn)
                         </label>
                         <Textarea
@@ -302,7 +320,7 @@ export default function ApprovalPanel({
 
                     <div className="flex gap-2">
                         <button
-                            onClick={() => handleCompletionApproval(true)}
+                            onClick={handleCompletionApprovalClick}
                             disabled={isSubmitting}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
@@ -310,7 +328,7 @@ export default function ApprovalPanel({
                             Phê duyệt hoàn thành
                         </button>
                         <button
-                            onClick={() => handleCompletionApproval(false)}
+                            onClick={handleCompletionRejection}
                             disabled={isSubmitting}
                             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
                         >
@@ -320,6 +338,18 @@ export default function ApprovalPanel({
                     </div>
                 </div>
             )}
+
+            {/* Points Approval Modal */}
+            <PointsApprovalModal
+                isOpen={showPointsModal}
+                onClose={() => setShowPointsModal(false)}
+                onSubmit={pointsModalType === 'creation' ? handleCreationApprovalSubmit : handleCompletionApprovalSubmit}
+                title={pointsModalType === 'creation' ? 'Phê duyệt công việc' : 'Phê duyệt hoàn thành'}
+                taskName={task.title || 'Công việc'}
+                suggestedPoints={pointsModalType === 'creation' ? (task.requiredPoints || 0) : (task.initialPoints || 0)}
+                type={pointsModalType}
+                isSubmitting={isSubmitting}
+            />
         </div>
     );
 }

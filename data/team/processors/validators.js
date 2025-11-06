@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { TEAM_ROLE } from '@/model/common/enums.js';
 import { AppError } from '@/lib/errors.js';
+import AppUser from '@/model/user.model.js';
 
 /** ID team bắt buộc */
 export const teamIdSchema = z.string().min(1);
@@ -30,7 +31,26 @@ export const teamUpdateSchema = z.object({
 
 /** Thêm thành viên */
 export const memberAddSchema = z.object({
-    userId: z.string().min(1),
+    userId: z.string().min(1).transform(async (val) => {
+        // Check if userId looks like MongoDB ObjectId (24 hex chars)
+        const isObjectId = /^[0-9a-fA-F]{24}$/.test(val);
+        
+        if (isObjectId) {
+            // Try to convert _id to externalUserId
+            try {
+                const user = await AppUser.findById(val);
+                if (user && user.externalUserId) {
+                    console.log(`[memberAddSchema] Converting userId from _id (${val}) to externalUserId (${user.externalUserId})`);
+                    return user.externalUserId;
+                }
+            } catch (err) {
+                console.error(`[memberAddSchema] Failed to lookup user by _id=${val}:`, err.message);
+            }
+        }
+        
+        // Return as-is (already externalUserId or conversion failed)
+        return val;
+    }),
     role: z.enum([TEAM_ROLE.MANAGER, TEAM_ROLE.MEMBER]).default(TEAM_ROLE.MEMBER),
 });
 
@@ -62,6 +82,26 @@ export function validate(schema, payload) {
             message: e.message,
         })) || [];
         // message='VALIDATION', code='VALIDATION', status=400
+        throw new AppError('VALIDATION', 'VALIDATION', 400, issues);
+    }
+}
+
+/**
+ * Helper validateAsync: parse async bằng zod (cho transform async), nếu lỗi ném AppError.
+ * @template T
+ * @param {z.ZodSchema<T>} schema
+ * @param {unknown} payload
+ * @returns {Promise<T>}
+ * @throws {AppError}
+ */
+export async function validateAsync(schema, payload) {
+    try {
+        return await schema.parseAsync(payload);
+    } catch (err) {
+        const issues = err?.errors?.map?.((e) => ({
+            path: Array.isArray(e.path) ? e.path.join('.') : String(e.path ?? ''),
+            message: e.message,
+        })) || [];
         throw new AppError('VALIDATION', 'VALIDATION', 400, issues);
     }
 }
