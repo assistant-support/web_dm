@@ -1,7 +1,7 @@
 // components/comments/CommentList.client.js
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MessageSquare, Loader2 } from 'lucide-react';
 import CommentItem from './CommentItem.client';
 import CommentForm from './CommentForm.client';
@@ -21,7 +21,7 @@ export default function CommentList({ taskId, currentUser, canManage, initialCou
     const [error, setError] = useState('');
     console.log(comments);
     
-    const loadComments = async () => {
+    const loadComments = useCallback(async () => {
         try {
             setLoading(true);
             setError('');
@@ -36,11 +36,11 @@ export default function CommentList({ taskId, currentUser, canManage, initialCou
         } finally {
             setLoading(false);
         }
-    };
+    }, [taskId]);
 
     useEffect(() => {
         loadComments();
-    }, [taskId]);
+    }, [loadComments]);
 
     const handleCommentAdded = (newComment) => {
         // Thêm comment mới vào đầu danh sách

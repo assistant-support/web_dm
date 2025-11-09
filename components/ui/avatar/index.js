@@ -3,6 +3,8 @@
 
 'use client';
 
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import clsx from 'clsx';
 
 /**
@@ -62,13 +64,13 @@ function getColorFromId(userId) {
  * @param {'xs'|'sm'|'md'|'lg'|'xl'} props.size - Kích thước avatar
  * @param {string} props.className - Custom classes
  */
-export default function Avatar({ 
-    userId, 
-    name = '', 
+export default function Avatar({
+    userId,
+    name = '',
     src,
     zaloavt,
-    size = 'md', 
-    className 
+    size = 'md',
+    className,
 }) {
     const sizeClasses = {
         xs: 'h-6 w-6 text-xs',
@@ -80,28 +82,38 @@ export default function Avatar({
 
     const initials = getInitials(name);
     const bgColor = getColorFromId(userId);
-    
-    // Priority: avatar > zaloavt > initials
     const avatarUrl = src || zaloavt;
+    const [loadError, setLoadError] = useState(false);
 
-    // If has avatar URL, show image
-    if (avatarUrl) {
+    useEffect(() => {
+        setLoadError(false);
+    }, [avatarUrl]);
+
+    const sizePixels = {
+        xs: 24,
+        sm: 32,
+        md: 40,
+        lg: 48,
+        xl: 64,
+    };
+    const resolvedSize = sizeClasses[size] ? size : 'md';
+    const dimension = sizePixels[resolvedSize];
+
+    if (avatarUrl && !loadError) {
         return (
-            <img
+            <Image
                 src={avatarUrl}
                 alt={name || userId}
+                width={dimension}
+                height={dimension}
                 className={clsx(
                     'inline-flex items-center justify-center rounded-full object-cover',
-                    sizeClasses[size],
+                    sizeClasses[resolvedSize],
                     className
                 )}
+                sizes={`${dimension}px`}
                 title={name || userId}
-                onError={(e) => {
-                    // On error, hide image and show initials fallback
-                    e.target.style.display = 'none';
-                    const fallback = e.target.nextElementSibling;
-                    if (fallback) fallback.style.display = 'flex';
-                }}
+                onError={() => setLoadError(true)}
             />
         );
     }
@@ -110,7 +122,7 @@ export default function Avatar({
         <div
             className={clsx(
                 'inline-flex items-center justify-center rounded-full text-white font-semibold',
-                sizeClasses[size],
+                sizeClasses[resolvedSize],
                 bgColor,
                 className
             )}

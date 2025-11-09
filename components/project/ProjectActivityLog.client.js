@@ -1,7 +1,7 @@
 // components/project/ProjectActivityLog.client.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { getActivities } from '@/data/project/actions/analytics.js';
 import ActivityItem from '@/components/ui/activity-item';
@@ -12,11 +12,7 @@ export default function ProjectActivityLog({ projectId }) {
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    useEffect(() => {
-        loadActivities();
-    }, [projectId]);
-
-    const loadActivities = async () => {
+    const loadActivities = useCallback(async () => {
         setLoading(true);
         try {
             const result = await getActivities({ projectId, limit: 10 });
@@ -29,9 +25,13 @@ export default function ProjectActivityLog({ projectId }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [projectId]);
 
-    const loadMore = async () => {
+    useEffect(() => {
+        loadActivities();
+    }, [loadActivities]);
+
+    const loadMore = useCallback(async () => {
         setLoadingMore(true);
         try {
             const result = await getActivities({ 
@@ -40,7 +40,7 @@ export default function ProjectActivityLog({ projectId }) {
                 skip: activities.length 
             });
             if (result.ok) {
-                setActivities([...activities, ...result.data.items]);
+                setActivities((prev) => [...prev, ...result.data.items]);
                 setHasMore(result.data.hasMore);
             }
         } catch (error) {
@@ -48,7 +48,7 @@ export default function ProjectActivityLog({ projectId }) {
         } finally {
             setLoadingMore(false);
         }
-    };
+    }, [activities.length, projectId]);
 
     if (loading) {
         return (

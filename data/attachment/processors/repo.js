@@ -6,6 +6,7 @@
 // - Loại bỏ { lean:true } trong *findByIdAndUpdate* (tùy chọn vì không có hiệu lực), vẫn trả về doc mới qua { new:true }.
 
 import mongoose from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import Attachment from '@/model/attachment.model.js';
 import Task from '@/model/task.model.js';
 import Project from '@/model/project.model.js';
@@ -40,6 +41,7 @@ export async function createAttachment({
         project: O(projectId),
         task: taskId ? O(taskId) : null,
         author: String(createdBy),
+        lastModifiedBy: String(createdBy),
         storage: STORAGE_PROVIDER.DRIVE,
         driveFileId: driveMeta?.driveFileId,
         driveFolderId: driveMeta?.parentId,
@@ -50,6 +52,7 @@ export async function createAttachment({
         webContentLink: driveMeta?.webContentLink ?? null,
         kind,
         label: null,
+        publicToken: driveMeta?.publicToken ?? randomUUID(),
     });
     return asPlainAttachment(doc);
 }
@@ -84,20 +87,32 @@ export async function getById(attachmentId) {
 }
 
 /** Đổi tên (DB only) và trả PlainAttachment */
-export async function renameAttachment(attachmentId, name) {
+export async function renameAttachment(attachmentId, name, { byUserId } = {}) {
+    const setPayload = { driveName: name };
+    if (byUserId) {
+        setPayload.lastModifiedBy = String(byUserId);
+    }
+
     const updated = await Attachment.findByIdAndUpdate(
         O(attachmentId),
-        { $set: { driveName: name } },
+        { $set: setPayload },
         { new: true }
     );
-    return updated ? asPlainAttachment(updated) : null;
+
+    if (!updated) return null;
+    if (!updated.publicToken) {
+        updated.publicToken = randomUUID();
+        await updated.save();
+    }
+
+    return asPlainAttachment(updated);
 }
 
 /**
  * Di chuyển giữa project <-> task cùng 1 project.
  * Side-effects: cập nhật counters chuẩn (Task.attachmentsCount & Project.attachmentsCount).
  */
-export async function moveAttachment(attachmentId, { scope, projectId, taskId }, driveParentId) {
+export async function moveAttachment(attachmentId, { scope, projectId, taskId }, driveParentId, { byUserId } = {}) {
     const att = await Attachment.findById(O(attachmentId)).lean();
     if (!att) return null;
 
@@ -105,15 +120,18 @@ export async function moveAttachment(attachmentId, { scope, projectId, taskId },
     const toTaskId = taskId ? String(taskId) : null;
 
     // Cập nhật record
+    const setPayload = {
+        project: O(projectId),
+        task: toTaskId ? O(toTaskId) : null,
+        driveFolderId: driveParentId || att.driveFolderId || null,
+    };
+    if (byUserId) {
+        setPayload.lastModifiedBy = String(byUserId);
+    }
+
     const updated = await Attachment.findByIdAndUpdate(
         O(attachmentId),
-        {
-            $set: {
-                project: O(projectId),
-                task: toTaskId ? O(toTaskId) : null,
-                driveFolderId: driveParentId || att.driveFolderId || null,
-            },
-        },
+        { $set: setPayload },
         { new: true }
     );
 
@@ -138,7 +156,13 @@ export async function moveAttachment(attachmentId, { scope, projectId, taskId },
         // swallow
     }
 
-    return updated ? asPlainAttachment(updated) : null;
+    if (!updated) return null;
+    if (!updated.publicToken) {
+        updated.publicToken = randomUUID();
+        await updated.save();
+    }
+
+    return asPlainAttachment(updated);
 }
 
 /**
@@ -146,7 +170,7 @@ export async function moveAttachment(attachmentId, { scope, projectId, taskId },
  * Side-effects: giảm counters tương ứng.
  * Trả về plain + {_hard:boolean}
  */
-export async function deleteAttachment(attachmentId, { hard = false } = {}) {
+export async function deleteAttachment(attachmentId, { hard = false, byUserId } = {}) {
     const att = await Attachment.findById(O(attachmentId)).lean();
     if (!att) return null;
 
@@ -158,9 +182,15 @@ export async function deleteAttachment(attachmentId, { hard = false } = {}) {
         await Attachment.findByIdAndDelete(O(attachmentId));
         result = { ...asPlainAttachment(att), _hard: true };
     } else {
+        const setPayload = { deletedAt: new Date() };
+        if (byUserId) {
+            setPayload.deletedBy = String(byUserId);
+            setPayload.lastModifiedBy = String(byUserId);
+        }
+
         const updated = await Attachment.findByIdAndUpdate(
             O(attachmentId),
-            { $set: { deletedAt: new Date() } },
+            { $set: setPayload },
             { new: true }
         );
         result = { ...asPlainAttachment(updated), _hard: false };

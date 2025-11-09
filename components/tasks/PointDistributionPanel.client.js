@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Award, Save, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -29,11 +29,7 @@ export default function PointDistributionPanel({ task, canManage = false }) {
     const totalAvailable = task.initialPoints || 0;
 
     // Load subtasks
-    useEffect(() => {
-        loadSubtasks();
-    }, [task._id]);
-
-    const loadSubtasks = async () => {
+    const loadSubtasks = useCallback(async () => {
         setIsLoading(true);
         try {
             const result = await listSubtasks(task._id);
@@ -55,7 +51,11 @@ export default function PointDistributionPanel({ task, canManage = false }) {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [task._id, task.subtaskPointsDistribution]);
+
+    useEffect(() => {
+        loadSubtasks();
+    }, [loadSubtasks]);
 
     // Calculate total distributed
     const totalDistributed = Object.values(pointsMap).reduce((sum, val) => sum + (parseInt(val) || 0), 0);
@@ -286,7 +286,7 @@ export default function PointDistributionPanel({ task, canManage = false }) {
                             <li>Mỗi subtask sẽ có điểm riêng sau khi phân bổ</li>
                             <li>Tổng điểm chia <strong>không được vượt quá</strong> {totalAvailable} điểm</li>
                             <li>Khi subtask hoàn thành, người thực hiện nhận điểm tương ứng</li>
-                            <li>Nhấn "Chia đều" để tự động phân bổ đều cho các subtask</li>
+                            <li>Nhấn &quot;Chia đều&quot; để tự động phân bổ đều cho các subtask</li>
                         </ul>
                     </div>
                 </div>

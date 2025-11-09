@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, Circle, Clock, XCircle } from 'lucide-react';
 import { getTaskWorkflow } from '@/data/workflow/actions/server';
 
@@ -18,11 +18,7 @@ export default function WorkflowVisual({ taskId, task }) {
     const [workflow, setWorkflow] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        loadWorkflow();
-    }, [taskId]);
-
-    const loadWorkflow = async () => {
+    const loadWorkflow = useCallback(async () => {
         setIsLoading(true);
         try {
             const result = await getTaskWorkflow(taskId);
@@ -34,7 +30,11 @@ export default function WorkflowVisual({ taskId, task }) {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [taskId]);
+
+    useEffect(() => {
+        loadWorkflow();
+    }, [loadWorkflow]);
 
     // Nếu không có workflow, hiển thị simple progress flow
     if (isLoading) {

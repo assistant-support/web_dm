@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import CreateSubtaskDialog from './CreateSubtaskDialog.client';
@@ -46,7 +46,7 @@ export default function SubtaskList({
         })
     );
 
-    const loadSubtasks = async () => {
+    const loadSubtasks = useCallback(async () => {
         setIsLoading(true);
         try {
             const [subtasksResult, statsResult] = await Promise.all([
@@ -65,14 +65,14 @@ export default function SubtaskList({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [parentTaskId]);
 
     useEffect(() => {
         loadSubtasks();
-    }, [parentTaskId]);
+    }, [loadSubtasks]);
 
     const handleSubtaskCreated = (newSubtask) => {
-        loadSubtasks(); // Refresh list
+    loadSubtasks(); // Refresh list
     };
 
     const handleUpdateSubtask = async (subtaskId, updates) => {

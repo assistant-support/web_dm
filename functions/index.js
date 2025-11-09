@@ -71,9 +71,82 @@ export const getInitials = (name) => {
     return (name[0] || '').toUpperCase();
 };
 
-// Chuyển thành dạng ảnh hiển thị - Drive
-export const driveImage = (id) => {
+/**
+ * Get Google Drive image URL for display
+ * 
+ * Google Drive direct image URLs:
+ * - Format: https://lh3.googleusercontent.com/d/FILE_ID
+ * - With size: https://lh3.googleusercontent.com/d/FILE_ID=w400
+ * - Thumbnail: https://drive.google.com/thumbnail?id=FILE_ID&sz=w400
+ * 
+ * @param {string} id - Google Drive file ID or full URL
+ * @param {number} size - Optional width in pixels (e.g., 400, 800, 1600)
+ * @returns {string|null} Image URL or null if invalid
+ */
+export const driveImage = (id, size = null) => {
     if (!id) return null;
-    if (id.startsWith('https://lh3.googleusercontent.com/d/')) return id;
+    
+    // If already a full googleusercontent URL, return as is or add size
+    if (id.startsWith('https://lh3.googleusercontent.com/d/')) {
+        // Extract file ID from URL
+        const match = id.match(/\/d\/([^/=?]+)/);
+        if (match) {
+            const fileId = match[1];
+            return size ? `https://lh3.googleusercontent.com/d/${fileId}=w${size}` : id;
+        }
+        return id;
+    }
+    
+    // If it's just a file ID, construct the URL
+    if (size) {
+        return `https://lh3.googleusercontent.com/d/${id}=w${size}`;
+    }
     return `https://lh3.googleusercontent.com/d/${id}`;
-}
+};
+
+/**
+ * Get Google Drive thumbnail URL
+ * Better for generating thumbnails than direct image URL
+ * 
+ * @param {string} fileId - Google Drive file ID
+ * @param {number} width - Thumbnail width (100, 200, 400, 800, 1600)
+ * @returns {string|null} Thumbnail URL
+ */
+export const driveThumbnail = (fileId, width = 400) => {
+    if (!fileId) return null;
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${width}`;
+};
+
+/**
+ * Get Google Drive preview URL (for embedding)
+ * Works for documents, videos, etc.
+ * 
+ * @param {string} fileId - Google Drive file ID
+ * @returns {string|null} Preview URL
+ */
+export const drivePreview = (fileId) => {
+    if (!fileId) return null;
+    return `https://drive.google.com/file/d/${fileId}/preview`;
+};
+
+/**
+ * Get Google Drive view URL (opens in Drive viewer)
+ * 
+ * @param {string} fileId - Google Drive file ID
+ * @returns {string|null} View URL
+ */
+export const driveView = (fileId) => {
+    if (!fileId) return null;
+    return `https://drive.google.com/file/d/${fileId}/view`;
+};
+
+/**
+ * Get Google Drive download URL
+ * 
+ * @param {string} fileId - Google Drive file ID
+ * @returns {string|null} Download URL
+ */
+export const driveDownload = (fileId) => {
+    if (!fileId) return null;
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+};

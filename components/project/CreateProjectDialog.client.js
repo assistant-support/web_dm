@@ -47,11 +47,7 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
     const [managedTeams, setManagedTeams] = useState([]);
     const [loadingTeams, setLoadingTeams] = useState(false);
     const { run, Overlays } = useAsyncNotifier({ enableNoti: false, enableLoading: true });
-
-    // Get default dates
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const { startDate: defaultStartDate, dueDate: defaultDueDate } = buildDefaultDateInputs();
 
     const form = useForm({
         resolver: zodResolver(projectSchema),
@@ -60,8 +56,8 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
             description: '',
             team: defaultTeamId || '',
             priority: PRIORITY.MEDIUM,
-            startDate: formatDateForInput(today),
-            dueDate: formatDateForInput(tomorrow),
+            startDate: defaultStartDate,
+            dueDate: defaultDueDate,
             tags: '',
         },
     });
@@ -88,17 +84,18 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
             loadTeams();
             
             // Reset form
+            const { startDate, dueDate } = buildDefaultDateInputs();
             form.reset({
                 name: '',
                 description: '',
                 team: defaultTeamId || '',
                 priority: PRIORITY.MEDIUM,
-                startDate: formatDateForInput(today),
-                dueDate: formatDateForInput(tomorrow),
+                startDate,
+                dueDate,
                 tags: '',
             });
         }
-    }, [open, defaultTeamId, form]);
+    }, [defaultTeamId, form, open]);
 
     const onSubmit = async (data) => {
         await run(async () => {
@@ -231,4 +228,15 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
             </DialogComponent>
         </>
     );
+}
+
+function buildDefaultDateInputs() {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    return {
+        startDate: formatDateForInput(today),
+        dueDate: formatDateForInput(tomorrow),
+    };
 }

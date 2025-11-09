@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Plus, Trash2, Move, Link as LinkIcon } from 'lucide-react';
 import TaskStatusBadge from '@/components/ui/TaskStatusBadge';
@@ -88,7 +88,7 @@ export default function WorkflowEditor({ task, subtasks = [], workflow, users })
         });
     };
 
-    const handleMouseMove = (e) => {
+    const handleMouseMove = useCallback((e) => {
         if (!draggingNode) return;
 
         const dx = e.clientX - draggingNode.startX;
@@ -103,22 +103,25 @@ export default function WorkflowEditor({ task, subtasks = [], workflow, users })
                 }
                 : node
         ));
-    };
+    }, [draggingNode]);
 
-    const handleMouseUp = () => {
+    const handleMouseUp = useCallback(() => {
         setDraggingNode(null);
-    };
+    }, []);
 
     useEffect(() => {
-        if (draggingNode) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-            };
+        if (!draggingNode) {
+            return;
         }
-    }, [draggingNode]);
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [draggingNode, handleMouseMove, handleMouseUp]);
 
     // Handle connection
     const handleConnectClick = (nodeKey) => {
@@ -449,7 +452,7 @@ export default function WorkflowEditor({ task, subtasks = [], workflow, users })
                     </div>
                     <div className="flex items-center gap-2">
                         <LinkIcon className="h-4 w-4" />
-                        <span>Click "Nối" để tạo connection giữa các nodes</span>
+                        <span>Click &quot;Nối&quot; để tạo connection giữa các nodes</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <Trash2 className="h-4 w-4 text-red-600" />

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import DialogComponent from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
@@ -169,15 +170,7 @@ export default function UidSetupDialog({ open, onClose, onSuccess }) {
 
                         <div className="bg-gray-50 rounded-lg p-4 space-y-4">
                             {/* Cập nhật: Hiển thị Avatar */}
-                            {foundUid.avatar && (
-                                <div className="flex justify-center">
-                                    <img
-                                        src={foundUid.avatar}
-                                        alt="Avatar Zalo"
-                                        className="w-20 h-20 rounded-full border-2 border-gray-200 object-cover"
-                                    />
-                                </div>
-                            )}
+                            <AvatarPreview avatar={foundUid.avatar} />
 
                             <div className="space-y-3">
                                 <div>
@@ -239,5 +232,31 @@ export default function UidSetupDialog({ open, onClose, onSuccess }) {
                 )}
             </DialogComponent>
         </>
+    );
+}
+
+function AvatarPreview({ avatar }) {
+    const [loadError, setLoadError] = useState(false);
+
+    useEffect(() => {
+        setLoadError(false);
+    }, [avatar]);
+
+    if (!avatar || loadError) {
+        return null;
+    }
+
+    return (
+        <div className="flex justify-center">
+            <Image
+                src={avatar}
+                alt="Avatar Zalo"
+                width={80}
+                height={80}
+                className="h-20 w-20 rounded-full border-2 border-gray-200 object-cover"
+                sizes="80px"
+                onError={() => setLoadError(true)}
+            />
+        </div>
     );
 }

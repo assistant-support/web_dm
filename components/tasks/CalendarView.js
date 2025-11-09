@@ -11,11 +11,15 @@ export default function CalendarView({ tasks }) {
     const [anchor, setAnchor] = useState(new Date())
     const [isPending, startTransition] = useTransition()
 
-    const first = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
-    const last = addDays(endOfMonth(anchor), 6)
-
-    const days = []
-    for (let d = first; d <= last; d = addDays(d, 1)) days.push(d)
+    const days = useMemo(() => {
+        const start = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
+        const end = addDays(endOfMonth(anchor), 6)
+        const result = []
+        for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
+            result.push(cursor)
+        }
+        return result
+    }, [anchor])
 
     const tasksByDay = useMemo(() => {
         const map = new Map()
@@ -32,7 +36,7 @@ export default function CalendarView({ tasks }) {
             }
         })
         return map
-    }, [JSON.stringify(tasks), format(anchor, 'yyyy-MM')])
+    }, [days, tasks])
 
     const dragTask = useRef(null)
     const onDragStart = (t) => (e) => {

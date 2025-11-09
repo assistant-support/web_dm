@@ -1,7 +1,7 @@
 // components/team/TeamLeaderboard.client.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Trophy, Medal, Award, Clock, CheckCircle2, ChevronDown } from 'lucide-react';
 import { team as teamLeaderboardAction } from '@/data/leaderboard/actions/server.js';
 import UserDisplay from '@/components/ui/user-display';
@@ -18,11 +18,7 @@ export default function TeamLeaderboard({ teamId, initialYm }) {
     const [isLoading, setIsLoading] = useState(false);
     const { run, Overlays } = useAsyncNotifier();
 
-    useEffect(() => {
-        loadLeaderboard();
-    }, [teamId, ym, limit]);
-
-    const loadLeaderboard = async () => {
+    const loadLeaderboard = useCallback(async () => {
         setIsLoading(true);
         try {
             const result = await teamLeaderboardAction({ 
@@ -38,7 +34,11 @@ export default function TeamLeaderboard({ teamId, initialYm }) {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [limit, teamId, ym]);
+
+    useEffect(() => {
+        loadLeaderboard();
+    }, [loadLeaderboard]);
 
     // Generate month options (current month and 11 months back)
     const monthOptions = [];

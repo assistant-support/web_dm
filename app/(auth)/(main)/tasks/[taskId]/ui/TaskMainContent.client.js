@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link.js';
 import { formatDistanceToNow } from 'date-fns';
@@ -110,10 +111,13 @@ export default function TaskMainContent({
                     <ul className="space-y-4">
                         {initialComments.map((comment) => (
                             <li key={comment.id} className="flex items-start gap-3">
-                                <img
+                                <Image
                                     src={driveImage(comment.author.avatar) || 'https://lh3.googleusercontent.com/d/16EGtxONxjbU3XF6TGSCb-kK7ciRLw4Pk'}
                                     alt={comment.author.name}
-                                    className="w-12 h-12 rounded-full"
+                                    width={48}
+                                    height={48}
+                                    className="h-12 w-12 rounded-full object-cover"
+                                    sizes="48px"
                                 />
                                 <div>
                                     <div className="text-sm font-medium text-gray-800 flex gap-2 items-center">

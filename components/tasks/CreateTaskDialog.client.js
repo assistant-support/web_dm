@@ -334,7 +334,7 @@ export default function CreateTaskDialog({
                         <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 flex gap-2 items-start">
                             <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
                             <div className="text-sm text-blue-800">
-                                <p><strong>Lưu ý:</strong> Task sẽ ở trạng thái "Chờ phê duyệt". Điểm dự kiến (nếu có) chỉ có hiệu lực sau khi quản lý xem xét.</p>
+                                <p><strong>Lưu ý:</strong> Task sẽ ở trạng thái &quot;Chờ phê duyệt&quot;. Điểm dự kiến (nếu có) chỉ có hiệu lực sau khi quản lý xem xét.</p>
                             </div>
                         </div>
                     )}

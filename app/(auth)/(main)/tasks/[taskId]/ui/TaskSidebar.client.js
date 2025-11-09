@@ -1,7 +1,7 @@
 // app/(auth)/(main)/tasks/[taskId]/ui/TaskSidebar.client.js
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     User, Briefcase, Tag, Users as UsersIcon, Folder as FolderIcon,
     CalendarDays, Clock, UserCheck
@@ -10,8 +10,10 @@ import clsx from 'clsx';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import Link from 'next/link';
+import Image from 'next/image';
 // [THÊM] Import driveImage
 import { driveImage } from '@/functions';
+import Badge from '@/components/ui/badge';
 
 // --- Helpers ---
 
@@ -40,23 +42,35 @@ const formatRelativeTime = (dateString) => {
 // [THAY ĐỔI] Component Avatar (Sử dụng driveImage)
 const Avatar = ({ name, src, size = 'xs', className = '' }) => {
     const sizeClasses = {
-        'xs': 'w-5 h-5 text-[10px]',
-        'sm': 'w-6 h-6 text-xs',
+        xs: 'w-5 h-5 text-[10px]',
+        sm: 'w-6 h-6 text-xs',
     };
+    const sizePixels = {
+        xs: 20,
+        sm: 24,
+    };
+    const resolvedSize = sizeClasses[size] ? size : 'xs';
+    const dimension = sizePixels[resolvedSize];
     const initials = name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '?';
 
     // Sử dụng hàm driveImage để lấy URL cuối cùng
     const finalSrc = driveImage(src);
+    const [loadError, setLoadError] = useState(false);
 
-    if (finalSrc) {
+    useEffect(() => {
+        setLoadError(false);
+    }, [finalSrc]);
+
+    if (finalSrc && !loadError) {
         return (
-            <img
-                // eslint-disable-next-line @next/next/no-img-element
+            <Image
                 src={finalSrc}
                 alt={name || 'Avatar'}
-                className={clsx("rounded-full object-cover", sizeClasses[size], className)}
-                // Optional: Add onError for fallback if image fails to load
-                onError={(e) => { e.currentTarget.style.display = 'none'; /* Hide broken image */ }}
+                width={dimension}
+                height={dimension}
+                className={clsx('rounded-full object-cover', sizeClasses[resolvedSize], className)}
+                sizes={`${dimension}px`}
+                onError={() => setLoadError(true)}
             />
         );
     }
@@ -66,7 +80,7 @@ const Avatar = ({ name, src, size = 'xs', className = '' }) => {
         <div
             className={clsx(
                 "rounded-full flex items-center justify-center font-medium bg-gray-200 text-gray-600",
-                sizeClasses[size],
+                sizeClasses[resolvedSize],
                 className
             )}
             title={name}

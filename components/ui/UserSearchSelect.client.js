@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { listForPicker } from '@/data/appUser/actions.js';
 import { Search, User, X } from 'lucide-react';
 
@@ -71,7 +72,7 @@ export default function UserSearchSelect({
         // Debounce search
         const debounce = setTimeout(loadUsers, 300);
         return () => clearTimeout(debounce);
-    }, [searchQuery, isOpen]); // Remove JSON.stringify - causes infinite loop!
+    }, [excludeUserIds, includeUserIds, isOpen, searchQuery]);
 
     // Load selected user info ONCE when value changes
     useEffect(() => {
@@ -104,7 +105,7 @@ export default function UserSearchSelect({
         };
 
         loadSelectedUser();
-    }, [value]); // Only depend on value, not selectedUser
+    }, [selectedUser, value]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -155,17 +156,17 @@ export default function UserSearchSelect({
                 {selectedUser && !isOpen ? (
                     <>
                         <div className="flex items-center gap-2 flex-1">
-                            {selectedUser.avatar ? (
-                                <img
-                                    src={selectedUser.avatar}
-                                    alt={selectedUser.name}
-                                    className="h-6 w-6 rounded-full object-cover flex-shrink-0"
-                                />
-                            ) : (
-                                <div className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                    <User className="h-3 w-3 text-gray-500" />
-                                </div>
-                            )}
+                            <AvatarThumbnail
+                                src={selectedUser.avatar}
+                                alt={selectedUser.name}
+                                size="sm"
+                                className="h-6 w-6 rounded-full object-cover flex-shrink-0"
+                                fallback={(
+                                    <div className="h-6 w-6 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                        <User className="h-3 w-3 text-gray-500" />
+                                    </div>
+                                )}
+                            />
                             <span className="text-sm text-gray-900 truncate">
                                 {selectedUser.name}
                             </span>
@@ -233,17 +234,17 @@ export default function UserSearchSelect({
                                         className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors flex items-center gap-3"
                                     >
                                         {/* Avatar */}
-                                        {user.avatar ? (
-                                            <img
-                                                src={user.avatar}
-                                                alt={user.name}
-                                                className="h-8 w-8 rounded-full object-cover flex-shrink-0"
-                                            />
-                                        ) : (
-                                            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                                <User className="h-4 w-4 text-gray-500" />
-                                            </div>
-                                        )}
+                                        <AvatarThumbnail
+                                            src={user.avatar}
+                                            alt={user.name}
+                                            size="md"
+                                            className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                                            fallback={(
+                                                <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                                    <User className="h-4 w-4 text-gray-500" />
+                                                </div>
+                                            )}
+                                        />
 
                                         {/* User Info */}
                                         <div className="flex-1 min-w-0">
@@ -269,5 +270,31 @@ export default function UserSearchSelect({
                 </div>
             )}
         </div>
+    );
+}
+
+function AvatarThumbnail({ src, alt, size, className = '', fallback = null }) {
+    const [loadError, setLoadError] = useState(false);
+
+    useEffect(() => {
+        setLoadError(false);
+    }, [src]);
+
+    if (!src || loadError) {
+        return fallback;
+    }
+
+    const dimensions = size === 'sm' ? 24 : 32;
+
+    return (
+        <Image
+            src={src}
+            alt={alt}
+            width={dimensions}
+            height={dimensions}
+            className={className}
+            sizes={`${dimensions}px`}
+            onError={() => setLoadError(true)}
+        />
     );
 }

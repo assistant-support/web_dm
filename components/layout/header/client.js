@@ -165,10 +165,13 @@ export function UserMenu({ user }) {
                         <div className="mx-2 mb-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center gap-3 mb-2">
                                 {zaloInfo.zaloavt ? (
-                                    <img
+                                    <Image
                                         src={zaloInfo.zaloavt}
                                         alt="Avatar Zalo"
-                                        className="w-10 h-10 rounded-full border-2 border-green-300 object-cover"
+                                        width={40}
+                                        height={40}
+                                        className="h-10 w-10 rounded-full border-2 border-green-300 object-cover"
+                                        sizes="40px"
                                     />
                                 ) : (
                                     <div className="w-10 h-10 rounded-full bg-green-300 flex items-center justify-center">

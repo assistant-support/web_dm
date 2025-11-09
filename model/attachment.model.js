@@ -12,6 +12,7 @@
  */
 
 import mongoose from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import { STORAGE_PROVIDER, FILE_KIND } from '@/model/common/enums.js';
 import { connectDB } from '@/lib/db.js';
 
@@ -126,6 +127,31 @@ const AttachmentSchema = new mongoose.Schema({
         index: true 
     }],
 
+    // ==================== AUDIT & ACCESS ====================
+
+    // Người chỉnh sửa gần nhất
+    lastModifiedBy: {
+        type: String,
+        index: true,
+        default: null,
+    },
+
+    // Người xóa (soft delete)
+    deletedBy: {
+        type: String,
+        index: true,
+        default: null,
+    },
+
+    // Token truy cập công khai (ẩn driveFileId)
+    publicToken: {
+        type: String,
+        required: true,
+        unique: true,
+        index: true,
+        default: () => randomUUID(),
+    },
+
     // ==================== SOFT DELETE ====================
     
     // Thời điểm xóa mềm
@@ -170,6 +196,7 @@ AttachmentSchema.index({ deletedAt: 1 }, {
  * Ứng dụng: Lọc file theo loại (image, video, doc).
  */
 AttachmentSchema.index({ kind: 1, deletedAt: 1 });
+AttachmentSchema.index({ publicToken: 1 });
 
 // ==================== VIRTUALS ====================
 

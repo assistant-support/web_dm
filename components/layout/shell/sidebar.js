@@ -16,7 +16,7 @@ const navItems = [
     { href: '/', label: 'Công việc', icon: Home },
     { href: '/projects', label: 'Dự án', icon: FolderKanban },
     { href: '/teams', label: 'Nhóm', icon: Users },
-    // { href: '/reports', label: 'Báo cáo', icon: BarChart3 },
+    { href: '/files', label: 'Tài nguyên', icon: BarChart3 },
     // { href: '/settings', label: 'Cài đặt', icon: Settings },
 ];
 

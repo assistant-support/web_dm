@@ -1,7 +1,7 @@
 // components/tasks/CollaboratorsPanel.client.js
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserPlus, X, Check, Clock, Trash2, Send } from 'lucide-react';
 import { Select } from '@/components/ui/input';
@@ -54,11 +54,7 @@ export default function CollaboratorsPanel({
     const [selectedRole, setSelectedRole] = useState('contributor');
 
     // Load collaborators initially and when task ID changes
-    useEffect(() => {
-        loadCollaborators();
-    }, [task._id]);
-
-    const loadCollaborators = async () => {
+    const loadCollaborators = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
@@ -74,7 +70,11 @@ export default function CollaboratorsPanel({
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [task._id]);
+
+    useEffect(() => {
+        loadCollaborators();
+    }, [loadCollaborators]);
 
     // Filter users for the dropdown: exclude project members & existing collaborators
     const availableUsersForDropdown = useMemo(() => {

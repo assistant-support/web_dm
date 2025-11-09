@@ -81,7 +81,7 @@ export default function SubtaskList({
                         </h3>
                         {canCreateSubtask && (
                             <p className="mt-1 text-sm text-gray-500">
-                                Nhấn nút "Thêm việc con" để bắt đầu.
+                                Nhấn nút &quot;Thêm việc con&quot; để bắt đầu.
                             </p>
                         )}
                     </div>

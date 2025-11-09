@@ -364,7 +364,7 @@ export async function rename(payload) {
             assert(isOwner || isMgr, 'Không có quyền đổi tên', 'FORBIDDEN', 403);
 
             if (att.driveFileId) await renameDriveFile({ driveFileId: att.driveFileId, name: input.name });
-            const updated = await renameAttachment(input.attachmentId, input.name);
+            const updated = await renameAttachment(input.attachmentId, input.name, { byUserId: uid });
 
             await logActivity({
                 actor: uid,
@@ -453,7 +453,8 @@ export async function move(payload) {
             const updated = await moveAttachment(
                 input.attachmentId,
                 { scope: input.to.scope, projectId: input.to.projectId, taskId: input.to.taskId ?? null },
-                parentId
+                parentId,
+                { byUserId: uid }
             );
 
             await logActivity({
@@ -511,7 +512,7 @@ export async function remove(payload) {
             if (hard && att.driveFileId) {
                 await deleteDriveFile({ driveFileId: att.driveFileId, hard: true });
             }
-            const result = await deleteAttachment(input.attachmentId, { hard });
+            const result = await deleteAttachment(input.attachmentId, { hard, byUserId: uid });
 
             await logActivity({
                 actor: uid,

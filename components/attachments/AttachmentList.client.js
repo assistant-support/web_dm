@@ -1,7 +1,7 @@
 // components/attachments/AttachmentList.client.js
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Paperclip, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import AttachmentItem from './AttachmentItem.client';
 import { AttachmentUpload } from './AttachmentUpload.client';
@@ -24,37 +24,72 @@ export default function AttachmentList({
     const [showUpload, setShowUpload] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
     
-    const loadAttachments = async () => {
+    const loadAttachments = useCallback(async () => {
         try {
             setLoading(true);
             setError('');
+
+            console.log('[AttachmentList] Loading attachments:', { scope, taskId, projectId });
 
             const result = scope === 'task'
                 ? await listTaskAttachments(taskId)
                 : await listProjectAttachments(projectId);
 
-            console.log('[AttachmentList] API Response:', result);
+            console.log('[AttachmentList] Raw API Response:', result);
 
-            // Extract data array from response
-            const attachmentsData = result?.data || result || [];
-            console.log('[AttachmentList] Attachments Data:', attachmentsData);
+            // Handle different response structures
+            let attachmentsData = [];
             
-            setAttachments(Array.isArray(attachmentsData) ? attachmentsData : []);
+            if (result?.ok === true && result?.data) {
+                // Response: { ok: true, data: [...] }
+                attachmentsData = result.data;
+            } else if (result?.ok === false) {
+                // Response: { ok: false, message: '...' }
+                throw new Error(result.message || 'Không thể tải danh sách tệp');
+            } else if (Array.isArray(result)) {
+                // Direct array response
+                attachmentsData = result;
+            } else if (result) {
+                // Other structure - try to extract data
+                attachmentsData = result;
+            }
+
+            console.log('[AttachmentList] Extracted attachments:', attachmentsData);
+            console.log('[AttachmentList] Attachments count:', Array.isArray(attachmentsData) ? attachmentsData.length : 0);
+            
+            // Validate and set
+            if (!Array.isArray(attachmentsData)) {
+                console.warn('[AttachmentList] Data is not an array:', typeof attachmentsData, attachmentsData);
+                attachmentsData = [];
+            }
+
+            // Log each attachment for debugging
+            attachmentsData.forEach((att, idx) => {
+                console.log(`[AttachmentList] Attachment ${idx}:`, {
+                    id: att.id || att._id,
+                    name: att.name || att.driveName,
+                    hasId: !!(att.id || att._id),
+                    keys: Object.keys(att)
+                });
+            });
+            
+            setAttachments(attachmentsData);
         } catch (err) {
-            console.error('Error loading attachments:', err);
-            setError('Không thể tải danh sách tệp');
+            console.error('[AttachmentList] Error loading attachments:', err);
+            console.error('[AttachmentList] Error stack:', err.stack);
+            setError(err.message || 'Không thể tải danh sách tệp');
             setAttachments([]); // Set empty array on error
         } finally {
             setLoading(false);
         }
-    };
+    }, [projectId, scope, taskId]);
 
     useEffect(() => {
         loadAttachments();
-    }, [taskId, projectId, scope]);
+    }, [loadAttachments]);
 
-    const handleUploaded = (newAttachment) => {
-        console.log('[AttachmentList] File uploaded:', newAttachment);
+    const handleUploaded = (uploadResult) => {
+        console.log('[AttachmentList] Files uploaded:', uploadResult);
         // Reload the list to get fresh data from server
         loadAttachments();
         setShowUpload(false);
@@ -147,20 +182,29 @@ export default function AttachmentList({
                                 <Paperclip className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                                 <p>Chưa có tệp đính kèm</p>
                                 <p className="text-sm mt-1">
-                                    Click "Thêm tệp" để tải lên tệp đầu tiên
+                                    Click &quot;Thêm tệp&quot; để tải lên tệp đầu tiên
                                 </p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {attachments.map((attachment) => (
-                                    <AttachmentItem
-                                        key={attachment.id}
-                                        attachment={attachment}
-                                        canDelete={canDeleteAttachment(attachment)}
-                                        onDeleted={handleDeleted}
-                                        viewMode="grid"
-                                    />
-                                ))}
+                                {attachments.map((attachment, index) => {
+                                    const attachmentId = attachment.id || attachment._id || `attachment-${index}`;
+                                    
+                                    // Debug log
+                                    if (!attachment.id && !attachment._id) {
+                                        console.warn('[AttachmentList] Missing ID for attachment:', attachment);
+                                    }
+                                    
+                                    return (
+                                        <AttachmentItem
+                                            key={attachmentId}
+                                            attachment={attachment}
+                                            canDelete={canDeleteAttachment(attachment)}
+                                            onDeleted={handleDeleted}
+                                            viewMode="grid"
+                                        />
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

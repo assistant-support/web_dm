@@ -11,8 +11,8 @@ export default function TaskFilters({ assignees, filters }) {
     const params = useSearchParams()
 
     useEffect(() => {
-        setLocal(filters)
-    }, [JSON.stringify(filters)])
+        setLocal({ ...filters })
+    }, [filters])
 
     const onSubmit = (e) => {
         e.preventDefault()

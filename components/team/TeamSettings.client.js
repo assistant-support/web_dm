@@ -217,7 +217,7 @@ export default function TeamSettings({ team, currentUserId, isManager }) {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Nhập tên nhóm "<span className="font-bold">{team.name}</span>" để xác nhận:
+                                    Nhập tên nhóm &quot;<span className="font-bold">{team.name}</span>&quot; để xác nhận:
                                 </label>
                                 <input
                                     type="text"
