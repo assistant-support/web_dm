@@ -14,6 +14,7 @@ import Button from '@/components/ui/button';
 import SubtaskListSimple from './SubtaskListSimple.client';
 import Dropdown from '@/components/ui/dropdown';
 import { getWorkTypeByCode, getWorkTypeColor } from '@/data/workTypes/constants';
+import { formatTaskPoints } from '@/lib/points';
 import { TASK_STATUS } from '@/model/common/enums';
 import UserInfoPopup from './UserInfoPopup.client';
 import Avatar from '@/components/ui/avatar';
@@ -485,7 +486,7 @@ export default function TaskItem({
                                 )}
                             </div>
                             <div className="hidden lg:flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap" title={`Hạn: ${fmt(task.plannedDueAt)}`}><CalendarDays className="h-4 w-4 text-gray-400" /><span>{fmt(task.plannedDueAt)}</span></div>
-                            <div className="hidden sm:block text-xs font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded border border-gray-200">{task.finalPoints ?? task.initialPoints ?? 0}đ</div>
+                            <div className="hidden sm:block text-xs font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded border border-gray-200">{formatTaskPoints(task)}</div>
                             {/* Toggle Subtasks Button */}
                             {hasSubtasks && (
                                 <button

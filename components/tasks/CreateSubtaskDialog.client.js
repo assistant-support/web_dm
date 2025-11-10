@@ -15,6 +15,18 @@ const PRIORITY_OPTIONS = [
     { value: 'urgent', label: 'Khẩn cấp' },
 ];
 
+const MS_IN_DAY = 24 * 60 * 60 * 1000;
+
+const computeDefaultDateRange = () => {
+    const now = Date.now();
+    const toISODate = (timestamp) => new Date(timestamp).toISOString().split('T')[0];
+
+    return {
+        today: toISODate(now),
+        tomorrow: toISODate(now + MS_IN_DAY),
+    };
+};
+
 export default function CreateSubtaskDialog({
     open,
     onClose,
@@ -42,12 +54,9 @@ export default function CreateSubtaskDialog({
     
     // Calculate dates only on client side to avoid hydration mismatch
     const [defaultDates, setDefaultDates] = useState({ today: '', tomorrow: '' });
-    
+
     useEffect(() => {
-        const now = Date.now();
-        const today = new Date(now).toISOString().split('T')[0];
-        const tomorrow = new Date(now + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        setDefaultDates({ today, tomorrow });
+        setDefaultDates(computeDefaultDateRange());
     }, []);
     
     const [formData, setFormData] = useState({
@@ -93,7 +102,8 @@ export default function CreateSubtaskDialog({
         setIsSubmitting(true);
         setError('');
 
-        await run(async () => {
+        try {
+            await run(async () => {
             if (!formData.title.trim()) {
                 throw new Error('Tiêu đề subtask là bắt buộc');
             }
@@ -118,48 +128,50 @@ export default function CreateSubtaskDialog({
                 initialPoints: Number(formData.initialPoints) || 0,
                 estimatedHours: formData.estimatedHours ? Number(formData.estimatedHours) : null,
             };
-            console.log(parentTask);
-            
-            const result = await createSubtask(parentTask._id, payload); // Use parentTaskId directly
-            if (!result.ok) {
-                throw result;
-            }
-
-            return result.data;
-
-        }, {
-            notify: 'none',
-            successMessage: 'Tạo subtask thành công!',
-            onSuccess: (data) => {
-                setFormData({
-                    title: '',
-                    description: '',
-                    priority: parentTask?.priority || 'normal',
-                    assignee: '',
-                    workType: parentTask?.workType || '',
-                    platforms: parentTask?.platforms || [],
-                    plannedStartAt: today, // Reset về hôm nay
-                    plannedDueAt: tomorrow, // Reset về ngày mai
-                    tags: '',
-                    initialPoints: 0,
-                    estimatedHours: '',
-                });
-
-                if (onSuccess) {
-                    onSuccess(data);
-                } else {
-                    router.refresh();
+                const result = await createSubtask(parentTask._id, payload);
+                if (!result.ok) {
+                    throw result;
                 }
 
-                onClose();
-            },
-            onError: (err) => {
-                setError(err.message || 'Có lỗi không mong muốn xảy ra');
-                console.error('Lỗi khi tạo subtask:', err.message);
-            }
-        });
+                return result.data;
 
-        setIsSubmitting(false);
+            }, {
+                notify: 'none',
+                successMessage: 'Tạo subtask thành công!',
+                onSuccess: (data) => {
+                    const refreshedDates = computeDefaultDateRange();
+                    setDefaultDates(refreshedDates);
+
+                    setFormData({
+                        title: '',
+                        description: '',
+                        priority: parentTask?.priority || 'normal',
+                        assignee: '',
+                        workType: parentTask?.workType || '',
+                        platforms: parentTask?.platforms || [],
+                        plannedStartAt: refreshedDates.today,
+                        plannedDueAt: refreshedDates.tomorrow,
+                        tags: '',
+                        initialPoints: 0,
+                        estimatedHours: '',
+                    });
+
+                    if (onSuccess) {
+                        onSuccess(data);
+                    } else {
+                        router.refresh();
+                    }
+
+                    onClose();
+                },
+                onError: (err) => {
+                    setError(err.message || 'Có lỗi không mong muốn xảy ra');
+                    console.error('Lỗi khi tạo subtask:', err.message);
+                }
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const parentPoints = parentTask?.initialPoints || 0;

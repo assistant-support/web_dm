@@ -1,15 +1,26 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, Download, Pencil, Trash2 } from 'lucide-react';
+import { Eye, Download, Copy, Check, Pencil, Trash2 } from 'lucide-react';
 import FilePreviewModal from '@/components/attachments/FilePreviewModal.client';
 import { renameAttachmentAction, deleteAttachmentAction } from './actions.js';
+import { getGoogleDriveShareableLink } from '@/lib/drive-utils.js';
 
 export default function FileActions({ file }) {
     const router = useRouter();
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isPending, startTransition] = useTransition();
+    const [copied, setCopied] = useState(false);
+    const copyResetRef = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (copyResetRef.current) {
+                window.clearTimeout(copyResetRef.current);
+            }
+        };
+    }, []);
 
     const handlePreview = () => setIsPreviewOpen(true);
 
@@ -45,6 +56,35 @@ export default function FileActions({ file }) {
         });
     };
 
+    const handleCopyLink = async () => {
+        const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
+        const shareLink = getGoogleDriveShareableLink(file, { origin });
+        if (!shareLink) {
+            window.alert('Không tìm thấy link Drive để sao chép.');
+            return;
+        }
+
+        try {
+            const nav = typeof navigator !== 'undefined' ? navigator : null;
+            const canUseClipboard = !!nav?.clipboard?.writeText;
+
+            if (!canUseClipboard) {
+                window.prompt('Sao chép link Drive', shareLink);
+                return;
+            }
+
+            await nav.clipboard.writeText(shareLink);
+            setCopied(true);
+            if (copyResetRef.current) {
+                window.clearTimeout(copyResetRef.current);
+            }
+            copyResetRef.current = window.setTimeout(() => setCopied(false), 2000);
+        } catch (error) {
+            console.error('Copy Drive link failed', error);
+            window.alert('Không thể sao chép link. Vui lòng thử lại.');
+        }
+    };
+
     return (
         <>
             <div className="flex items-center gap-2">
@@ -63,6 +103,16 @@ export default function FileActions({ file }) {
                 >
                     <Download className="h-4 w-4" />
                 </a>
+                <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className={`rounded-md border border-gray-200 bg-white p-2 text-gray-600 transition hover:bg-gray-50 ${
+                        copied ? 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100' : ''
+                    }`}
+                    title={copied ? 'Đã sao chép' : 'Sao chép link'}
+                >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
                 {file.permissions?.canRename && (
                     <button
                         type="button"

@@ -115,22 +115,26 @@ export const getBatchMemberTaskStats = cache(
             tags.project(projectId),
             tags.tasks(),
             'project-member-task-stats'
-        ]
+        ].filter(Boolean)
     }
 );
 
 // Export wrapped version with unstable_cache
 export const getCachedBatchMemberTaskStats = (projectId, userIds) => {
+    const tagList = tags.sanitizeTags([
+        tags.project(projectId),
+        tags.tasks(),
+        'project-member-task-stats'
+    ]);
+
+    const options = { revalidate: 3 };
+    if (tagList.length > 0) {
+        options.tags = tagList;
+    }
+
     return unstable_cache(
         async () => _getBatchMemberTaskStats(projectId, userIds),
         [`project-member-task-stats-${projectId}`],
-        {
-            revalidate: 3,
-            tags: [
-                tags.project(projectId),
-                tags.tasks(),
-                'project-member-task-stats'
-            ]
-        }
+        options
     )();
 };

@@ -133,10 +133,12 @@ async function _getProjectAnalytics(projectId) {
 export const getProjectAnalytics = cache(
     _getProjectAnalytics,
     ['project-analytics'],
-    {
-        tags: ['project-analytics'],
-        revalidate: 3 // Revalidate every 3 seconds for real-time data
-    }
+    (() => {
+        const tagsList = tags.sanitizeTags(['project-analytics']);
+        return tagsList.length
+            ? { tags: tagsList, revalidate: 3 }
+            : { revalidate: 3 };
+    })()
 );
 
 /**
@@ -219,8 +221,10 @@ async function _getProjectMemberStats(projectId, memberIds) {
 export const getProjectMemberStats = cache(
     _getProjectMemberStats,
     ['project-member-stats'],
-    {
-        tags: ['project-member-stats', 'tasks'],
-        revalidate: 3 // Revalidate every 3 seconds for real-time data
-    }
+    (() => {
+        const tagsList = tags.sanitizeTags(['project-member-stats', 'tasks']);
+        return tagsList.length
+            ? { tags: tagsList, revalidate: 3 }
+            : { revalidate: 3 };
+    })()
 );

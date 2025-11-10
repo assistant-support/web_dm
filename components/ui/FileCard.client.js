@@ -3,12 +3,12 @@
 
 'use client';
 
-import { useState } from 'react';
-import { Download, Eye, Trash2, MoreVertical, ExternalLink } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, Eye, Trash2, ExternalLink, Copy, Check } from 'lucide-react';
 import FileThumbnail from './FileThumbnail.client';
-import { getCompleteFileConfig } from '@/lib/file-display';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { getGoogleDriveShareableLink } from '@/lib/drive-utils.js';
 
 /**
  * FileCard Component
@@ -23,18 +23,28 @@ import { vi } from 'date-fns/locale';
  * @param {function} props.onSelect - Callback when file selected
  * @returns {JSX.Element}
  */
-export default function FileCard({ 
-    file, 
-    onPreview, 
+export default function FileCard({
+    file,
+    displayConfig,
+    onPreview,
     onDelete,
     canDelete = false,
     selected = false,
-    onSelect
+    onSelect,
 }) {
     const [showActions, setShowActions] = useState(false);
-    
-    const config = getCompleteFileConfig(file);
-    
+    const [copied, setCopied] = useState(false);
+    const copyResetRef = useRef(null);
+    const config = displayConfig ?? file?.displayConfig ?? buildFallbackConfig(file);
+
+    useEffect(() => {
+        return () => {
+            if (copyResetRef.current) {
+                window.clearTimeout(copyResetRef.current);
+            }
+        };
+    }, []);
+
     const handleCardClick = () => {
         if (onPreview) {
             onPreview(file);
@@ -59,6 +69,35 @@ export default function FileCard({
         e.stopPropagation();
         if (config.urls.view) {
             window.open(config.urls.view, '_blank');
+        }
+    };
+
+    const handleCopyLink = async (e) => {
+        e.stopPropagation();
+        const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
+        const shareLink = getGoogleDriveShareableLink({ ...file, displayConfig: config }, { origin });
+        if (!shareLink) {
+            window.alert('Không tìm thấy link Drive để sao chép.');
+            return;
+        }
+
+        try {
+            const nav = typeof navigator !== 'undefined' ? navigator : null;
+            const canUseClipboard = !!nav?.clipboard?.writeText;
+
+            if (!canUseClipboard) {
+                window.prompt('Sao chép link Drive', shareLink);
+                return;
+            }
+            await nav.clipboard.writeText(shareLink);
+            setCopied(true);
+            if (copyResetRef.current) {
+                window.clearTimeout(copyResetRef.current);
+            }
+            copyResetRef.current = window.setTimeout(() => setCopied(false), 2000);
+        } catch (error) {
+            console.error('Copy Drive link failed', error);
+            window.alert('Không thể sao chép link. Vui lòng thử lại.');
         }
     };
     
@@ -96,6 +135,21 @@ export default function FileCard({
                         title="Xem trên Drive"
                     >
                         <ExternalLink className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <button
+                        onClick={handleCopyLink}
+                        className={`p-1.5 rounded-md shadow-sm border transition ${
+                            copied
+                                ? 'bg-green-50 border-green-200 hover:bg-green-100 text-green-600'
+                                : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-600'
+                        }`}
+                        title={copied ? 'Đã sao chép' : 'Sao chép link'}
+                    >
+                        {copied ? (
+                            <Check className="w-3.5 h-3.5" />
+                        ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                        )}
                     </button>
                     {file.webContentLink && (
                         <button
@@ -183,4 +237,32 @@ export default function FileCard({
             )}
         </div>
     );
+}
+
+function buildFallbackConfig(file) {
+    const size = typeof file?.size === 'number' ? file.size : 0;
+    return {
+        category: 'OTHER',
+        label: file?.mimeType ?? 'Tập tin',
+        formattedSize: formatBytes(size),
+        urls: {
+            download: file?.webContentLink ?? null,
+            view: file?.webViewLink ?? null,
+        },
+        colors: {
+            text: 'text-gray-600',
+            bg: 'bg-gray-50',
+            border: 'border-gray-200',
+            hover: 'hover:bg-gray-100',
+        },
+        canPreview: false,
+    };
+}
+
+function formatBytes(bytes = 0) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, exponent);
+    return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[exponent]}`;
 }

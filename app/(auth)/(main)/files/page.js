@@ -10,7 +10,7 @@ export const metadata = {
     description: 'Quản lý tất cả file đính kèm trong dự án và công việc',
 };
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
 
 export default async function FilesPage({ searchParams }) {
     const currentUser = await getCurrentUser();
@@ -35,28 +35,32 @@ export default async function FilesPage({ searchParams }) {
     const view = params.view || 'grid';
     const limit = 50;
 
-    const [filesResult, statsResult] = await Promise.all([
-        listAttachments({
-            scope,
-            projectId,
-            taskId,
-            kind,
-            search,
-            sortBy,
-            sortOrder,
-            page,
-            limit,
-        }),
-        getAttachmentStats(),
-    ]);
-    const files = filesResult.ok ? filesResult.data : { items: [], total: 0, page: 1, pages: 1 };
-    const stats = statsResult.ok ? statsResult.data : { byKind: [], byProject: [], total: 0, recentUploads: 0 };
+    const filesFallback = { items: [], total: 0, page: 1, pages: 1, limit };
+    const statsFallback = { byKind: [], byProject: [], total: 0, recentUploads: 0 };
+
+    const filesPromise = listAttachments({
+        scope,
+        projectId,
+        taskId,
+        kind,
+        search,
+        sortBy,
+        sortOrder,
+        page,
+        limit,
+    })
+        .then((result) => (result.ok ? result.data : filesFallback))
+        .catch(() => filesFallback);
+
+    const statsPromise = getAttachmentStats()
+        .then((result) => (result.ok ? result.data : statsFallback))
+        .catch(() => statsFallback);
 
     return (
         <div className="h-full w-full overflow-hidden">
             <FilesManager
-                initialFiles={files}
-                stats={stats}
+                initialFilesPromise={filesPromise}
+                statsPromise={statsPromise}
                 currentUser={currentUser}
                 initialFilters={{
                     scope,

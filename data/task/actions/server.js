@@ -16,6 +16,8 @@ import { TASK_STATUS, TASK_SCOPE } from '@/model/common/enums.js';
 import { asPlainTask } from '@/lib/serialize.js';
 import { revalidatePath } from 'next/cache';
 import { sendZalo } from '@/lib/noti';
+import { buildTaskUrl } from '@/lib/url.js';
+import { resolveMonthlyDriveFolderId } from '@/lib/drive-utils.js';
 /**
  * List tasks by project
  */
@@ -511,28 +513,11 @@ export async function createTask(projectId, payload) {
         // Create Google Drive folder if requested
         if (payload.createTaskFolder) {
             try {
-                // Xác định thư mục tháng dựa trên plannedStartAt
-                let targetFolderId = null;
-                
-                if (task.plannedStartAt && project.monthlyDriveFolders && project.monthlyDriveFolders.length > 0) {
-                    // Lấy năm và tháng từ plannedStartAt
-                    const startDate = new Date(task.plannedStartAt);
-                    const year = startDate.getFullYear();
-                    const month = startDate.getMonth() + 1;
-                    
-                    const monthFolder = project.monthlyDriveFolders.find(
-                        f => f.year === year && f.month === month
-                    );
-                    
-                    if (monthFolder && monthFolder.folderId) {
-                        targetFolderId = monthFolder.folderId;
-                    } else {
-                        targetFolderId = project.driveFolderId;
-                    }
-                } else {
-                    targetFolderId = project.driveFolderId;
-                }
-                
+                const targetFolderId =
+                    resolveMonthlyDriveFolderId(project, task.plannedStartAt) ||
+                    project.driveFolderId ||
+                    null;
+
                 if (targetFolderId) {
                     const { createTaskFolder } = await import('@/lib/drive.js');
                     const folderResult = await createTaskFolder(
@@ -559,7 +544,7 @@ export async function createTask(projectId, payload) {
         if (shouldNotifyAssignee && payload.assignee) {
             try {
                 // Ensure task details are available for the message
-                const taskLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/tasks/${task._id}`;
+                const taskLink = buildTaskUrl(task._id);
                 const creatorName = user.name || user.email || 'Quản lý'; // Get creator's name/email
 
                 const zaloMessage = `🔔 Công việc mới được giao

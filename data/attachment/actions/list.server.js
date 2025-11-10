@@ -5,6 +5,7 @@
 
 import mongoose from 'mongoose';
 import { randomUUID } from 'node:crypto';
+import { cache } from 'react';
 import { connectDB } from '@/lib/db.js';
 import { runAction } from '@/lib/action-utils.js';
 import Attachment from '@/model/attachment.model.js';
@@ -17,7 +18,11 @@ import {
     isTeamManager,
 } from '@/lib/permissions.js';
 import { getUsersDisplayInfo } from '@/lib/user-display.js';
-import { getFileExtension, canPreviewInBrowser } from '@/lib/file-display.js';
+import {
+    getFileExtension,
+    canPreviewInBrowser,
+    getCompleteFileConfig,
+} from '@/lib/file-display.js';
 import { getFileMeta } from '@/lib/drive.js';
 import { getRuntimeCache, setRuntimeCache } from '@/lib/runtime-cache.js';
 
@@ -102,13 +107,26 @@ export async function listAttachments(params = {}) {
             .sort(sort)
             .skip(skip)
             .limit(limit)
-            .populate({
-                path: 'project',
-                select: 'name team members',
-            })
-            .populate({
-                path: 'task',
-                select: 'title parentTask scope project',
+            .select({
+                driveName: 1,
+                mimeType: 1,
+                size: 1,
+                kind: 1,
+                label: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                deletedAt: 1,
+                author: 1,
+                lastModifiedBy: 1,
+                deletedBy: 1,
+                project: 1,
+                task: 1,
+                publicToken: 1,
+                driveFileId: 1,
+                storage: 1,
+                driveFolderId: 1,
+                webViewLink: 1,
+                webContentLink: 1,
             })
             .lean();
 
@@ -123,7 +141,8 @@ export async function listAttachments(params = {}) {
 
         const tokenUpdates = [];
         const userIds = new Set();
-        const teamIds = new Set();
+        const projectIds = new Set();
+        const taskIds = new Set();
 
         for (const item of items) {
             if (!item.publicToken) {
@@ -131,8 +150,8 @@ export async function listAttachments(params = {}) {
                 tokenUpdates.push(
                     Attachment.updateOne(
                         { _id: item._id },
-                        { $set: { publicToken: newToken } }
-                    )
+                        { $set: { publicToken: newToken } },
+                    ),
                 );
                 item.publicToken = newToken;
             }
@@ -140,11 +159,32 @@ export async function listAttachments(params = {}) {
             if (item.author) userIds.add(String(item.author));
             if (item.lastModifiedBy) userIds.add(String(item.lastModifiedBy));
             if (item.deletedBy) userIds.add(String(item.deletedBy));
-            if (item.project?.team) teamIds.add(String(item.project.team));
+            if (item.project) projectIds.add(String(item.project));
+            if (item.task) taskIds.add(String(item.task));
         }
 
         if (tokenUpdates.length) {
             await Promise.all(tokenUpdates);
+        }
+
+        await hydrateProjects(Array.from(projectIds), projectMap);
+        const taskMap = await hydrateTasks(Array.from(taskIds));
+
+        const extraProjectIdsFromTasks = new Set();
+        for (const task of taskMap.values()) {
+            if (task.project) {
+                extraProjectIdsFromTasks.add(String(task.project));
+            }
+        }
+
+        await hydrateProjects(Array.from(extraProjectIdsFromTasks), projectMap);
+
+        const teamIds = new Set();
+        for (const projectId of new Set([...projectIds, ...extraProjectIdsFromTasks])) {
+            const project = projectMap.get(String(projectId));
+            if (project?.team) {
+                teamIds.add(String(project.team));
+            }
         }
 
         const [userDisplayMap, teamDisplayMap] = await Promise.all([
@@ -161,7 +201,10 @@ export async function listAttachments(params = {}) {
                 userDisplayMap,
                 teamDisplayMap,
                 managerTeamIds,
-            })
+                project: item.project ? projectMap.get(String(item.project)) || null : null,
+                task: item.task ? taskMap.get(String(item.task)) || null : null,
+                taskMap,
+            }),
         );
 
         const pages = Math.ceil(total / limit);
@@ -182,10 +225,13 @@ async function warmDrivePreviews(items = []) {
     if (!items.length) return;
 
     const candidates = items
-            .filter((item) =>
+        .filter(
+            (item) =>
                 item?.driveFileId &&
-                (item.kind && item.kind !== 'other' || canPreviewInBrowser(item.mimeType)))
-            .slice(0, 6);
+                ((item.kind && item.kind !== 'other') ||
+                    canPreviewInBrowser(item.mimeType)),
+        )
+        .slice(0, 6);
 
     const tasks = candidates
         .map((item) => {
@@ -328,10 +374,8 @@ async function buildScopeFilters({
             return { type: 'empty' };
         }
 
-        let project = projectMap.get(String(projectId));
-        if (!project) {
-            project = await Project.findById(projectId).lean();
-        }
+        await hydrateProjects([String(projectId)], projectMap);
+        const project = projectMap.get(String(projectId));
         if (!project) {
             return { type: 'empty' };
         }
@@ -373,11 +417,17 @@ async function buildScopeFilters({
         if (!taskId) {
             return { type: 'empty' };
         }
-        const task = await Task.findById(taskId).populate('project').lean();
+        const taskMap = await hydrateTasks([String(taskId)]);
+        const task = taskMap.get(String(taskId));
         if (!task) {
             return { type: 'empty' };
         }
-        if (!canViewTask(task, uid)) {
+        await hydrateProjects(task.project ? [String(task.project)] : [], projectMap);
+        const taskWithProject = {
+            ...task,
+            project: task.project ? projectMap.get(String(task.project)) || null : null,
+        };
+        if (!canViewTask(taskWithProject, uid)) {
             return { type: 'empty' };
         }
         return {
@@ -450,27 +500,43 @@ async function resolveTeamDisplay(teamIds, knownTeams = []) {
     return map;
 }
 
-function serializeAttachmentItem({ item, uid, userDisplayMap, teamDisplayMap, managerTeamIds }) {
-    const project = item.project
+function serializeAttachmentItem({
+    item,
+    uid,
+    userDisplayMap,
+    teamDisplayMap,
+    managerTeamIds,
+    project,
+    task,
+    taskMap,
+}) {
+    const projectDoc = project || null;
+    const normalizedProject = projectDoc
         ? {
-            id: String(item.project._id),
-            name: item.project.name || null,
-            teamId: item.project.team ? String(item.project.team) : null,
-        }
+              id: String(projectDoc._id),
+              name: projectDoc.name || null,
+              teamId: projectDoc.team ? String(projectDoc.team) : null,
+          }
         : null;
 
-    const team = project?.teamId
-        ? teamDisplayMap.get(project.teamId) || { id: project.teamId, name: null }
+    const team = normalizedProject?.teamId
+        ? teamDisplayMap.get(normalizedProject.teamId) || {
+              id: normalizedProject.teamId,
+              name: null,
+          }
         : null;
 
-    const task = item.task
+    const taskDoc = task || null;
+    const normalizedTask = taskDoc
         ? {
-            id: String(item.task._id),
-            title: item.task.title || null,
-            parentTaskId: item.task.parentTask ? String(item.task.parentTask) : null,
-            scope: item.task.scope || null,
-        }
+              id: String(taskDoc._id),
+              title: taskDoc.title || null,
+              parentTaskId: taskDoc.parentTask ? String(taskDoc.parentTask) : null,
+              scope: taskDoc.scope || null,
+          }
         : null;
+
+    const taskPath = taskDoc ? resolveTaskPath(taskDoc, taskMap) : [];
 
     const uploadedBy = item.author
         ? normalizeUserDisplay(userDisplayMap.get(String(item.author)))
@@ -483,16 +549,22 @@ function serializeAttachmentItem({ item, uid, userDisplayMap, teamDisplayMap, ma
         : null;
 
     const isOwner = String(item.author) === String(uid);
-    const isTeamMgr = project?.teamId ? managerTeamIds.includes(project.teamId) : false;
+    const isTeamMgr = normalizedProject?.teamId
+        ? managerTeamIds.includes(normalizedProject.teamId)
+        : false;
     const canManage =
-        (item.project ? canManageProject(item.project, uid) : false) || isTeamMgr;
+        (projectDoc ? canManageProject(projectDoc, uid) : false) || isTeamMgr;
 
     const kind = item.kind || 'other';
     const isImageKind = kind === 'image';
 
+    const displayConfig = getCompleteFileConfig(item);
+
     return {
         id: String(item._id),
         name: item.driveName,
+        driveFileId: item.driveFileId || null,
+        driveFolderId: item.driveFolderId || null,
         extension: getFileExtension(item.driveName, item.mimeType),
         mime: item.mimeType,
         size: item.size || 0,
@@ -500,12 +572,15 @@ function serializeAttachmentItem({ item, uid, userDisplayMap, teamDisplayMap, ma
         label: item.label || null,
         createdAt: item.createdAt ? item.createdAt.toISOString() : null,
         updatedAt: item.updatedAt ? item.updatedAt.toISOString() : null,
-        project: project ? { id: project.id, name: project.name } : null,
-        task,
+        project: normalizedProject
+            ? { id: normalizedProject.id, name: normalizedProject.name }
+            : null,
+        task: normalizedTask,
         team: team ? { id: team.id, name: team.name } : null,
         uploadedBy,
         modifiedBy,
         deletedBy,
+        taskPath,
         permissions: {
             canRename: isOwner || canManage,
             canDelete: isOwner || canManage,
@@ -519,8 +594,41 @@ function serializeAttachmentItem({ item, uid, userDisplayMap, teamDisplayMap, ma
                 ? `/api/files/preview/${item.publicToken}?mode=thumbnail`
                 : null,
             downloadUrl: `/api/files/preview/${item.publicToken}?mode=download`,
+            viewUrl: displayConfig?.urls?.view || item.webViewLink || null,
         },
+        webViewLink: item.webViewLink || null,
+        webContentLink: item.webContentLink || null,
+        displayConfig,
     };
+}
+
+function resolveTaskPath(taskDoc, taskMap = new Map()) {
+    const path = [];
+    const visited = new Set();
+    let current = taskDoc;
+
+    while (current) {
+        const currentId = String(current._id ?? current.id ?? '');
+        if (!currentId || visited.has(currentId)) {
+            break;
+        }
+        path.push({ id: currentId, title: current.title || null });
+        visited.add(currentId);
+
+        if (!current.parentTask) {
+            break;
+        }
+
+        const parentId = String(current.parentTask);
+        const parent = taskMap?.get(parentId);
+        if (!parent) {
+            path.push({ id: parentId, title: null });
+            break;
+        }
+        current = parent;
+    }
+
+    return path.reverse();
 }
 
 function normalizeUserDisplay(info) {
@@ -672,19 +780,104 @@ async function resolveProjectNames(projectIds = [], projectMap = new Map()) {
         .map((id) => String(id))
         .filter((id) => !map.has(id));
 
-    if (!missingIds.length) {
-        return map;
-    }
-
-    const docs = await Project.find({
-        _id: { $in: missingIds.map((id) => new mongoose.Types.ObjectId(id)) },
-    })
-        .select('name')
-        .lean();
-
-    for (const doc of docs) {
-        map.set(String(doc._id), doc.name || '');
+    if (missingIds.length) {
+        await hydrateProjects(missingIds, projectMap);
+        for (const id of missingIds) {
+            const project = projectMap.get(id);
+            map.set(id, project?.name || '');
+        }
     }
 
     return map;
+}
+
+const loadProjects = cache(async (ids = []) => {
+    if (!ids.length) {
+        return new Map();
+    }
+
+    const unique = Array.from(new Set(ids.map(String))).sort();
+    const objectIds = unique.map((id) => new mongoose.Types.ObjectId(id));
+
+    const projects = await Project.find({ _id: { $in: objectIds } })
+        .select('name team members')
+        .lean();
+
+    const map = new Map();
+    for (const project of projects) {
+        map.set(String(project._id), project);
+    }
+    return map;
+});
+
+async function hydrateProjects(ids = [], projectMap = new Map()) {
+    const targetMap = projectMap;
+    const missing = Array.from(new Set(ids.map(String))).filter(
+        (id) => !targetMap.has(id),
+    );
+
+    if (!missing.length) {
+        return targetMap;
+    }
+
+    const loaded = await loadProjects(missing.sort());
+    for (const [projectId, project] of loaded.entries()) {
+        targetMap.set(projectId, project);
+    }
+
+    return targetMap;
+}
+
+const loadTasks = cache(async (ids = []) => {
+    if (!ids.length) {
+        return new Map();
+    }
+
+    const unique = Array.from(new Set(ids.map(String))).sort();
+    const objectIds = unique.map((id) => new mongoose.Types.ObjectId(id));
+
+    const tasks = await Task.find({ _id: { $in: objectIds } })
+        .select('title parentTask scope project')
+        .lean();
+
+    const map = new Map();
+    for (const task of tasks) {
+        map.set(String(task._id), task);
+    }
+    return map;
+});
+
+async function hydrateTasks(ids = []) {
+    const queue = Array.from(new Set(ids.map(String)));
+    if (!queue.length) {
+        return new Map();
+    }
+
+    const result = new Map();
+    const processed = new Set();
+
+    while (queue.length) {
+        const batch = queue
+            .splice(0, queue.length)
+            .filter((id) => id && !processed.has(id));
+
+        if (!batch.length) {
+            break;
+        }
+
+        const loaded = await loadTasks(batch.sort());
+        for (const [taskId, task] of loaded.entries()) {
+            result.set(taskId, task);
+            processed.add(taskId);
+
+            if (task?.parentTask) {
+                const parentId = String(task.parentTask);
+                if (parentId && !processed.has(parentId) && !result.has(parentId)) {
+                    queue.push(parentId);
+                }
+            }
+        }
+    }
+
+    return result;
 }

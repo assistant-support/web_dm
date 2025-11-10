@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { TASK_STATUS } from '@/model/common/enums';
-import { Check, X, Clock, AlertCircle } from 'lucide-react';
+import { Check, X, Clock } from 'lucide-react';
 import PointsApprovalModal from '@/components/tasks/PointsApprovalModal.client';
+import { submitTaskApproval } from '@/actions/task-approval.actions';
 
 export default function PendingApprovalSection({ initialTasks, usersMap, projectId }) {
     const router = useRouter();
     const [tasks, setTasks] = useState(initialTasks);
     const [processing, setProcessing] = useState({});
+    const [isMutating, startTransition] = useTransition();
     const [modalState, setModalState] = useState({
         isOpen: false,
         taskId: null,
@@ -28,77 +30,72 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
         });
     };
 
-    const handleApprove = async (points) => {
+    const handleApprove = (points) => {
         const { taskId, isPendingStart } = modalState;
         
         setModalState(prev => ({ ...prev, isOpen: false }));
         setProcessing(prev => ({ ...prev, [taskId]: 'approving' }));
-        
-        try {
-            const response = await fetch(`/api/tasks/${taskId}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'approve',
-                    type: isPendingStart ? 'start' : 'complete',
-                    initialPoints: isPendingStart ? points : undefined,
-                    finalPoints: !isPendingStart ? points : undefined
+        startTransition(() => {
+            submitTaskApproval({
+                taskId,
+                type: isPendingStart ? 'start' : 'complete',
+                approve: true,
+                points,
+            })
+                .then((result) => {
+                    if (result.success) {
+                        setTasks(prev => prev.filter(t => t._id !== taskId));
+                        router.refresh();
+                    } else if (result?.error) {
+                        alert(result.error);
+                    }
                 })
-            });
-
-            if (response.ok) {
-                setTasks(prev => prev.filter(t => t._id !== taskId));
-                router.refresh();
-            } else {
-                const error = await response.json();
-                alert(error.message || 'Có lỗi xảy ra khi duyệt công việc');
-            }
-        } catch (error) {
-            console.error('Error approving task:', error);
-            alert('Có lỗi xảy ra khi duyệt công việc');
-        } finally {
-            setProcessing(prev => {
-                const newState = { ...prev };
-                delete newState[taskId];
-                return newState;
-            });
-        }
+                .catch((error) => {
+                    console.error('Error approving task:', error);
+                    alert('Có lỗi xảy ra khi duyệt công việc');
+                })
+                .finally(() => {
+                    setProcessing(prev => {
+                        const newState = { ...prev };
+                        delete newState[taskId];
+                        return newState;
+                    });
+                });
+        });
     };
 
-    const handleReject = async (taskId, isPendingStart) => {
+    const handleReject = (taskId, isPendingStart) => {
         const reason = prompt('Lý do từ chối (tùy chọn):');
         if (reason === null) return;
 
         setProcessing(prev => ({ ...prev, [taskId]: 'rejecting' }));
-        
-        try {
-            const response = await fetch(`/api/tasks/${taskId}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'reject',
-                    type: isPendingStart ? 'start' : 'complete',
-                    reason: reason || undefined
+        startTransition(() => {
+            submitTaskApproval({
+                taskId,
+                type: isPendingStart ? 'start' : 'complete',
+                approve: false,
+                note: reason || '',
+            })
+                .then((result) => {
+                    if (result.success) {
+                        setTasks(prev => prev.filter(t => t._id !== taskId));
+                        router.refresh();
+                    } else if (result?.error) {
+                        alert(result.error);
+                    }
                 })
-            });
-
-            if (response.ok) {
-                setTasks(prev => prev.filter(t => t._id !== taskId));
-                router.refresh();
-            } else {
-                const error = await response.json();
-                alert(error.message || 'Có lỗi xảy ra khi từ chối công việc');
-            }
-        } catch (error) {
-            console.error('Error rejecting task:', error);
-            alert('Có lỗi xảy ra khi từ chối công việc');
-        } finally {
-            setProcessing(prev => {
-                const newState = { ...prev };
-                delete newState[taskId];
-                return newState;
-            });
-        }
+                .catch((error) => {
+                    console.error('Error rejecting task:', error);
+                    alert('Có lỗi xảy ra khi từ chối công việc');
+                })
+                .finally(() => {
+                    setProcessing(prev => {
+                        const newState = { ...prev };
+                        delete newState[taskId];
+                        return newState;
+                    });
+                });
+        });
     };
 
     if (tasks.length === 0) {
@@ -239,7 +236,7 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                     <button
                                         onClick={() => handleApproveClick(task._id, isPendingStart, task.title, task.requiredPoints)}
-                                        disabled={!!isProcessing}
+                                        disabled={!!isProcessing || isMutating}
                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         {isApproving ? (
@@ -256,7 +253,7 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
                                     </button>
                                     <button
                                         onClick={() => handleReject(task._id, isPendingStart)}
-                                        disabled={!!isProcessing}
+                                        disabled={!!isProcessing || isMutating}
                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
                                         {isRejecting ? (
@@ -286,7 +283,7 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
                 taskName={modalState.taskName}
                 suggestedPoints={modalState.suggestedPoints}
                 type={modalState.isPendingStart ? 'creation' : 'completion'}
-                isSubmitting={processing[modalState.taskId] === 'approving'}
+                isSubmitting={processing[modalState.taskId] === 'approving' || isMutating}
             />
         </div>
     );

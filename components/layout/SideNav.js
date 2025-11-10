@@ -16,6 +16,7 @@ function NavLink({ href, children }) {
     return (
         <Link
             href={href}
+            prefetch
             className={`block rounded-md px-3 py-2 text-sm ${active ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
                 }`}
         >

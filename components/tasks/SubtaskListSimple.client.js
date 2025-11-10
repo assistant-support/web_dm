@@ -16,6 +16,7 @@ import clsx from 'clsx';
 import { getWorkTypeByCode, getWorkTypeColor } from '@/data/workTypes/constants';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 import Dropdown from '@/components/ui/dropdown';
+import { formatTaskPoints } from '@/lib/points';
 
 const getStatusInfo = (status) => {
     switch (status) {
@@ -251,7 +252,7 @@ function SubtaskItem({ subtask, users, currentUserId, canManageSubtask, onStatus
                     </div>
                     
                     <div className="flex-shrink-0 text-xs font-semibold text-gray-700 w-12 text-center px-2 py-1 bg-gray-50 rounded border border-gray-200">
-                        {subtask.finalPoints || subtask.initialPoints || 0}đ
+                        {formatTaskPoints(subtask)}
                     </div>
                 </div>
                 

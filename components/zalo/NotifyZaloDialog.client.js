@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAsyncNotifier } from '@/hooks/loading.hook.js';
 // Correct the import path based on your structure
 import { sendZalo } from '@/lib/noti'; // Assuming zalo-actions.js is in data/appUser
+import { buildTaskUrl } from '@/lib/url.js';
 import DialogComponent from '@/components/ui/dialog';
 // Use the Input/Textarea from form-elements
 import { Textarea } from '@/components/ui/input';
@@ -14,7 +15,7 @@ import { Send, AlertCircle } from 'lucide-react';
  * Tạo tin nhắn mặc định dựa trên bối cảnh
  */
 function getDefaultMessage(task, context, statusInfo, fmtDate) {
-    const taskUrl = typeof window !== 'undefined' ? `${window.location.origin}/tasks/${task._id}` : `/tasks/${task._id}`; // Safer URL generation
+    const taskUrl = buildTaskUrl(task._id);
 
     let contextMessage = '';
     switch (context) {

@@ -47,7 +47,7 @@ export default async function ProjectMembersPage({ params }) {
     const canManage = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
 
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
             {/* Header */}
             <div>
                 <h2 className="text-xl font-semibold text-gray-900">Thành viên dự án</h2>

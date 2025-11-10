@@ -3,8 +3,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { Plus } from 'lucide-react';
 import CreateSubtaskDialog from './CreateSubtaskDialog.client';
 import SubtaskCard from './SubtaskCard.client';
@@ -17,6 +16,7 @@ import {
 } from '@/data/task/actions/subtasks.server';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { reorderSubtasksAction } from '@/app/actions/reorder-subtasks';
 
 /**
  * SubtaskList Component
@@ -31,12 +31,12 @@ export default function SubtaskList({
     currentUserId = '',
     canManage = false 
 }) {
-    const router = useRouter();
     const [subtasks, setSubtasks] = useState([]);
     const [stats, setStats] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [error, setError] = useState('');
+    const [isSavingOrder, startSavingOrder] = useTransition();
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -48,6 +48,7 @@ export default function SubtaskList({
 
     const loadSubtasks = useCallback(async () => {
         setIsLoading(true);
+        setError('');
         try {
             const [subtasksResult, statsResult] = await Promise.all([
                 listSubtasks(parentTaskId),
@@ -62,6 +63,7 @@ export default function SubtaskList({
             }
         } catch (err) {
             console.error('Failed to load subtasks:', err);
+            setError('Không thể tải danh sách subtasks. Vui lòng thử lại.');
         } finally {
             setIsLoading(false);
         }
@@ -71,8 +73,8 @@ export default function SubtaskList({
         loadSubtasks();
     }, [loadSubtasks]);
 
-    const handleSubtaskCreated = (newSubtask) => {
-    loadSubtasks(); // Refresh list
+    const handleSubtaskCreated = () => {
+        loadSubtasks(); // Refresh list
     };
 
     const handleUpdateSubtask = async (subtaskId, updates) => {
@@ -107,12 +109,24 @@ export default function SubtaskList({
         const newIndex = subtasks.findIndex(t => t._id === over.id);
 
         if (oldIndex !== -1 && newIndex !== -1) {
+            const previousState = subtasks;
             const reordered = [...subtasks];
             const [moved] = reordered.splice(oldIndex, 1);
             reordered.splice(newIndex, 0, moved);
             setSubtasks(reordered);
 
-            // TODO: Call reorder API
+            setError('');
+            const orderedIds = reordered.map((item) => item._id);
+
+            startSavingOrder(async () => {
+                try {
+                    await reorderSubtasksAction(parentTaskId, orderedIds);
+                } catch (err) {
+                    console.error('Failed to persist subtask order:', err);
+                    setError('Không thể lưu thứ tự subtask. Vui lòng thử lại.');
+                    setSubtasks(previousState);
+                }
+            });
         }
     };
 
@@ -125,7 +139,7 @@ export default function SubtaskList({
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4" aria-busy={isSavingOrder}>
             {/* Header with stats */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">

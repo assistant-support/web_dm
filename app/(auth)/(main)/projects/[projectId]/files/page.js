@@ -20,38 +20,38 @@ export default async function ProjectFilesPage({ params, searchParams }) {
     const sortBy = query.sortBy || 'createdAt';
     const sortOrder = query.sortOrder || 'desc';
     const page = Number.parseInt(query.page, 10) || 1;
-    const view = query.view === 'list' ? 'list' : 'grid';
+    const allowedViews = new Set(['grid', 'list', 'drive']);
+    const view = allowedViews.has(query.view) ? query.view : 'grid';
     const limit = 50;
 
-    const [filesResult, statsResult] = await Promise.all([
-        listAttachments({
-            scope: 'project',
-            projectId,
-            kind,
-            search,
-            sortBy,
-            sortOrder,
-            page,
-            limit,
-        }),
-        getAttachmentStats({
-            scope: 'project',
-            projectId,
-        }),
-    ]);
+    const filesFallback = { items: [], total: 0, page: 1, pages: 1, limit };
+    const statsFallback = { byKind: [], byProject: [], total: 0, recentUploads: 0 };
 
-    const files = filesResult.ok
-        ? filesResult.data
-        : { items: [], total: 0, page: 1, pages: 1, limit };
-    const stats = statsResult.ok
-        ? statsResult.data
-        : { byKind: [], byProject: [], total: 0, recentUploads: 0 };
+    const filesPromise = listAttachments({
+        scope: 'project',
+        projectId,
+        kind,
+        search,
+        sortBy,
+        sortOrder,
+        page,
+        limit,
+    })
+        .then((result) => (result.ok ? result.data : filesFallback))
+        .catch(() => filesFallback);
+
+    const statsPromise = getAttachmentStats({
+        scope: 'project',
+        projectId,
+    })
+        .then((result) => (result.ok ? result.data : statsFallback))
+        .catch(() => statsFallback);
 
     return (
-        <div className="h-full w-full overflow-hidden">
+        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
             <FilesManager
-                initialFiles={files}
-                stats={stats}
+                initialFilesPromise={filesPromise}
+                statsPromise={statsPromise}
                 currentUser={currentUser}
                 initialFilters={{
                     scope: 'project',

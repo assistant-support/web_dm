@@ -5,7 +5,7 @@
 
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
-import { canManageProject } from '@/lib/permissions.js';
+import { canManageProject, canViewProject } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import { notifyEvent } from '@/lib/noti.js';
 import * as tags from '@/data/_shared/tags.js';
@@ -169,10 +169,30 @@ export async function removeCollaboratorFromTask(taskId, userId) {
 export async function listTaskCollaborators(taskId) {
     await connectDB();
     return runAction(async ({ user }) => {
+        const uid = user.externalUserId;
+
         const task = await Task.findById(taskId).lean();
         assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
         
-        // TODO: Check permission - user phải có quyền xem task
+        const userId = String(uid);
+        const watchers = Array.isArray(task.watchers) ? task.watchers.map(String) : [];
+        const collaborators = Array.isArray(task.collaborators) ? task.collaborators : [];
+        const isCreator = task.createdBy && String(task.createdBy) === userId;
+        const isAssignee = task.assignee && String(task.assignee) === userId;
+        const isWatcher = watchers.includes(userId);
+        const isCollaborator = collaborators.some((c) => String(c.userId) === userId && !!c.acceptedAt);
+        const isPublicPublished = task.scope === 'public' && task.public?.published;
+
+        let canView = isCreator || isAssignee || isWatcher || isCollaborator || isPublicPublished;
+
+        if (!canView && task.project) {
+            const project = await Project.findById(task.project).select({ members: 1 }).lean();
+            if (project) {
+                canView = canViewProject(project, userId);
+            }
+        }
+
+        assert(canView, 'Bạn không có quyền xem danh sách cộng tác viên của task này', 'FORBIDDEN', 403);
         
         return (task.collaborators || []).map(c => ({
             userId: String(c.userId),

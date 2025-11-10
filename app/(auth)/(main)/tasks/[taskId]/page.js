@@ -18,7 +18,7 @@ const getPlatforms = async () => Promise.resolve([]);
 // Components MỚI
 import TaskHeader from './ui/TaskHeader.client';
 import TaskMainContent from './ui/TaskMainContent.client';
-import TaskSidebar from './ui/TaskSidebar.client';
+import TaskSidebar from './ui/TaskSidebar';
 import { AlertTriangle } from 'lucide-react';
 
 // Force dynamic rendering

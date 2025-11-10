@@ -30,6 +30,7 @@ import Avatar from '@/components/ui/avatar';
 import { driveImage } from '@/functions';
 import Badge from '@/components/ui/badge';
 import UserDisplay from '@/components/ui/user-display';
+import { formatTaskPoints } from '@/lib/points';
 
 // Components Task Specific
 import CommentList from '@/components/comments/CommentList.client';
@@ -459,7 +460,7 @@ export default function TaskDetail({
                                 <MetadataItem icon={BarChart3} label="Độ ưu tiên" iconClassName={priorityInfo.color}><span className={priorityInfo.color}>{priorityInfo.label}</span></MetadataItem>
                                 <MetadataItem icon={CalendarDays} label="Hạn chót">{fmt(task.plannedDueAt)}</MetadataItem>
                                 <MetadataItem icon={CheckCircle2} label="Ngày hoàn thành" iconClassName="text-green-600">{fmt(task.completedAt)}</MetadataItem>
-                                <MetadataItem icon={Circle} label="Điểm">{task.finalPoints ?? task.initialPoints ?? 0}đ</MetadataItem>
+                                <MetadataItem icon={Circle} label="Điểm">{formatTaskPoints(task)}</MetadataItem>
                                 <div className="pt-3 pb-3 text-xs text-gray-500 space-y-1">
                                     <div><span className="font-medium">Tạo lúc:</span> {fmt(task.createdAt, true)}</div>
                                     {task.updatedAt && task.updatedAt !== task.createdAt && (<div><span className="font-medium">Cập nhật:</span> {fmt(task.updatedAt, true)}</div>)}

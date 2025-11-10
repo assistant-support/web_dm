@@ -172,8 +172,10 @@ async function _getTeamAnalytics(teamId) {
 export const getTeamAnalytics = cache(
     _getTeamAnalytics,
     ['team-analytics'],
-    {
-        tags: ['team-analytics'],
-        revalidate: 3 // Revalidate every 3 seconds for real-time data
-    }
+    (() => {
+        const tagsList = tags.sanitizeTags(['team-analytics']);
+        return tagsList.length
+            ? { tags: tagsList, revalidate: 3 }
+            : { revalidate: 3 };
+    })()
 );

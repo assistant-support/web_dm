@@ -37,7 +37,7 @@ export default async function ProjectAnalyticsPage({ params }) {
     const project = result.data;
 
     return (
-        <div className="space-y-6">
+        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
             <ProjectAnalytics projectId={projectId} />
         </div>
     );

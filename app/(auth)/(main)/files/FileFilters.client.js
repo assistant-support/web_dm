@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Filter, LayoutGrid, List, Search, XCircle } from 'lucide-react';
+import { Filter, LayoutGrid, List, Search, XCircle, FolderTree } from 'lucide-react';
 
 const BASE_DEFAULT_FILTERS = Object.freeze({
     search: '',
@@ -205,6 +205,19 @@ export default function FileFilters({
                         >
                             <List className="h-4 w-4" />
                             <span className="hidden sm:inline">Danh sách</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleViewChange('drive')}
+                            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
+                                normalized.view === 'drive'
+                                    ? 'bg-blue-600 text-white shadow-sm'
+                                    : 'text-gray-600 hover:bg-gray-50'
+                            }`}
+                            disabled={isPending}
+                        >
+                            <FolderTree className="h-4 w-4" />
+                            <span className="hidden sm:inline">Thư mục</span>
                         </button>
                     </div>
 

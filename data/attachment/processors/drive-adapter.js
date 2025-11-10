@@ -9,6 +9,7 @@ import { renameFile as _renameFile } from '@/lib/drive.js';
 import { moveFile as _moveFile } from '@/lib/drive.js';
 import { deleteFile as _deleteFile } from '@/lib/drive.js';
 import { createProjectFolder, createTaskFolder } from '@/lib/drive.js';
+import { resolveMonthlyDriveFolderId } from '@/lib/drive-utils.js';
 import Project from '@/model/project.model.js';
 import Task from '@/model/task.model.js';
 import { AppError } from '@/lib/errors.js';
@@ -77,8 +78,13 @@ export async function ensureTaskFolder({ project, task }) {
     const t = await Task.findById(task._id).lean();
     if (t?.docs?.driveFolderId) return t.docs.driveFolderId;
 
+    const effectiveTask = t || task;
+    const parentFolderId =
+        resolveMonthlyDriveFolderId(project, effectiveTask?.plannedStartAt) ||
+        projectFolder;
+
     try {
-        const created = await createTaskFolder(task.title || 'Task', projectFolder);
+        const created = await createTaskFolder(task.title || 'Task', parentFolderId);
         if (created?.id) {
             await Task.findByIdAndUpdate(task._id, {
                 $set: { 'docs.driveFolderId': created.id, 'docs.driveFolderName': created.name },

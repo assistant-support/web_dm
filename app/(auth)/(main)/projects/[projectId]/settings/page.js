@@ -47,5 +47,9 @@ export default async function ProjectSettingsPage({ params }) {
         redirect(`/projects/${projectId}`);
     }
 
-    return <ProjectSettings project={project} />;
+    return (
+        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
+            <ProjectSettings project={project} />
+        </div>
+    );
 }

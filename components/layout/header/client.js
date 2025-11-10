@@ -3,12 +3,17 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { signOut } from 'next-auth/react';
 import { LayoutGrid, AlertCircle } from 'lucide-react';
 import Dropdown from '@/components/ui/dropdown';
 import { driveImage, truncateText } from '@/functions';
-import UidSetupDialog from '@/components/uid/UidSetupDialog.client';
 import { checkUserUid } from '@/data/appUser/uid-actions';
+
+const UidSetupDialog = dynamic(() => import('@/components/uid/UidSetupDialog.client'), {
+    ssr: false,
+    loading: () => null,
+});
 
 // --- Component cho Menu Ứng Dụng (Bên Trái) ---
 
@@ -226,12 +231,13 @@ export function UserMenu({ user }) {
                 </Dropdown.Content>
             </Dropdown>
 
-            {/* Dialog cập nhật UID */}
-            <UidSetupDialog
-                open={showUidDialog}
-                onClose={() => setShowUidDialog(false)}
-                onSuccess={handleUidUpdateSuccess}
-            />
+            {showUidDialog && (
+                <UidSetupDialog
+                    open={showUidDialog}
+                    onClose={() => setShowUidDialog(false)}
+                    onSuccess={handleUidUpdateSuccess}
+                />
+            )}
         </>
     );
 }

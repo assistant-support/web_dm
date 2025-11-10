@@ -75,9 +75,9 @@ export default async function ProjectTasksPage({ params }) {
     }));
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
             {/* Header với nút tạo task */}
-            <div className="flex items-center justify-between mb-4 px-1">
+            <div className="flex items-center justify-between px-1">
                 <div>
                     <h2 className="text-xl font-semibold text-gray-900">Công việc</h2>
                     <p className="text-sm text-gray-500 mt-1">

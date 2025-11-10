@@ -3,6 +3,10 @@
 
 const s = (v) => String(v ?? '').trim();
 
+function asTag(value) {
+    return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
 /**
  * Tag theo Team.
  * @param {string|number} id
@@ -10,7 +14,7 @@ const s = (v) => String(v ?? '').trim();
  */
 export function team(id) {
     const x = s(id);
-    return x ? `team:${x}` : '';
+    return x ? `team:${x}` : undefined;
 }
 
 /**
@@ -20,7 +24,7 @@ export function team(id) {
  */
 export function project(id) {
     const x = s(id);
-    return x ? `project:${x}` : '';
+    return x ? `project:${x}` : undefined;
 }
 
 /**
@@ -30,7 +34,7 @@ export function project(id) {
  */
 export function task(id) {
     const x = s(id);
-    return x ? `task:${x}` : '';
+    return x ? `task:${x}` : undefined;
 }
 
 /**
@@ -49,7 +53,7 @@ export function tasks() {
  */
 export function workflow(id) {
     const x = s(id);
-    return x ? `workflow:${x}` : '';
+    return x ? `workflow:${x}` : undefined;
 }
 
 /**
@@ -67,7 +71,7 @@ export function publicTasks() {
  */
 export function userInbox(uid) {
     const x = s(uid);
-    return x ? `inbox:${x}` : '';
+    return x ? `inbox:${x}` : undefined;
 }
 
 /**
@@ -79,7 +83,7 @@ export function userInbox(uid) {
 export function leaderboard(scope, ym) {
     const a = s(scope);
     const b = s(ym);
-    return a && b ? `leaderboard:${a}:${b}` : '';
+    return a && b ? `leaderboard:${a}:${b}` : undefined;
 }
 
 // ===================================
@@ -92,7 +96,7 @@ export function leaderboard(scope, ym) {
  */
 export function teamAnalytics(teamId) {
     const x = s(teamId);
-    return x ? `team-analytics:${x}` : '';
+    return x ? `team-analytics:${x}` : undefined;
 }
 // ===================================
 
@@ -123,5 +127,13 @@ export function projectBundle({ projectId, teamId } = {}) {
  */
 export function projectAnalytics(projectId) {
     const x = s(projectId);
-    return x ? `project-analytics:${x}` : '';
+    return x ? `project-analytics:${x}` : undefined;
+}
+
+export function sanitizeTags(tags = []) {
+    return Array.from(new Set(
+        (Array.isArray(tags) ? tags : [])
+            .filter(tag => typeof tag === 'string' && tag.trim().length > 0)
+            .map(tag => tag.trim())
+    ));
 }

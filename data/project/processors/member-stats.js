@@ -221,35 +221,43 @@ async function _getBatchMemberStats(projectId, userIds, ym) {
  * Cached version - lấy stats cho nhiều members
  * Cache 3 giây, revalidate khi có thay đổi project/task
  */
-export const getBatchProjectMemberStats = cache(
-    async (projectId, userIds, ym) => {
-        return await _getBatchMemberStats(projectId, userIds, ym);
-    },
-    ['project-member-stats'],
-    {
-        revalidate: 3,
-        tags: (projectId) => [
-            tags.project(projectId),
-            tags.tasks(),
-            'project-member-stats'
-        ]
+export const getBatchProjectMemberStats = (projectId, userIds, ym) => {
+    const tagList = tags.sanitizeTags([
+        tags.project(projectId),
+        tags.tasks(),
+        'project-member-stats'
+    ]);
+
+    const options = { revalidate: 3 };
+    if (tagList.length > 0) {
+        options.tags = tagList;
     }
-);
+
+    return cache(
+        async () => _getBatchMemberStats(projectId, userIds, ym),
+        ['project-member-stats', String(projectId ?? ''), String(ym ?? '')],
+        options
+    )();
+};
 
 /**
  * Cached version - lấy stats cho 1 member
  */
-export const getProjectMemberStats = cache(
-    async (projectId, userId, ym) => {
-        return await _getMemberStats(projectId, userId, ym);
-    },
-    ['project-member-stats-single'],
-    {
-        revalidate: 3,
-        tags: (projectId, userId) => [
-            tags.project(projectId),
-            tags.tasks(),
-            `project-member-stats-${userId}`
-        ]
+export const getProjectMemberStats = (projectId, userId, ym) => {
+    const tagList = tags.sanitizeTags([
+        tags.project(projectId),
+        tags.tasks(),
+        userId ? `project-member-stats-${userId}` : undefined
+    ]);
+
+    const options = { revalidate: 3 };
+    if (tagList.length > 0) {
+        options.tags = tagList;
     }
-);
+
+    return cache(
+        async () => _getMemberStats(projectId, userId, ym),
+        ['project-member-stats-single', String(projectId ?? ''), String(userId ?? ''), String(ym ?? '')],
+        options
+    )();
+};

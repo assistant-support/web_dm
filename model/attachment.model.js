@@ -148,7 +148,6 @@ const AttachmentSchema = new mongoose.Schema({
         type: String,
         required: true,
         unique: true,
-        index: true,
         default: () => randomUUID(),
     },
 
@@ -158,7 +157,6 @@ const AttachmentSchema = new mongoose.Schema({
     deletedAt: { 
         type: Date, 
         default: null, 
-        index: true 
     },
 }, {
     timestamps: true, // createdAt, updatedAt
@@ -196,7 +194,6 @@ AttachmentSchema.index({ deletedAt: 1 }, {
  * Ứng dụng: Lọc file theo loại (image, video, doc).
  */
 AttachmentSchema.index({ kind: 1, deletedAt: 1 });
-AttachmentSchema.index({ publicToken: 1 });
 
 // ==================== VIRTUALS ====================
 
