@@ -121,7 +121,7 @@ export default function DmAgentChatDemo({
     if (onSelectProject) {
       onSelectProject(projectId);
     }
-  };
+  }; 
 
   return (
     <div className="flex flex-col overflow-hidden flex-1">
