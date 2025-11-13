@@ -139,8 +139,10 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
 
             <div className="divide-y divide-gray-200">
                 {tasks.map(task => {
-                    const assigneeInfo = task.assignee && usersMap[task.assignee];
-                    const creatorInfo = task.createdBy && usersMap[task.createdBy];
+                    const assigneeKey = task.assignee?.externalUserId || task.assignee;
+                    const creatorKey = task.createdBy?.externalUserId || task.createdBy;
+                    const assigneeInfo = assigneeKey && usersMap[assigneeKey];
+                    const creatorInfo = creatorKey && usersMap[creatorKey];
                     const isPendingStart = task.status === TASK_STATUS.PENDING_APPROVAL;
                     const badgeColor = isPendingStart 
                         ? 'bg-orange-100 text-orange-800' 

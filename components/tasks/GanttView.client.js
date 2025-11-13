@@ -104,7 +104,7 @@ export default function GanttView({ tasks }) {
                     shadow: 'shadow-orange-200',
                     hover: 'hover:shadow-lg hover:shadow-orange-300'
                 };
-            case 'normal':
+            case 'medium':
                 return {
                     bg: 'bg-gradient-to-r from-blue-500 to-blue-600',
                     shadow: 'shadow-blue-200',

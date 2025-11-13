@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { format } from 'date-fns';
+import { getUserId } from '@/lib/permissions.js';
 
 // Hooks và Actions
 import { useAsyncNotifier } from '@/hooks/loading.hook.js';
@@ -141,14 +142,14 @@ export default function TaskDetail({
 
     // Permissions & Info
     const currentUserId = currentUser.externalUserId;
-    const isAssignee = task.assignee?._id === currentUserId;
-    const isCreator = task.createdBy?._id === currentUserId;
+    const isAssignee = getUserId(task.assignee) === currentUserId;
+    const isCreator = getUserId(task.createdBy) === currentUserId;
     const canEditTask = canManage || isCreator;
     const canManagePanels = canManage;
     const statusInfo = useMemo(() => getStatusInfo(task.status), [task.status]);
     const priorityInfo = useMemo(() => getPriorityInfo(task.priority), [task.priority]);
-    const assigneeId = task.assignee?._id;
-    const creatorId = task.createdBy?._id;
+    const assigneeId = getUserId(task.assignee);
+    const creatorId = getUserId(task.createdBy);
 
     const fmt = (d, includeTime = false) => {
         if (!d) return '—';
@@ -397,7 +398,8 @@ export default function TaskDetail({
                                     <div className="space-y-2">
                                         {subtasks.length > 0 ? (subtasks.map(sub => {
                                             const subStatusInfo = getStatusInfo(sub.status); const SubStatusIcon = subStatusInfo.icon;
-                                            const subAssignee = sub.assignee?._id ? allUsersWithDetails.find(u => u.id === sub.assignee._id) : null;
+                                            const subAssigneeId = getUserId(sub.assignee);
+                                            const subAssignee = subAssigneeId ? allUsersWithDetails.find(u => u.id === subAssigneeId) : null;
                                             return (
                                                 <Link href={`/tasks/${sub._id}`} key={sub._id} className="flex items-center justify-between p-2.5 rounded-md border border-gray-100 bg-gray-50 hover:bg-gray-100 group transition-colors duration-150">
                                                     <div className="flex items-center gap-2 min-w-0 flex-1 mr-4">

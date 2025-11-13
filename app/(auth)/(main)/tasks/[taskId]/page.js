@@ -3,7 +3,7 @@
 
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/request-user.js';
-import { canManageProject } from '@/lib/permissions.js';
+import { canManageProject, getUserId } from '@/lib/permissions.js';
 // Actions
 import { getTaskDetail, listSubtasks } from '@/data/task/actions';
 import { getDetailAction as getProjectDetail } from '@/data/project/actions/server.js';
@@ -123,8 +123,9 @@ export default async function TaskDetailPage({ params }) {
     // --- Calculate Permissions & Prepare Props (Giữ nguyên) ---
     const currentUserId = currentUser.externalUserId;
     const hasManagePermission = project ? canManageProject(project, currentUserId) : false;
-    const isAssignee = task.assignee === currentUserId;
-    const isCreator = task.createdBy === currentUserId;
+    console.log(task,currentUser);
+    const isAssignee = getUserId(task.assignee) === currentUserId;
+    const isCreator = getUserId(task.createdBy) === currentUserId;
     const canEditTask = hasManagePermission || isCreator;
     const projectName = project?.name || '';
     const projectMembers = team?.members || [];

@@ -39,7 +39,7 @@ export default function Badge({
     const priorityColors = {
         [PRIORITY.URGENT]: 'bg-red-100 text-red-800 ring-1 ring-red-300',
         [PRIORITY.HIGH]: 'bg-orange-100 text-orange-800',
-        [PRIORITY.NORMAL]: 'bg-blue-100 text-blue-800',
+    [PRIORITY.MEDIUM]: 'bg-blue-100 text-blue-800',
         [PRIORITY.LOW]: 'bg-gray-100 text-gray-700',
     };
 

@@ -63,11 +63,23 @@ export async function deleteDriveFile({ driveFileId, hard = false }) {
 
 export async function ensureProjectFolder(project) {
     if (project?.driveFolderId) return project.driveFolderId;
+    if (project?.rootDriveFolderId) return project.rootDriveFolderId;
     const created = await createProjectFolder(project?.name || 'Project', project?.driveParentId || null);
     if (created?.id) {
         await Project.findByIdAndUpdate(project._id, {
-            $set: { driveFolderId: created.id, driveFolderName: created.name },
+            $set: {
+                driveFolderId: created.id,
+                driveFolderName: created.name,
+                rootDriveFolderId: created.id,
+                rootDriveFolderName: created.name,
+            },
         });
+        if (project && typeof project === 'object') {
+            project.driveFolderId = created.id;
+            project.driveFolderName = created.name;
+            project.rootDriveFolderId = created.id;
+            project.rootDriveFolderName = created.name;
+        }
         return created.id;
     }
     throw new AppError('CREATE_PROJECT_FOLDER_FAILED', { status: 500 });
@@ -79,15 +91,45 @@ export async function ensureTaskFolder({ project, task }) {
     if (t?.docs?.driveFolderId) return t.docs.driveFolderId;
 
     const effectiveTask = t || task;
-    const parentFolderId =
-        resolveMonthlyDriveFolderId(project, effectiveTask?.plannedStartAt) ||
+    const isSubtask = Boolean(effectiveTask?.parentTask);
+    let parentFolderId = projectFolder;
+
+    let projectMeta = project;
+    if (!projectMeta?.monthlyDriveFolders || !Array.isArray(projectMeta.monthlyDriveFolders)) {
+        const projectId = project?._id || project?.id;
+        if (projectId) {
+            projectMeta = await Project.findById(projectId).lean();
+        }
+    }
+    const rootFolderId =
+        projectMeta?.rootDriveFolderId ||
+        projectMeta?.driveFolderId ||
         projectFolder;
+
+    if (isSubtask) {
+        const parentTask = await Task.findById(effectiveTask.parentTask).lean();
+        if (parentTask?.docs?.driveFolderId) {
+            parentFolderId = parentTask.docs.driveFolderId;
+        }
+    } else {
+        const referenceDate =
+            effectiveTask?.plannedStartAt ||
+            effectiveTask?.plannedDueAt ||
+            effectiveTask?.createdAt ||
+            new Date();
+        const monthlyFolderId = resolveMonthlyDriveFolderId(projectMeta, referenceDate);
+        parentFolderId = monthlyFolderId || rootFolderId;
+    }
 
     try {
         const created = await createTaskFolder(task.title || 'Task', parentFolderId);
         if (created?.id) {
             await Task.findByIdAndUpdate(task._id, {
-                $set: { 'docs.driveFolderId': created.id, 'docs.driveFolderName': created.name },
+                $set: {
+                    'docs.enabled': true,
+                    'docs.driveFolderId': created.id,
+                    'docs.driveFolderName': created.name,
+                },
             });
             return created.id;
         }

@@ -5,10 +5,11 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAsyncNotifier } from '@/hooks/loading.hook'
 import { createTask } from '@/data/actions.server'
+import { PRIORITY } from '@/model/common/enums.js'
 
 export default function QuickTaskForm({ projectId, defaultAssignee, onCreated }) {
     const [title, setTitle] = useState('')
-    const [priority, setPriority] = useState('NORMAL')
+    const [priority, setPriority] = useState(PRIORITY.MEDIUM)
     const [assignee, setAssignee] = useState(defaultAssignee || '')
     const [docsEnabled, setDocsEnabled] = useState(false)
     const [requiresApproval, setRequiresApproval] = useState(false)
@@ -57,10 +58,10 @@ export default function QuickTaskForm({ projectId, defaultAssignee, onCreated })
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
                 >
-                    <option value="URGENT">URGENT</option>
-                    <option value="HIGH">HIGH</option>
-                    <option value="NORMAL">NORMAL</option>
-                    <option value="LOW">LOW</option>
+                    <option value={PRIORITY.URGENT}>URGENT</option>
+                    <option value={PRIORITY.HIGH}>HIGH</option>
+                    <option value={PRIORITY.MEDIUM}>MEDIUM</option>
+                    <option value={PRIORITY.LOW}>LOW</option>
                 </select>
                 <input
                     className="rounded-md border px-3 py-2 text-sm"

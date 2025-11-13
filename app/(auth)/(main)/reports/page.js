@@ -18,17 +18,27 @@ export default async function ReportsPage() {
     const currentMonth = format(new Date(), 'yyyy-MM');
     
     // Fetch report data
-    const [reportData, projectsData] = await Promise.all([
+    const [reportResult, projectsResult] = await Promise.all([
         getUserReportData({ userId: user.externalUserId, ym: currentMonth }),
         listMyProjects({ limit: 100 })
     ]);
+
+    if (!reportResult.ok) {
+        console.error('Failed to load personal report:', reportResult.message);
+    }
+    if (!projectsResult.ok) {
+        console.error('Failed to load project list for report:', projectsResult.message);
+    }
+
+    const initialReportData = reportResult.ok ? reportResult.data : null;
+    const projects = projectsResult.ok ? projectsResult.data.projects : [];
 
     return (
         <div className="w-full h-full">
             <PersonalReportClient
                 user={user}
-                initialReportData={reportData}
-                projects={projectsData?.projects || []}
+                initialReportData={initialReportData}
+                projects={projects}
                 currentMonth={currentMonth}
             />
         </div>

@@ -1,7 +1,7 @@
 // components/layout/header/index.js
 import Link from "next/link";
 import Image from "next/image";
-import { AppSwitcher, UserMenu } from "./client";
+import { AppSwitcher, UserMenu, ChatBotButton } from "./client";
 import { getCurrentUserWithSync } from "@/lib/oauth-client";
 import SearchInput from "./SearchInput.client";
 import NotificationBell from "@/components/layout/NotificationBell.client";
@@ -50,6 +50,7 @@ export default async function SiteHeader() {
 
                 {/* Phần Bên Phải */}
                 <div className="flex items-center gap-3">
+                    <ChatBotButton />
                     <NotificationBell currentUser={user} />
                     <UserMenu user={datauser} />
                 </div>

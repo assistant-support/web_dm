@@ -45,7 +45,7 @@ export async function createProject(payload, creatorUserId) {
 
     let teamDriveFolderId = '1_guao-kh5cGjvcvLYiZVioujTkqJveEG'
     const projectParentFolderId = teamDriveFolderId
-    const { id: projectRootFolderId } = await createProjectFolder(
+    const { id: projectRootFolderId, name: projectRootFolderName } = await createProjectFolder(
         payload.name,
         projectParentFolderId
     );
@@ -62,8 +62,12 @@ export async function createProject(payload, creatorUserId) {
         startDate: payload.startDate || undefined,
         dueDate: payload.dueDate || undefined,
 
-        // Lưu mảng folder tháng
+        // Lưu metadata Drive
         monthlyDriveFolders: monthlyFoldersData, // [{ year, month, folderId, folderName }]
+        driveFolderId: projectRootFolderId,
+        driveFolderName: projectRootFolderName,
+        rootDriveFolderId: projectRootFolderId,
+        rootDriveFolderName: projectRootFolderName,
 
         members: [{ userId: creatorUserId, role: PROJECT_ROLE.OWNER }],
         platforms: payload.platforms || [],

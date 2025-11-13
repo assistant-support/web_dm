@@ -8,12 +8,13 @@ import { useRouter } from 'next/navigation';
 import { Input, Select } from '@/components/ui/input';
 import { createTask } from '@/data/task/actions/server.js';
 import { Plus } from 'lucide-react';
+import { PRIORITY } from '@/model/common/enums.js';
 
 const PRIORITY_OPTIONS = [
-    { value: 'low', label: 'Low' },
-    { value: 'normal', label: 'Normal' },
-    { value: 'high', label: 'High' },
-    { value: 'urgent', label: 'Urgent' },
+    { value: PRIORITY.LOW, label: 'Low' },
+    { value: PRIORITY.MEDIUM, label: 'Medium' },
+    { value: PRIORITY.HIGH, label: 'High' },
+    { value: PRIORITY.URGENT, label: 'Urgent' },
 ];
 
 /**
@@ -25,7 +26,7 @@ const PRIORITY_OPTIONS = [
 export default function QuickTaskForm({ projectId, onSuccess }) {
     const router = useRouter();
     const [title, setTitle] = useState('');
-    const [priority, setPriority] = useState('normal');
+    const [priority, setPriority] = useState(PRIORITY.MEDIUM);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -53,7 +54,7 @@ export default function QuickTaskForm({ projectId, onSuccess }) {
 
             // Reset form
             setTitle('');
-            setPriority('normal');
+            setPriority(PRIORITY.MEDIUM);
 
             if (onSuccess) {
                 onSuccess(result.data);

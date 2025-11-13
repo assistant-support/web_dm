@@ -16,6 +16,7 @@ import Dropdown from '@/components/ui/dropdown';
 import { getWorkTypeByCode, getWorkTypeColor } from '@/data/workTypes/constants';
 import { formatTaskPoints } from '@/lib/points';
 import { TASK_STATUS } from '@/model/common/enums';
+import { getUserId } from '@/lib/permissions.js';
 import UserInfoPopup from './UserInfoPopup.client';
 import Avatar from '@/components/ui/avatar';
 import { driveImage } from '@/functions';
@@ -215,9 +216,9 @@ export default function TaskItem({
         }
     };
 
-    const handleNotifyAssignee = (e) => openNotifyDialog(e, task.assignee, 'assignee');
-    const handleNotifyManagerApproval = (e) => openNotifyDialog(e, task.createdBy, 'manager_approval'); // Giả định người tạo là người duyệt
-    const handleNotifyManagerCompletion = (e) => openNotifyDialog(e, task.createdBy, 'manager_completion'); // Giả định người tạo là người duyệt
+    const handleNotifyAssignee = (e) => openNotifyDialog(e, getUserId(task.assignee), 'assignee');
+    const handleNotifyManagerApproval = (e) => openNotifyDialog(e, getUserId(task.createdBy), 'manager_approval'); // Giả định người tạo là người duyệt
+    const handleNotifyManagerCompletion = (e) => openNotifyDialog(e, getUserId(task.createdBy), 'manager_completion'); // Giả định người tạo là người duyệt
 
     // --- Other Action Handlers ---
     const handleEdit = (e) => { e.stopPropagation(); onEdit?.(task._id); };
@@ -268,7 +269,7 @@ export default function TaskItem({
         e.stopPropagation();
         const newAssignee = e.target.value;
         // Chỉ gọi nếu giá trị thực sự thay đổi
-        if (newAssignee !== (task.assignee || '')) {
+        if (newAssignee !== (getUserId(task.assignee) || '')) {
             if (onAssign) {
                 await run(() => onAssign(task._id, newAssignee || null), {
                     loadingMessage: 'Đang cập nhật người thực hiện...',
@@ -344,8 +345,8 @@ export default function TaskItem({
     const progress = task.progress || { total: 0, completed: 0, percentage: 0 };
     const hasSubtasks = !task.parentTask && progress.total > 0;
     const workTypeInfo = task.workType ? getWorkTypeByCode(task.workType) : null;
-    const isAssignee = task.assignee === currentUserId;
-    const isCreator = task.createdBy === currentUserId;
+    const isCreator = getUserId(task.createdBy) === currentUserId;
+    const isAssignee = getUserId(task.assignee) === currentUserId;
     const isProjectManager = canManage;
     const isWaitingConfirm = task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
     const isPendingApproval = task.status === TASK_STATUS.PENDING_APPROVAL;
@@ -365,7 +366,7 @@ export default function TaskItem({
     const isSubtaskAssignee = isSubtask && isAssignee;
 
     // --- Adjusted Permissions for Subtask Approval ---
-    const canApproveOrReject = isSubtask && task.createdBy === currentUserId; // Only creator of the task can approve/reject
+    const canApproveOrReject = isSubtask && getUserId(task.createdBy) === currentUserId; // Only creator of the task can approve/reject
     const showApprovalButtons = canApproveOrReject && isPendingCompletionReview;
     const showPendingApproval = isSubtaskAssignee && isPendingCompletionReview && !canApproveOrReject; // Subtask assignee sees pending status and reminder button
 
@@ -387,8 +388,8 @@ export default function TaskItem({
             }
         };
 
-        addUser(task.createdBy, 'Người tạo');
-        addUser(task.assignee, 'Người thực hiện');
+    addUser(getUserId(task.createdBy), 'Người tạo');
+    addUser(getUserId(task.assignee), 'Người thực hiện');
 
         return Array.from(userMap.values());
     }, [task.createdBy, task.assignee, allUsersWithDetails]);

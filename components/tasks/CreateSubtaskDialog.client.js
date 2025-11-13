@@ -5,14 +5,15 @@ import { useRouter } from 'next/navigation';
 import DialogComponent from '@/components/ui/dialog';
 import { Input, Textarea, Select, Checkbox } from '@/components/ui/input';
 import { createSubtask } from '@/data/task/actions/subtasks.server';
+import { PRIORITY } from '@/model/common/enums.js';
 import { Loader2, Info } from 'lucide-react';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 
 const PRIORITY_OPTIONS = [
-    { value: 'low', label: 'Thấp' },
-    { value: 'normal', label: 'Bình thường' },
-    { value: 'high', label: 'Cao' },
-    { value: 'urgent', label: 'Khẩn cấp' },
+    { value: PRIORITY.LOW, label: 'Thấp' },
+    { value: PRIORITY.MEDIUM, label: 'Bình thường' },
+    { value: PRIORITY.HIGH, label: 'Cao' },
+    { value: PRIORITY.URGENT, label: 'Khẩn cấp' },
 ];
 
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
@@ -62,7 +63,7 @@ export default function CreateSubtaskDialog({
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        priority: parentTask?.priority || 'normal',
+    priority: parentTask?.priority || PRIORITY.MEDIUM,
         assignee: '',
         workType: parentTask?.workType || '',
         platforms: parentTask?.platforms || [],
@@ -145,7 +146,7 @@ export default function CreateSubtaskDialog({
                     setFormData({
                         title: '',
                         description: '',
-                        priority: parentTask?.priority || 'normal',
+                        priority: parentTask?.priority || PRIORITY.MEDIUM,
                         assignee: '',
                         workType: parentTask?.workType || '',
                         platforms: parentTask?.platforms || [],

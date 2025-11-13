@@ -14,20 +14,27 @@ export default async function SettingsPage() {
     if (!user) redirect('/login');
 
     // Get user settings
-    const result = await getUserSettings({ userId: user.externalUserId });
-    const settings = result?.data || result || {
-        notifications: {
-            email: true,
-            taskAssigned: true,
-            taskCompleted: true,
-            projectUpdates: true,
-            mentions: true,
-        },
-        preferences: {},
-        platforms: [],
-        color: '',
-        capacityHoursPerWeek: 40,
-    };
+    const settingsResult = await getUserSettings({ userId: user.externalUserId });
+
+    if (!settingsResult.ok) {
+        console.error('Failed to load user settings:', settingsResult.message);
+    }
+
+    const settings = settingsResult.ok
+        ? settingsResult.data
+        : {
+              notifications: {
+                  email: true,
+                  taskAssigned: true,
+                  taskCompleted: true,
+                  projectUpdates: true,
+                  mentions: true,
+              },
+              preferences: {},
+              platforms: [],
+              color: '',
+              capacityHoursPerWeek: 40,
+          };
 
     return (
         <div className="w-full h-full">

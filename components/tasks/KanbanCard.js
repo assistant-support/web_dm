@@ -6,6 +6,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Calendar, MessageSquare, Paperclip, User } from 'lucide-react';
 import Badge from '@/components/ui/badge';
 import UserDisplay from '@/components/ui/user-display';
+import { getUserId } from '@/lib/permissions.js';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 
@@ -42,7 +43,7 @@ export default function KanbanCard({ task }) {
                 return 'bg-red-100 text-red-800 border-red-200';
             case 'high':
                 return 'bg-orange-100 text-orange-800 border-orange-200';
-            case 'normal':
+            case 'medium':
                 return 'bg-blue-100 text-blue-800 border-blue-200';
             case 'low':
                 return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -55,7 +56,7 @@ export default function KanbanCard({ task }) {
         switch (priority) {
             case 'urgent': return 'Khẩn cấp';
             case 'high': return 'Cao';
-            case 'normal': return 'Bình thường';
+            case 'medium': return 'Bình thường';
             case 'low': return 'Thấp';
             default: return priority;
         }
@@ -105,7 +106,7 @@ export default function KanbanCard({ task }) {
             {/* Meta info */}
             <div className="flex items-center gap-2 ml-6 flex-wrap" onClick={handleClick}>
                 {/* Priority badge */}
-                {task.priority && task.priority !== 'normal' && (
+                {task.priority && task.priority !== 'medium' && (
                     <span className={`text-xs px-2 py-0.5 rounded border ${getPriorityColor(task.priority)}`}>
                         {getPriorityLabel(task.priority)}
                     </span>
@@ -139,7 +140,7 @@ export default function KanbanCard({ task }) {
             {/* Assignee */}
             {task.assignee && (
                 <div className="mt-2 ml-6" onClick={handleClick}>
-                    <UserDisplay userId={task.assignee} variant="avatar" size="sm" />
+                    <UserDisplay userId={getUserId(task.assignee)} variant="avatar" size="sm" />
                 </div>
             )}
         </div>

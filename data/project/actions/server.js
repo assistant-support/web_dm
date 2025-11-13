@@ -226,10 +226,7 @@ export async function deleteProjectAction(projectId) {
         const isOwner = (raw.members || []).some(m => String(m.userId) === String(user.externalUserId) && m.role === PROJECT_ROLE.OWNER);
         assert(isOwner, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-        // Gọi hàm repo updateProject thay vì archiveProject
-        // Giả sử model Project có trường isDeleted và deletedAt
-        // Nếu không có, cần thêm vào model hoặc dùng archiveProject
-        const updated = await updateProject(id, { isActive: false /* hoặc isDeleted: true */ });
+    const updated = await archiveProject(id);
 
         await logActivity({
             actor: user.externalUserId, project: id, team: updated.team?._id,

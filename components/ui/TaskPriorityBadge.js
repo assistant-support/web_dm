@@ -5,24 +5,25 @@
 
 import { clsx } from 'clsx';
 import { Flag, AlertTriangle, Zap } from 'lucide-react';
+import { PRIORITY } from '@/model/common/enums.js';
 
 const PRIORITY_CONFIG = {
-    low: {
+    [PRIORITY.LOW]: {
         label: 'Thấp',
         icon: Flag,
         className: 'bg-gray-100 text-gray-600 border-gray-200',
     },
-    normal: {
+    [PRIORITY.MEDIUM]: {
         label: 'Bình thường',
         icon: Flag,
         className: 'bg-blue-100 text-blue-600 border-blue-200',
     },
-    high: {
+    [PRIORITY.HIGH]: {
         label: 'Cao',
         icon: AlertTriangle,
         className: 'bg-orange-100 text-orange-600 border-orange-200',
     },
-    urgent: {
+    [PRIORITY.URGENT]: {
         label: 'Khẩn cấp',
         icon: Zap,
         className: 'bg-red-100 text-red-600 border-red-200',
@@ -32,18 +33,18 @@ const PRIORITY_CONFIG = {
 /**
  * TaskPriorityBadge - Badge hiển thị priority của task
  * @param {Object} props
- * @param {string} props.priority - Task priority (low, normal, high, urgent)
+ * @param {string} props.priority - Task priority (low, medium, high, urgent)
  * @param {boolean} props.showIcon - Hiển thị icon (default: true)
  * @param {'sm'|'md'|'lg'} props.size - Kích thước badge
  * @param {string} props.className - Custom classes
  */
 export default function TaskPriorityBadge({ 
-    priority = 'normal', 
+    priority = PRIORITY.MEDIUM, 
     showIcon = true,
     size = 'md',
     className 
 }) {
-    const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.normal;
+    const config = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG[PRIORITY.MEDIUM];
     const Icon = config.icon;
 
     const sizeClasses = {

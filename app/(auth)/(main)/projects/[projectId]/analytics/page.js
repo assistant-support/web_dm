@@ -2,6 +2,7 @@
 import { notFound } from 'next/navigation';
 import ProjectAnalytics from '@/components/project/ProjectAnalytics.client.js';
 import { getProjectDetail } from '@/data/project/actions/list.js';
+import { getProjectAnalytics } from '@/data/project/processors/analytics.js';
 
 // Revalidate every 3 seconds for real-time updates
 export const revalidate = 3;
@@ -36,9 +37,19 @@ export default async function ProjectAnalyticsPage({ params }) {
 
     const project = result.data;
 
+    let initialAnalytics = null;
+    try {
+        const analytics = await getProjectAnalytics(projectId);
+        if (analytics) {
+            initialAnalytics = JSON.parse(JSON.stringify(analytics));
+        }
+    } catch (error) {
+        console.error('Failed to load project analytics:', error);
+    }
+
     return (
         <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
-            <ProjectAnalytics projectId={projectId} />
+            <ProjectAnalytics projectId={projectId} initialAnalytics={initialAnalytics} />
         </div>
     );
 }

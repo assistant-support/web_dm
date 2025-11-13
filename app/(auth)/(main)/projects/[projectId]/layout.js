@@ -46,8 +46,7 @@ export default async function ProjectDetailLayout({ children, params }) {
                 projectId={projectId}
                 isOwnerOrManager={userIsManager}
             />
-            {/* Bỏ overflow-scroll ở đây và để MyProjectsList tự xử lý scroll */}
-            <div className="flex-1 min-h-0 overflow-hidden"> {/* Thêm min-h-0 để flex hoạt động đúng */}
+            <div className="flex-1 min-h-0 overflow-hidden">
                 {children}
             </div>
         </div>

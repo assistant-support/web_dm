@@ -75,7 +75,7 @@ export default function CalendarView({ tasks }) {
         switch (priority) {
             case 'urgent': return 'bg-red-100 border-red-300 text-red-800'
             case 'high': return 'bg-orange-100 border-orange-300 text-orange-800'
-            case 'normal': return 'bg-blue-100 border-blue-300 text-blue-800'
+            case 'medium': return 'bg-blue-100 border-blue-300 text-blue-800'
             case 'low': return 'bg-gray-100 border-gray-300 text-gray-700'
             default: return 'bg-gray-100 border-gray-300 text-gray-700'
         }

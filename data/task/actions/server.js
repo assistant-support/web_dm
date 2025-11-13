@@ -26,11 +26,24 @@ export async function listByProject(projectId, filters = {}) {
     try {
         return runAction(async ({ user }) => {
             const uid = user.externalUserId;
-            const project = await Project.findById(projectId).lean();
+            const project = await Project.findById(projectId)
+                .select({ members: 1, team: 1 })
+                .lean();
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-            const team = await Team.findById(project.team).lean();
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
+
+            const isProjectMember = (project.members || []).some(
+                (m) => String(m.userId) === String(uid)
+            );
+
+            let isMember = isProjectMember;
+            if (!isMember && project.team) {
+                const teamMembershipExists = await Team.exists({
+                    _id: project.team,
+                    'members.userId': uid,
+                });
+                isMember = Boolean(teamMembershipExists);
+            }
+
             assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
             const query = {
                 project: new mongoose.Types.ObjectId(projectId),
@@ -45,14 +58,6 @@ export async function listByProject(projectId, filters = {}) {
                     : filters.status;
             }
             const matchStage = { $match: query };
-            const countResult = await Task.aggregate([
-                matchStage,
-                { $count: 'matchingDocs' }
-            ]);
-            if (!countResult || countResult.length === 0 || countResult[0].matchingDocs === 0) {
-                const anyTaskInProject = await Task.find({ project: new mongoose.Types.ObjectId(projectId) }).lean();
-                return []; // Trả về mảng rỗng như hành vi cũ
-            }
             const tasks = await Task.aggregate([
                 matchStage,
                 {
@@ -405,24 +410,33 @@ export async function createTask(projectId, payload) {
         const project = await Project.findById(projectId); // Don't use lean, we need to save
         assert(project, 'PROJECT_NOT_FOUND', 'Dự án không tồn tại.', 404);
 
-        const team = await Team.findById(project.team).lean(); // Use lean for reads
-        assert(team, 'TEAM_NOT_FOUND', 'Nhóm không tồn tại.', 404);
+        const projectMembers = project.members || [];
+        const isProjectMember = projectMembers.some((m) => String(m.userId) === String(uid));
 
-        const isMember = (team.members || []).some((m) => String(m.userId) === String(uid));
-        assert(isMember, 'FORBIDDEN', 'Bạn không phải thành viên của nhóm này.', 403);
+        let team = null;
+        if (project.team) {
+            team = await Team.findById(project.team).lean();
+            assert(team, 'TEAM_NOT_FOUND', 'Nhóm không tồn tại.', 404);
+        }
+
+        let isMember = isProjectMember;
+        if (!isMember && team) {
+            isMember = (team.members || []).some((m) => String(m.userId) === String(uid));
+        }
+
+        assert(isMember, 'FORBIDDEN', 'Bạn không có quyền tạo công việc trong dự án này.', 403);
 
         const hasManagePermission = canManageProject(project, uid);
 
         // **THÊM MỚI: Kiểm tra và thêm assignee vào project nếu chưa có**
         if (payload.assignee && payload.assignee !== uid) {
-            // Kiểm tra assignee có trong team không
-            const assigneeInTeam = (team.members || []).some((m) => String(m.userId) === String(payload.assignee));
-            assert(assigneeInTeam, 'ASSIGNEE_NOT_IN_TEAM', 'Người được giao việc không thuộc team này.', 400);
+            if (team) {
+                const assigneeInTeam = (team.members || []).some((m) => String(m.userId) === String(payload.assignee));
+                assert(assigneeInTeam, 'ASSIGNEE_NOT_IN_TEAM', 'Người được giao việc không thuộc team này.', 400);
+            }
 
-            // Kiểm tra assignee có trong project chưa
             const assigneeInProject = (project.members || []).some((m) => String(m.userId) === String(payload.assignee));
-            
-            // Nếu chưa có trong project, tự động thêm vào với role 'member'
+
             if (!assigneeInProject) {
                 project.members = project.members || [];
                 project.members.push({
@@ -431,20 +445,18 @@ export async function createTask(projectId, payload) {
                     joinedAt: new Date()
                 });
                 await project.save();
-                
-                // Log activity
+
                 await logActivity({
                     actor: uid,
                     team: project.team,
                     project: projectId,
                     type: 'project.member.added',
-                    payload: { 
-                        addedUserId: payload.assignee, 
-                        reason: 'auto_added_on_task_assignment' 
+                    payload: {
+                        addedUserId: payload.assignee,
+                        reason: 'auto_added_on_task_assignment'
                     },
                 });
 
-                // Revalidate project members page
                 revalidatePath(`/projects/${projectId}/members`);
                 await revalidateMany([tags.project(projectId)]);
             }
@@ -480,11 +492,6 @@ export async function createTask(projectId, payload) {
             initialPoints = Number(payload.initialPoints) || 0;
         }
 
-        // Allow explicit overrides if necessary (use with caution)
-        if (payload.status) status = payload.status;
-        if (payload.approval) approval = payload.approval;
-        if (payload.assigneeConfirm) assigneeConfirm = payload.assigneeConfirm;
-
         // Create task
         const task = new Task({ // Use 'new Task' and 'task.save()' for potential middleware/hooks
             title: payload.title,
@@ -511,27 +518,47 @@ export async function createTask(projectId, payload) {
         await task.save(); // Save the new task document
 
         // Create Google Drive folder if requested
-        if (payload.createTaskFolder) {
+        if (payload.createTaskFolder && !task.parentTask) {
             try {
-                const targetFolderId =
-                    resolveMonthlyDriveFolderId(project, task.plannedStartAt) ||
+                const projectMeta =
+                    (await Project.findById(projectId)
+                        .select('monthlyDriveFolders driveFolderId rootDriveFolderId')
+                        .lean()) ||
+                    {
+                        monthlyDriveFolders: project?.monthlyDriveFolders ?? [],
+                        driveFolderId: project?.driveFolderId ?? null,
+                        rootDriveFolderId: project?.rootDriveFolderId ?? null,
+                    };
+
+                const referenceDate =
+                    task.plannedStartAt ||
+                    task.plannedDueAt ||
+                    payload.plannedStartAt ||
+                    payload.plannedDueAt ||
+                    new Date();
+
+                const monthlyFolderId = resolveMonthlyDriveFolderId(projectMeta, referenceDate);
+                const rootFolderId =
+                    projectMeta?.rootDriveFolderId ||
+                    projectMeta?.driveFolderId ||
                     project.driveFolderId ||
                     null;
+                const parentFolderId = monthlyFolderId || rootFolderId;
 
-                if (targetFolderId) {
+                if (!parentFolderId) {
+                    console.warn(`[createTask ${task._id}] Missing Drive parent folder metadata. Skip folder creation.`);
+                } else {
+                    const folderName = (task.title || 'Task').trim() || `Task-${task._id}`;
                     const { createTaskFolder } = await import('@/lib/drive.js');
-                    const folderResult = await createTaskFolder(
-                        task.title + '_' + Date.now(), 
-                        targetFolderId
-                    );
+                    const folderResult = await createTaskFolder(folderName, parentFolderId);
 
-                    const taskToUpdate = await Task.findById(task._id);
-                    if (taskToUpdate) {
-                        taskToUpdate.docs = taskToUpdate.docs || {};
-                        taskToUpdate.docs.driveFolderId = folderResult.id;
-                        taskToUpdate.docs.driveFolderName = folderResult.name;
-                        await taskToUpdate.save();
-                    }
+                    await Task.findByIdAndUpdate(task._id, {
+                        $set: {
+                            'docs.enabled': true,
+                            'docs.driveFolderId': folderResult.id,
+                            'docs.driveFolderName': folderResult.name,
+                        },
+                    });
                 }
 
             } catch (driveErr) {

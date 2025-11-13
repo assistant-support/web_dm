@@ -16,6 +16,7 @@ import TaskStatusBadge from '@/components/ui/TaskStatusBadge';
 import TaskPriorityBadge from '@/components/ui/TaskPriorityBadge';
 import UserDisplay from '@/components/ui/user-display';
 import { Input, Textarea, Select } from '@/components/ui/input';
+import { PRIORITY } from '@/model/common/enums.js';
 
 /**
  * SubtaskCard - Enhanced subtask item with expand/edit
@@ -37,7 +38,7 @@ export default function SubtaskCard({
         title: subtask.title,
         description: subtask.description || '',
         assignedTo: subtask.assignedTo || '',
-        priority: subtask.priority || 'normal',
+        priority: subtask.priority || PRIORITY.MEDIUM,
         workType: subtask.workType || '',
         estimatedHours: subtask.estimatedHours || 0,
     });
@@ -82,7 +83,7 @@ export default function SubtaskCard({
             title: subtask.title,
             description: subtask.description || '',
             assignedTo: subtask.assignedTo || '',
-            priority: subtask.priority || 'normal',
+            priority: subtask.priority || PRIORITY.MEDIUM,
             workType: subtask.workType || '',
             estimatedHours: subtask.estimatedHours || 0,
         });
@@ -256,10 +257,10 @@ export default function SubtaskCard({
                                         onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
                                         disabled={isUpdating}
                                     >
-                                        <option value="low">Thấp</option>
-                                        <option value="normal">Bình thường</option>
-                                        <option value="high">Cao</option>
-                                        <option value="urgent">Khẩn cấp</option>
+                                        <option value={PRIORITY.LOW}>Thấp</option>
+                                        <option value={PRIORITY.MEDIUM}>Bình thường</option>
+                                        <option value={PRIORITY.HIGH}>Cao</option>
+                                        <option value={PRIORITY.URGENT}>Khẩn cấp</option>
                                     </Select>
                                 </div>
 

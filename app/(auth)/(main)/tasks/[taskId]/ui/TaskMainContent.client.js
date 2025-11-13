@@ -56,6 +56,7 @@ export default function TaskMainContent({
 
     // Quyền quản lý attachments
     const canManageAttachments = isAssignee || isCreator;
+    console.log(isAssignee, canManageAttachments);
 
     return (
         <div className="flex-1 min-w-0 flex flex-col gap-4">

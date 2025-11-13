@@ -4,6 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getUserId } from '@/lib/permissions.js';
 import Link from 'next/link';
 import { updateTaskStatus, assignTask, updateTask } from '@/data/task/actions/server';
 import { 
@@ -37,7 +38,7 @@ const getPriorityInfo = (priority) => {
     switch (priority) {
         case 'urgent': return { color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', label: ' Khẩn' };
         case 'high': return { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', label: 'Cao' };
-        case 'normal': return { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', label: 'TB' };
+        case 'medium': return { color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', label: 'TB' };
         case 'low': return { color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', label: 'Thấp' };
         default: return { color: 'text-gray-400', bg: 'bg-gray-50', border: 'border-gray-200', label: '-' };
     }
@@ -55,8 +56,8 @@ export default function SubtaskListSimple({
     canManage = false 
 }) {
     const [subtasks, setSubtasks] = useState(initialSubtasks);
-    const taskCreator = parentTask?.createdBy;
-    const canManageSubtask = canManage || (taskCreator === currentUserId);
+    const taskCreatorId = getUserId(parentTask?.createdBy);
+    const canManageSubtask = canManage || (taskCreatorId === currentUserId);
 
     useEffect(() => {
         setSubtasks(initialSubtasks);
@@ -106,16 +107,16 @@ export default function SubtaskListSimple({
 function SubtaskItem({ subtask, users, currentUserId, canManageSubtask, onStatusChanged }) {
     const { run, Overlays } = useAsyncNotifier();
     const [showAssignForm, setShowAssignForm] = useState(false);
-    const [selectedAssignee, setSelectedAssignee] = useState(subtask.assignee || '');
+    const [selectedAssignee, setSelectedAssignee] = useState(getUserId(subtask.assignee) || '');
     
     const statusInfo = getStatusInfo(subtask.status);
     const StatusIcon = statusInfo.icon;
     const priorityInfo = getPriorityInfo(subtask.priority);
     const workTypeInfo = subtask.workType ? getWorkTypeByCode(subtask.workType) : null;
-    const assigneeInfo = users.find(u => u.value === subtask.assignee);
+    const assigneeInfo = users.find(u => u.value === getUserId(subtask.assignee));
     const dueDate = fmt(subtask.plannedDueAt);
     
-    const isAssignee = subtask.assignee === currentUserId;
+    const isAssignee = getUserId(subtask.assignee) === currentUserId;
     const canInteract = canManageSubtask || isAssignee;
     const isRejected = subtask.status === 'rejected';
     const needsConfirm = subtask.status === 'waiting_confirm' && isAssignee;

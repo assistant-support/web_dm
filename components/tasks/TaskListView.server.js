@@ -7,6 +7,7 @@ import { vi } from 'date-fns/locale';
 import Badge from '@/components/ui/badge';
 import { vi as viTranslations } from '@/lib/i18n-vi';
 import Link from 'next/link';
+import { getUserId } from '@/lib/permissions';
 
 /**
  * TaskListView - Hiển thị tasks dạng list giống trang /
@@ -62,7 +63,8 @@ export default function TaskListView({ tasks, projectId, usersMap = {} }) {
             {/* Task list */}
             <div className="divide-y divide-gray-100">
                 {tasks.map((task) => {
-                    const assigneeInfo = task.assignee ? usersMap[task.assignee] : null;
+                    const assigneeId = getUserId(task.assignee);
+                    const assigneeInfo = assigneeId ? usersMap[assigneeId] : null;
                     const statusInfo = getStatusBadge(task.status);
                     const priorityInfo = getPriorityBadge(task.priority);
                     const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && 

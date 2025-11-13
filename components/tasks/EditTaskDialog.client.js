@@ -10,12 +10,13 @@ import { useAsyncNotifier } from '@/hooks/loading.hook';
 import { updateTask } from '@/data/task/actions/server';
 import { createSubtask } from '@/data/task/actions/subtasks.server.js';
 import { WORK_TYPES } from '@/data/workTypes/constants';
+import { PRIORITY } from '@/model/common/enums.js';
 
 const PRIORITY_OPTIONS = [
-    { value: 'low', label: 'Thấp' },
-    { value: 'normal', label: 'Bình thường' },
-    { value: 'high', label: 'Cao' },
-    { value: 'urgent', label: 'Khẩn cấp' },
+    { value: PRIORITY.LOW, label: 'Thấp' },
+    { value: PRIORITY.MEDIUM, label: 'Bình thường' },
+    { value: PRIORITY.HIGH, label: 'Cao' },
+    { value: PRIORITY.URGENT, label: 'Khẩn cấp' },
 ];
 
 /**
@@ -47,7 +48,7 @@ export default function EditTaskDialog({
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        priority: 'normal',
+    priority: PRIORITY.MEDIUM,
         workType: '',
         assignee: '',
         plannedStartAt: '',
@@ -61,7 +62,7 @@ export default function EditTaskDialog({
             setFormData({
                 title: task.title || '',
                 description: task.description || '',
-                priority: task.priority || 'normal',
+                priority: task.priority || PRIORITY.MEDIUM,
                 workType: task.workType || '',
                 assignee: task.assignee || '',
                 plannedStartAt: task.plannedStartAt ? new Date(task.plannedStartAt).toISOString().slice(0, 16) : '',
@@ -73,7 +74,7 @@ export default function EditTaskDialog({
             setFormData({
                 title: '',
                 description: '',
-                priority: 'normal',
+                priority: PRIORITY.MEDIUM,
                 workType: '',
                 assignee: '',
                 plannedStartAt: '',

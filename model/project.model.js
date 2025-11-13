@@ -145,7 +145,7 @@ const ProjectSchema = new mongoose.Schema(
         priority: { 
             type: String, 
             enum: Object.values(PRIORITY),
-            default: PRIORITY.NORMAL,
+            default: PRIORITY.MEDIUM,
             index: true
         },
         
@@ -163,6 +163,27 @@ const ProjectSchema = new mongoose.Schema(
         monthlyDriveFolders: { 
             type: [MonthlyDriveFolderSchema], 
             default: [] 
+        },
+
+        // Folder gốc trên Drive (dùng làm fallback nếu không tìm thấy folder tháng)
+        driveFolderId: {
+            type: String,
+            index: true,
+            default: null,
+        },
+        driveFolderName: {
+            type: String,
+            default: '',
+        },
+        // Alias rõ nghĩa cho folder gốc (giữ song song để tránh nhầm lẫn)
+        rootDriveFolderId: {
+            type: String,
+            index: true,
+            default: null,
+        },
+        rootDriveFolderName: {
+            type: String,
+            default: '',
         },
 
         // ==================== CONFIGURATION ====================

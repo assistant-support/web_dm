@@ -3,6 +3,7 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import { PRIORITY } from '@/model/common/enums.js'
 
 export default function TaskFilters({ assignees, filters }) {
     const [local, setLocal] = useState(filters)
@@ -11,7 +12,21 @@ export default function TaskFilters({ assignees, filters }) {
     const params = useSearchParams()
 
     useEffect(() => {
-        setLocal({ ...filters })
+        if (!filters) {
+            setLocal({})
+            return
+        }
+
+        const normalizedPriority = Array.isArray(filters.priority)
+            ? filters.priority.map((p) => (typeof p === 'string' ? p.toLowerCase() : p))
+            : filters.priority
+            ? [filters.priority].flat().map((p) => (typeof p === 'string' ? p.toLowerCase() : p))
+            : undefined
+
+        setLocal({
+            ...filters,
+            priority: normalizedPriority,
+        })
     }, [filters])
 
     const onSubmit = (e) => {
@@ -59,7 +74,7 @@ export default function TaskFilters({ assignees, filters }) {
         []
     )
 
-    const PRIORITIES = ['URGENT', 'HIGH', 'NORMAL', 'LOW']
+    const PRIORITIES = Object.values(PRIORITY)
 
     return (
         <form onSubmit={onSubmit} className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
@@ -110,7 +125,7 @@ export default function TaskFilters({ assignees, filters }) {
                                         : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                                 }`}
                             >
-                                {p}
+                                {p.toUpperCase()}
                             </button>
                         ))}
                     </div>

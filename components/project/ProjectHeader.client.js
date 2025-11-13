@@ -19,12 +19,11 @@ import { vi } from 'date-fns/locale';
 import EditProjectDialog from './EditProjectDialog.client.js';
 import { t } from '@/lib/i18n-vi';
 import { PRIORITY } from '@/model/common/enums.js';
-import { tPriority } from '@/lib/i18n'; // Giả sử hàm này tồn tại
 
 // Map priority để hiển thị badge
 const priorityMap = {
     [PRIORITY.LOW]: { label: t('taskPriority.low'), variant: 'secondary' },
-    [PRIORITY.NORMAL]: { label: t('taskPriority.normal'), variant: 'default' }, // Giả sử 'default' là màu xanh/blue
+    [PRIORITY.MEDIUM]: { label: t('taskPriority.medium'), variant: 'default' }, // Medium uses default variant
     [PRIORITY.HIGH]: { label: t('taskPriority.high'), variant: 'warning' }, // Giả sử 'warning' là màu cam
     [PRIORITY.URGENT]: { label: t('taskPriority.urgent'), variant: 'destructive' },
 };

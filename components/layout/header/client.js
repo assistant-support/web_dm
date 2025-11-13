@@ -9,6 +9,7 @@ import { LayoutGrid, AlertCircle } from 'lucide-react';
 import Dropdown from '@/components/ui/dropdown';
 import { driveImage, truncateText } from '@/functions';
 import { checkUserUid } from '@/data/appUser/uid-actions';
+import ChatBotLauncher from '@/components/demo/ChatBotLauncher.client';
 
 const UidSetupDialog = dynamic(() => import('@/components/uid/UidSetupDialog.client'), {
     ssr: false,
@@ -240,4 +241,8 @@ export function UserMenu({ user }) {
             )}
         </>
     );
+}
+
+export function ChatBotButton() {
+    return <ChatBotLauncher />;
 }
