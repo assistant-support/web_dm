@@ -46,17 +46,50 @@ export async function loadMiniContext({ projectId, taskId } = {}) {
 }
 
 /**
- * Gửi thông báo in-app (hiện tại chỉ log).
+ * Gửi thông báo in-app và lưu vào database.
  * UI sẽ đảm nhiệm quyền hiển thị. Không throw.
- * @param {string[]} toUserIds
- * @param {string} message
- * @param {object} meta
+ * @param {string[]} toUserIds - Mảng externalUserId của users cần nhận thông báo
+ * @param {string} message - Nội dung thông báo
+ * @param {object} meta - Metadata chứa type, taskId, projectId, actorId, etc.
  */
 export async function sendSystemNotification(toUserIds = [], message = '', meta = {}) {
     try {
-        console.log('[NOTI][SYSTEM]', { toUserIds: uniqIds(toUserIds), message, meta });
+        // Dynamic import để tránh circular dependencies
+        const Notification = (await import('@/model/notification.model.js')).default;
+
+        // Lọc và dedupe user IDs
+        const uniqueUserIds = uniqIds(toUserIds);
+
+        // Không làm gì nếu không có user nào để gửi
+        if (uniqueUserIds.length === 0) {
+            console.log('[NOTI][SYSTEM][SKIP]', 'No users to notify');
+            return;
+        }
+
+        // Tạo mảng notifications để insert
+        const notifications = uniqueUserIds.map(userId => ({
+            userId,
+            type: meta.type || 'system', // Lấy type từ metadata, fallback về 'system'
+            message,
+            metadata: {
+                taskId: meta.taskId || undefined,
+                projectId: meta.projectId || undefined,
+                commentId: meta.commentId || undefined,
+                actorId: meta.actorId || undefined,
+            },
+            read: false,
+        }));
+
+        // Lưu vào database
+        await Notification.insertMany(notifications);
+        console.log('[NOTI][SYSTEM]', { 
+            created: notifications.length, 
+            type: meta.type || 'system',
+            users: uniqueUserIds 
+        });
     } catch (e) {
-        console.error('[NOTI][SYSTEM][ERROR]', e);
+        // Log error nhưng không throw để không phá luồng nghiệp vụ
+        console.error('[NOTI][SYSTEM][ERROR]', e?.message || e);
     }
 }
 

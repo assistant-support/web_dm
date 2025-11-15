@@ -13,6 +13,7 @@ export default function SubtaskList({
     subtasks = [],
     currentUser,
     canManage,
+    canCreateSubtask = false,
     isCreator,
     allUsersWithDetails,
     projectMembers,
@@ -26,7 +27,6 @@ export default function SubtaskList({
 
     const hasSubtasks = subtasks && subtasks.length > 0;
     const currentUserId = currentUser?.externalUserId;
-    const canCreateSubtask = canManage || isCreator;
 
     const handleSubtaskCreated = (newSubtask) => {
         router.refresh(); // Refresh để lấy danh sách subtask mới nhất
@@ -40,13 +40,13 @@ export default function SubtaskList({
                 <h3 className="text-base font-semibold text-gray-800">
                     Nhiệm vụ con ({subtasks.length})
                 </h3>
-                {(canCreateSubtask || isAssignee) && (
+                {canCreateSubtask && (
                     <Button
                         variant="ghost"
                         size="sm"
                         icon={PlusCircle}
                         onClick={() => setShowCreateDialog(true)}
-                        className="text-blue-600 hover:bg-blue-50"
+                        className="text-[var(--brand-600)] hover:bg-[var(--brand-50)]"
                     >
                         Thêm việc con
                     </Button>

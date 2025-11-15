@@ -1,12 +1,19 @@
 // app/(auth)/(main)/projects/page.js
 import { listMyProjects } from '@/data/project/actions/list.js';
+import { listManagedTeams } from '@/data/team/actions/server.js';
+import { getCurrentUser } from '@/lib/request-user.js';
+import { isTeamManager } from '@/lib/permissions.js';
 import ProjectsPageClient from '@/components/project/ProjectsPageClient.client.js';
 
 // Revalidate every 3 seconds for real-time updates
 export const revalidate = 3;
 
 export default async function ProjectsPage() {
-    const result = await listMyProjects();
+    // Fetch projects và user info song song
+    const [result, user] = await Promise.all([
+        listMyProjects(),
+        getCurrentUser()
+    ]);
 
     if (!result.ok) {
         return (
@@ -26,7 +33,25 @@ export default async function ProjectsPage() {
             </div>
         );
     }
+    
     const { projects, count } = result.data;
 
-    return <ProjectsPageClient initialProjects={projects} />;
+    // Kiểm tra quyền tạo project: User phải là manager của ít nhất 1 team
+    let canCreateProject = false;
+    if (user) {
+        const teamsResult = await listManagedTeams();
+        if (teamsResult.ok && teamsResult.data) {
+            // Nếu có team mà user là manager, cho phép tạo project
+            canCreateProject = teamsResult.data.some(team => 
+                isTeamManager(team, user.externalUserId)
+            );
+        }
+    }
+
+    return (
+        <ProjectsPageClient 
+            initialProjects={projects} 
+            canCreateProject={canCreateProject}
+        />
+    );
 }

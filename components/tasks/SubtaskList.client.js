@@ -29,7 +29,8 @@ export default function SubtaskList({
     workTypes = [],
     platforms = [],
     currentUserId = '',
-    canManage = false 
+    canManage = false,
+    canCreateSubtask = false
 }) {
     const [subtasks, setSubtasks] = useState([]);
     const [stats, setStats] = useState(null);
@@ -177,20 +178,24 @@ export default function SubtaskList({
             )}
 
             {/* Add subtask button */}
-            {canManage && (
-                <button
-                    onClick={() => setShowCreateDialog(true)}
-                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 border-2 border-blue-200 border-dashed rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors"
-                >
-                    <Plus className="h-4 w-4" />
-                    Thêm công việc con
-                </button>
-            )}
+            <button
+                onClick={() => setShowCreateDialog(true)}
+                disabled={!canCreateSubtask}
+                title={!canCreateSubtask ? 'Bạn không có quyền tạo công việc con cho task này' : 'Thêm công việc con'}
+                className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium border-2 border-dashed rounded-lg transition-colors ${
+                    canCreateSubtask
+                        ? 'text-[var(--brand-600)] bg-[var(--brand-50)] border-[var(--brand-200)] hover:bg-[var(--brand-100)] hover:border-[var(--brand-300)] cursor-pointer'
+                        : 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed opacity-50'
+                }`}
+            >
+                <Plus className="h-4 w-4" />
+                Thêm công việc con
+            </button>
 
             {/* Subtasks list */}
             {subtasks.length === 0 ? (
                 <div className="p-8 text-center text-sm text-gray-500 border border-gray-200 rounded-lg border-dashed">
-                    Chưa có subtask nào. {canManage && 'Click nút trên để thêm công việc con với đầy đủ thông tin.'}
+                    Chưa có subtask nào. {canCreateSubtask && 'Click nút trên để thêm công việc con với đầy đủ thông tin.'}
                 </div>
             ) : (
                 <DndContext
@@ -220,7 +225,7 @@ export default function SubtaskList({
             )}
             
             {/* Create Subtask Dialog */}
-            {showCreateDialog && parentTask && (
+            {canCreateSubtask && showCreateDialog && parentTask && (
                 <CreateSubtaskDialog
                     open={showCreateDialog}
                     onClose={() => setShowCreateDialog(false)}

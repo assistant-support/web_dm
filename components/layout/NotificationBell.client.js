@@ -6,48 +6,36 @@ import { Bell, Check, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import Dropdown from '@/components/ui/dropdown';
+import {
+    getMyNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+} from '@/data/noti/actions/list';
 
 /**
- * NotificationBell - Simple notification dropdown
- * Note: This is a simplified version using mock data
- * In production, connect to real notification system
+ * NotificationBell - Notification dropdown with real-time updates
+ * Integrated with server actions for live notification data
  */
 export default function NotificationBell({ currentUser }) {
     const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
     const [mounted, setMounted] = useState(false);
 
     // Ensure client-side only rendering to avoid hydration issues
     useEffect(() => {
         setMounted(true);
-        // In production, fetch from API
-        const now = Date.now();
-        const mockNotifications = [
-            {
-                id: '1',
-                type: 'task.assigned',
-                message: 'Bạn được giao nhiệm vụ mới: "Thiết kế UI Dashboard"',
-                createdAt: new Date(now - 1000 * 60 * 5), // 5 mins ago
-                read: false,
-            },
-            {
-                id: '2',
-                type: 'comment.added',
-                message: 'Nguyễn Văn A đã bình luận trong nhiệm vụ "API Integration"',
-                createdAt: new Date(now - 1000 * 60 * 30), // 30 mins ago
-                read: false,
-            },
-            {
-                id: '3',
-                type: 'task.status.changed',
-                message: 'Nhiệm vụ "Testing Module" đã chuyển sang trạng thái "Hoàn thành"',
-                createdAt: new Date(now - 1000 * 60 * 60 * 2), // 2 hours ago
-                read: true,
-            },
-        ];
-        setNotifications(mockNotifications);
-    }, []);
+        
+        // Fetch real notifications from server
+        const fetchNotifications = async () => {
+            const result = await getMyNotifications({ limit: 10 });
+            if (result.ok) {
+                setNotifications(result.data.notifications);
+                setUnreadCount(result.data.unreadCount);
+            }
+        };
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+        fetchNotifications();
+    }, []);
 
     // Prevent hydration mismatch by not rendering until mounted
     if (!mounted) {
@@ -62,16 +50,26 @@ export default function NotificationBell({ currentUser }) {
         );
     }
 
-    const handleMarkAsRead = (id) => {
+    const handleMarkAsRead = async (id) => {
+        // Optimistic UI update - immediately reflect the change
         setNotifications(prev =>
             prev.map(n => n.id === id ? { ...n, read: true } : n)
         );
+        setUnreadCount(prev => Math.max(0, prev - 1));
+
+        // Call server action
+        await markNotificationAsRead(id);
     };
 
-    const handleMarkAllAsRead = () => {
+    const handleMarkAllAsRead = async () => {
+        // Optimistic UI update - immediately mark all as read
         setNotifications(prev =>
             prev.map(n => ({ ...n, read: true }))
         );
+        setUnreadCount(0);
+
+        // Call server action
+        await markAllNotificationsAsRead();
     };
 
     const handleClearAll = () => {

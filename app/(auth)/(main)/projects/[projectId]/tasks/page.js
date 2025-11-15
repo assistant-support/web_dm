@@ -5,6 +5,7 @@ import { getProjectDetail } from '@/data/project/actions/list';
 import { listByProject } from '@/data/task/actions/server';
 import { getCurrentUser } from '@/lib/request-user';
 import { getUsersDisplayInfo } from '@/lib/user-display';
+import { canCreateTask } from '@/lib/permissions.js';
 
 // Revalidate every 3 seconds for real-time updates
 export const revalidate = 3; 
@@ -36,6 +37,9 @@ export default async function ProjectTasksPage({ params }) {
     // Check if user can manage (owner or manager)
     const userMember = project.members?.find(m => m.userId === user.externalUserId);
     const canManage = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
+    
+    // Check if user can create root tasks (only project managers)
+    const canCreate = canCreateTask(project, user.externalUserId);
 
     // Get team member IDs if project has team
     const team = project.team; // Already populated by getProjectDetail
@@ -75,26 +79,27 @@ export default async function ProjectTasksPage({ params }) {
     }));
 
     return (
-        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
-            {/* Header với nút tạo task */}
-            <div className="flex items-center justify-between px-1">
-                <div>
-                    <h2 className="text-xl font-semibold text-gray-900">Công việc</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                        {initialTasks.length} công việc trong dự án
-                    </p>
+        <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <div className="p-6 space-y-6">
+                {/* Header với nút tạo task */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-xl font-semibold text-gray-900">Công việc</h2>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {initialTasks.length} công việc trong dự án
+                        </p>
+                    </div>
+                    <CreateTaskButton
+                        projectId={projectId}
+                        users={users}
+                        projectMembers={project.members || []}
+                        currentUserId={user.externalUserId}
+                        canManage={canManage}
+                        canCreate={canCreate}
+                    />
                 </div>
-                <CreateTaskButton
-                    projectId={projectId}
-                    users={users}
-                    projectMembers={project.members || []}
-                    currentUserId={user.externalUserId}
-                    canManage={canManage}
-                />
-            </div>
 
-            {/* Task List */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                {/* Task List */}
                 <TaskList
                     initialTasks={initialTasks}
                     users={users}

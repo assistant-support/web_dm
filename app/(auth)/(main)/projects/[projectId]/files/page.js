@@ -48,34 +48,36 @@ export default async function ProjectFilesPage({ params, searchParams }) {
         .catch(() => statsFallback);
 
     return (
-        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
-            <FilesManager
-                initialFilesPromise={filesPromise}
-                statsPromise={statsPromise}
-                currentUser={currentUser}
-                initialFilters={{
-                    scope: 'project',
-                    projectId: '',
-                    kind,
-                    search,
-                    sortBy,
-                    sortOrder,
-                    page,
-                    view,
-                }}
-                config={{
-                    scopeOptions: [
-                        { value: 'project', label: 'File dự án' },
-                    ],
-                    filterDefaults: {
+        <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <div className="p-6 space-y-6">
+                <FilesManager
+                    initialFilesPromise={filesPromise}
+                    statsPromise={statsPromise}
+                    currentUser={currentUser}
+                    initialFilters={{
                         scope: 'project',
-                        view: 'grid',
                         projectId: '',
-                    },
-                    searchPlaceholder: 'Tìm file trong dự án...',
-                    filterBasePath: `/projects/${projectId}/files`,
-                }}
-            />
+                        kind,
+                        search,
+                        sortBy,
+                        sortOrder,
+                        page,
+                        view,
+                    }}
+                    config={{
+                        scopeOptions: [
+                            { value: 'project', label: 'File dự án' },
+                        ],
+                        filterDefaults: {
+                            scope: 'project',
+                            view: 'grid',
+                            projectId: '',
+                        },
+                        searchPlaceholder: 'Tìm file trong dự án...',
+                        filterBasePath: `/projects/${projectId}/files`,
+                    }}
+                />
+            </div>
         </div>
     );
 }

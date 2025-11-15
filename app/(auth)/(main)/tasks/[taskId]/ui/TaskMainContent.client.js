@@ -15,6 +15,7 @@ import { driveImage } from '@/functions/index.js';
 import SubtaskList from './SubtaskList.client.js';
 import WorkflowViewer from '@/components/tasks/WorkflowViewer.client.js';
 import AttachmentList from '@/components/attachments/AttachmentList.client.js';
+import Button from '@/components/ui/button/index.js';
 
 
 /**
@@ -25,6 +26,7 @@ export default function TaskMainContent({
     subtasks,
     currentUser,
     canManage,
+    canCreateSubtask = false,
     isAssignee,
     isCreator,
     allUsersWithDetails,
@@ -56,7 +58,7 @@ export default function TaskMainContent({
 
     // Quyền quản lý attachments
     const canManageAttachments = isAssignee || isCreator;
-    console.log(isAssignee, canManageAttachments);
+    console.log(isAssignee, canManageAttachments, (isAssignee || canManageAttachments) && !task.parentTask);
 
     return (
         <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -68,14 +70,16 @@ export default function TaskMainContent({
                         <Workflow size={18} className="text-blue-600" />
                         Quy trình (Workflow)
                     </h3>
-                    {isAssignee && !task.parentTask && (
-                        <Link
-                            variant="outline"
-                            size="xs"
-                            href={`/tasks/${task._id}/workflow`}
-                        >
-                            Chỉnh sửa Workflow
-                        </Link>
+                    {(isAssignee || canManageAttachments) && !task.parentTask && (
+                        <Button>
+                            <Link
+                                variant="outline"
+                                size="xs"
+                                href={`/tasks/${task._id}/workflow`}
+                            >
+                                Chỉnh sửa Workflow
+                            </Link>
+                        </Button>
                     )}
                 </div>
                 <div className="p-4">
@@ -90,6 +94,7 @@ export default function TaskMainContent({
                     subtasks={subtasks}
                     currentUser={currentUser}
                     canManage={canManage}
+                    canCreateSubtask={canCreateSubtask}
                     isCreator={isCreator}
                     allUsersWithDetails={allUsersWithDetails}
                     projectMembers={projectMembers}
@@ -145,7 +150,7 @@ export default function TaskMainContent({
                             />
                             <button
                                 onClick={handleAddComment}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm"
+                                className="bg-[var(--brand-600)] text-white px-4 py-2 rounded-md text-sm hover:bg-[var(--brand-700)] transition-colors"
                             >
                                 Gửi
                             </button>

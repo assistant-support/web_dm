@@ -3,7 +3,7 @@
 
 import { notFound } from 'next/navigation';
 import { getCurrentUser } from '@/lib/request-user.js';
-import { canManageProject, getUserId } from '@/lib/permissions.js';
+import { canManageProject, getUserId, canCreateSubtask } from '@/lib/permissions.js';
 // Actions
 import { getTaskDetail, listSubtasks } from '@/data/task/actions';
 import { getDetailAction as getProjectDetail } from '@/data/project/actions/server.js';
@@ -127,6 +127,10 @@ export default async function TaskDetailPage({ params }) {
     const isAssignee = getUserId(task.assignee) === currentUserId;
     const isCreator = getUserId(task.createdBy) === currentUserId;
     const canEditTask = hasManagePermission || isCreator;
+    
+    // Check if user can create subtasks for this task
+    const canCreateSubtaskForThisTask = project ? canCreateSubtask(task, project, currentUserId) : false;
+    
     const projectName = project?.name || '';
     const projectMembers = team?.members || [];
 
@@ -159,6 +163,7 @@ export default async function TaskDetailPage({ params }) {
                         workflow={workflow.data}
                         currentUser={currentUser}
                         canManage={hasManagePermission}
+                        canCreateSubtask={canCreateSubtaskForThisTask}
                         isAssignee={isAssignee}
                         isCreator={isCreator}
                         allUsersWithDetails={allUsersWithDetails}

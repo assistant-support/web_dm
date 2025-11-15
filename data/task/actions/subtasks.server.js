@@ -5,9 +5,10 @@
 
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
-import { canManageProject } from '@/lib/permissions.js';
+import { canManageProject, canCreateSubtask } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
+import { notifySubtaskCreated } from '@/lib/noti-helpers.js';
 
 import Task from '@/model/task.model.js';
 import Project from '@/model/project.model.js';
@@ -75,13 +76,21 @@ export async function createSubtask(parentTaskId, payload) {
         const parentTask = await Task.findById(parentTaskId);
         assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
 
+        // Get project for permission check
+        const project = await Project.findById(parentTask.project).lean();
+        assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+
         // Validate subtask creation
         const validation = validateSubtask(parentTask, payload);
         assert(validation.valid, validation.error, 'VALIDATION_ERROR', 400);
-        // Ensure assignee or createdBy of parent task can create subtasks
-        const isAssignee = parentTask.assignee && String(parentTask.assignee) === String(uid);
-        const isCreator = parentTask.createdBy && String(parentTask.createdBy) === String(uid);
-        assert(isAssignee || isCreator, 'FORBIDDEN', 'FORBIDDEN', 403);
+        
+        // **Kiểm tra quyền tạo SUBTASK - Manager hoặc Creator/Assignee của task cha**
+        assert(
+            canCreateSubtask(parentTask, project, uid),
+            'Không có quyền tạo công việc con cho task này',
+            'FORBIDDEN',
+            403
+        );
 
         // [THÊM] Xác định status và assigneeConfirm cho subtask dựa trên assignee
         let status = payload.status || TASK_STATUS.DRAFT;
@@ -142,6 +151,32 @@ export async function createSubtask(parentTaskId, payload) {
                 parentTaskTitle: parentTask.title,
             },
         });
+
+        // --- Send Zalo Notification for Subtask Creation ---
+        // Gửi cho người được giao subtask (nếu có)
+        if (subtask.assignee && subtask.assignee !== uid) {
+            notifySubtaskCreated(
+                parentTask.title,
+                subtask.title,
+                String(subtask.assignee)
+            ).catch(err => {
+                console.error(`[createSubtask ${subtask._id}] Failed to send Zalo notification to assignee ${subtask.assignee}:`, err);
+            });
+        }
+        
+        // Gửi cho người được giao task cha (nếu khác với người tạo subtask và người được giao subtask)
+        if (parentTask.assignee && 
+            String(parentTask.assignee) !== uid && 
+            String(parentTask.assignee) !== String(subtask.assignee)) {
+            notifySubtaskCreated(
+                parentTask.title,
+                subtask.title,
+                String(parentTask.assignee)
+            ).catch(err => {
+                console.error(`[createSubtask ${subtask._id}] Failed to send Zalo notification to parent task owner ${parentTask.assignee}:`, err);
+            });
+        }
+        // -----------------------------------------------------
 
         await revalidateMany([
             tags.project(parentTask.project),

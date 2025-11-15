@@ -112,7 +112,7 @@ export default function ChatDataProvider({ onClose } = {}) {
       projects_data,
       task_types,
     };
-  }, [isLoading, fetchError, session, tasksData, projectsData, taskTypesData]);
+  }, [isLoading, fetchError, session, tasksData, projectsData, taskTypesData, token]);
 
   // Call the socket hook with the contextPayload (may be null). Hook will only connect when payload is non-null.
   // initialBotMessages will be [] on first render, then populated by useEffect above

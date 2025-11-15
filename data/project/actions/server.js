@@ -9,6 +9,7 @@ import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
 import { isTeamManager, canManageProject } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
+import { notifyProjectMemberAdded } from '@/lib/noti-helpers.js';
 
 // Tối ưu: Import repo của Team và Project
 import { getById as getTeamById } from '@/data/team/processors/repo.js';
@@ -65,16 +66,22 @@ export async function getDetailAction(projectId) {
     }, { requireAuth: true });
 }
 
-/** Tạo project (team manager hoặc độc lập nếu không có team). */
+/** Tạo project (chỉ team manager có quyền). */
 export async function create(payload) {
     await connectDB();
     return runAction(async ({ user }) => {
         const data = validate(projectCreateSchema, payload);
 
+        // PERMISSION CHECK: Chỉ Team Manager mới được tạo project
         if (data.team) {
             const team = await getTeamById(data.team, { lean: true }); // Tối ưu: Dùng repo team
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
+            assert(
+                isTeamManager(team, user.externalUserId), 
+                'Chỉ quản lý nhóm mới được tạo dự án', 
+                'FORBIDDEN', 
+                403
+            );
         }
         const doc = await createProject(data, user.externalUserId);
 
@@ -161,6 +168,15 @@ export async function addMemberAction(projectId, payload) {
             type: isOutsider ? 'project.member.added.outsider' : 'project.member.added', 
             payload: { ...data, isOutsider } 
         });
+        
+        // --- Send Zalo Notification for Project Member Added ---
+        notifyProjectMemberAdded(
+            updated.name || 'dự án',
+            String(data.userId)
+        ).catch(err => {
+            console.error(`[addMemberAction] Failed to send Zalo notification to user ${data.userId}:`, err);
+        });
+        // -------------------------------------------------------
         
         await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 

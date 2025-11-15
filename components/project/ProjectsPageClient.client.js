@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import MyProjectsList from '@/components/project/MyProjectsList';
 import CreateProjectDialog from '@/components/project/CreateProjectDialog.client.js';
 
-export default function ProjectsPageClient({ initialProjects }) {
+export default function ProjectsPageClient({ initialProjects, canCreateProject = false }) {
     const router = useRouter();
     const [showCreateDialog, setShowCreateDialog] = useState(false);
 
@@ -38,10 +38,12 @@ export default function ProjectsPageClient({ initialProjects }) {
                     </div>
                     <button
                         onClick={() => setShowCreateDialog(true)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-600)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--brand-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 transition-all shadow-sm"
+                        disabled={!canCreateProject}
+                        className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-600)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--brand-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[var(--brand-600)]"
+                        title={!canCreateProject ? 'Chỉ quản lý nhóm mới được tạo dự án' : 'Tạo dự án mới'}
                     >
                         <Plus className="h-4 w-4" />
-                        Tạo dự án mới 1
+                        Tạo dự án mới
                     </button>
                 </div>
 
@@ -87,11 +89,13 @@ export default function ProjectsPageClient({ initialProjects }) {
             </div>
 
             {/* Create Project Dialog */}
-            <CreateProjectDialog
-                open={showCreateDialog}
-                onClose={() => setShowCreateDialog(false)}
-                onSuccess={handleCreateSuccess}
-            />
+            {canCreateProject && (
+                <CreateProjectDialog
+                    open={showCreateDialog}
+                    onClose={() => setShowCreateDialog(false)}
+                    onSuccess={handleCreateSuccess}
+                />
+            )}
         </>
     );
 }

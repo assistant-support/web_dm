@@ -29,6 +29,7 @@ import {
 // Import Dialog Zalo và action
 import NotifyZaloDialog from '@/components/zalo/NotifyZaloDialog.client';
 import DialogComponent from '@/components/ui/dialog'; // Import DialogComponent
+import TaskPointsBadge from './TaskPointsBadge.client'; // Import TaskPointsBadge
 
 
 // --- Helper Functions (Giữ nguyên) ---
@@ -143,6 +144,47 @@ export default function TaskItem({
         onDelete,
         onAddSubtask
     } = actions || {}; // Đảm bảo actions không null
+
+    // --- Calculated values (Di chuyển lên trước để các handlers có thể sử dụng) ---
+    const statusInfo = getStatusInfo(task.status);
+    const priorityInfo = getPriorityInfo(task.priority);
+    const StatusIcon = statusInfo.icon;
+    const progress = task.progress || { total: 0, completed: 0, percentage: 0 };
+    const hasSubtasks = !task.parentTask && progress.total > 0;
+    const workTypeInfo = task.workType ? getWorkTypeByCode(task.workType) : null;
+    const isCreator = getUserId(task.createdBy) === currentUserId;
+    const isAssignee = getUserId(task.assignee) === currentUserId;
+    const isProjectManager = canManage;
+    const isWaitingConfirm = task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+    const isPendingApproval = task.status === TASK_STATUS.PENDING_APPROVAL;
+    const isPendingCompletionReview = task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW;
+    const isEditable = [TASK_STATUS.DRAFT, TASK_STATUS.PENDING_APPROVAL, TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, TASK_STATUS.REJECTED].includes(task.status);
+    const canStartOrHold = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
+    const canMarkDone = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
+    const canCancel = ![TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED].includes(task.status);
+    const canDelete = [TASK_STATUS.DRAFT, TASK_STATUS.REJECTED, TASK_STATUS.CANCELLED].includes(task.status);
+
+    // [THÊM] Subtask-specific permissions
+    const isParentOwner = isSubtask && parentTaskAssignee === currentUserId;
+    
+    // [CẬP NHẬT] PM/Owner có MỌI quyền trong dự án
+    // Subtask: PM/Owner/ParentOwner có quyền quản lý
+    // Task cha: PM/Owner có quyền quản lý
+    const canManageSubtask = isSubtask 
+        ? (isProjectManager || isParentOwner) 
+        : isProjectManager;
+    
+    const canAssignSubtask = canManageSubtask || (isSubtask && isCreator);
+    const canEditSubtask = canManageSubtask || (isSubtask && (isCreator || isAssignee));
+    const canApproveSubtask = isProjectManager || isParentOwner;
+    const isSubtaskAssignee = isSubtask && isAssignee;
+
+    // --- Adjusted Permissions for Subtask Approval ---
+    // PM/Owner có quyền duyệt MỌI task (cả task cha và task con)
+    // Task con: ParentOwner (task.createdBy) cũng có quyền duyệt
+    const canApproveOrReject = isProjectManager || (isSubtask && getUserId(task.createdBy) === currentUserId);
+    const showApprovalButtons = canApproveOrReject && isPendingCompletionReview;
+    const showPendingApproval = isSubtaskAssignee && isPendingCompletionReview && !canApproveOrReject;
 
     // --- Action Handlers (Sử dụng `run` từ useAsyncNotifier) ---
     const handleConfirmAssignment = async (accept) => {
@@ -305,8 +347,13 @@ export default function TaskItem({
         if (![TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status)) return;
         
         if (onUpdateStatus) {
-            // [SỬA] Nếu là subtask và người làm là parent owner → Tự động hoàn thành
-            if (isSubtask && isParentOwner) {
+            // [SỬA] Quyền tự động hoàn thành:
+            // 1. PM hoặc Creator (owner) của task → Auto-complete
+            // 2. Subtask: Parent owner → Auto-complete
+            // 3. Người khác → Gửi duyệt
+            const canAutoComplete = isProjectManager || isCreator || (isSubtask && isParentOwner);
+            
+            if (canAutoComplete) {
                 // Tự động hoàn thành, không cần duyệt
                 await run(() => onUpdateStatus(task._id, TASK_STATUS.COMPLETED), {
                     loadingMessage: 'Đang hoàn thành công việc...',
@@ -337,38 +384,6 @@ export default function TaskItem({
             });
         }
     };
-
-    // --- Calculated values ---
-    const statusInfo = getStatusInfo(task.status);
-    const priorityInfo = getPriorityInfo(task.priority);
-    const StatusIcon = statusInfo.icon;
-    const progress = task.progress || { total: 0, completed: 0, percentage: 0 };
-    const hasSubtasks = !task.parentTask && progress.total > 0;
-    const workTypeInfo = task.workType ? getWorkTypeByCode(task.workType) : null;
-    const isCreator = getUserId(task.createdBy) === currentUserId;
-    const isAssignee = getUserId(task.assignee) === currentUserId;
-    const isProjectManager = canManage;
-    const isWaitingConfirm = task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
-    const isPendingApproval = task.status === TASK_STATUS.PENDING_APPROVAL;
-    const isPendingCompletionReview = task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW;
-    const isEditable = [TASK_STATUS.DRAFT, TASK_STATUS.PENDING_APPROVAL, TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, TASK_STATUS.REJECTED].includes(task.status);
-    const canStartOrHold = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
-    const canMarkDone = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
-    const canCancel = ![TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED].includes(task.status);
-    const canDelete = [TASK_STATUS.DRAFT, TASK_STATUS.REJECTED, TASK_STATUS.CANCELLED].includes(task.status); // Chỉ cho xóa khi ở trạng thái nháp, bị từ chối hoặc đã hủy
-
-    // [THÊM] Subtask-specific permissions
-    const isParentOwner = isSubtask && parentTaskAssignee === currentUserId;
-    const canManageSubtask = isSubtask ? (isProjectManager || isParentOwner) : canManage;
-    const canAssignSubtask = canManageSubtask;
-    const canEditSubtask = canManageSubtask;
-    const canApproveSubtask = canManageSubtask;
-    const isSubtaskAssignee = isSubtask && isAssignee;
-
-    // --- Adjusted Permissions for Subtask Approval ---
-    const canApproveOrReject = isSubtask && getUserId(task.createdBy) === currentUserId; // Only creator of the task can approve/reject
-    const showApprovalButtons = canApproveOrReject && isPendingCompletionReview;
-    const showPendingApproval = isSubtaskAssignee && isPendingCompletionReview && !canApproveOrReject; // Subtask assignee sees pending status and reminder button
 
     // Memoize relevant users to avoid recalculation
     const relevantUsers = useMemo(() => {
@@ -487,7 +502,7 @@ export default function TaskItem({
                                 )}
                             </div>
                             <div className="hidden lg:flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap" title={`Hạn: ${fmt(task.plannedDueAt)}`}><CalendarDays className="h-4 w-4 text-gray-400" /><span>{fmt(task.plannedDueAt)}</span></div>
-                            <div className="hidden sm:block text-xs font-semibold text-gray-700 px-2 py-1 bg-gray-50 rounded border border-gray-200">{formatTaskPoints(task)}</div>
+                            <div className="hidden sm:block"><TaskPointsBadge task={task} size="sm" /></div>
                             {/* Toggle Subtasks Button */}
                             {hasSubtasks && (
                                 <button
@@ -551,7 +566,8 @@ export default function TaskItem({
                                         ) : (
                                             <div className="flex items-center justify-end gap-2 w-full">
                                                 <div className="flex items-center gap-1 text-xs text-blue-600" title="Chờ xác nhận"><Clock size={14} /><span className="hidden xl:inline">Chờ xác nhận</span></div>
-                                                {(isCreator || isProjectManager || (isSubtask && isParentOwner)) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyAssignee} variant="info" tooltip="Nhắc nhở người thực hiện" className={notifyActionBtnClass} />)}
+                                                {/* [CẬP NHẬT] PM/Owner/Creator/ParentOwner có thể nhắc nhở */}
+                                                {(isProjectManager || isCreator || (isSubtask && isParentOwner)) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyAssignee} variant="info" tooltip="Nhắc nhở người thực hiện" className={notifyActionBtnClass} />)}
                                             </div>
                                         )}
                                     </>
@@ -613,29 +629,29 @@ export default function TaskItem({
                                 </Dropdown.Trigger>
                                 <Dropdown.Content position="bottom-right" width="w-56" className="z-10">
                                     <div className="p-1">
-                                        {/* Chỉ task cha mới có tạo việc con */}
-                                        {!task.parentTask && <DropdownItem icon={PlusCircle} label="Tạo việc con" onClick={handleAddSubtask} />}
+                                        {/* [CẬP NHẬT] Tạo việc con: PM/Owner/Creator/Assignee của task cha */}
+                                        {!task.parentTask && (isProjectManager || isCreator || isAssignee) && (
+                                            <DropdownItem icon={PlusCircle} label="Tạo việc con" onClick={handleAddSubtask} />
+                                        )}
                                         
-                                        {/* Sửa chi tiết: TASK CHA (editable) | TASK CON (PM hoặc parent owner) */}
-                                        {isSubtask ? (
-                                            canEditSubtask && isEditable && <DropdownItem icon={Edit} label="Sửa chi tiết" onClick={handleEdit} />
-                                        ) : (
-                                            isEditable && <DropdownItem icon={Edit} label="Sửa chi tiết" onClick={handleEdit} />
+                                        {/* [CẬP NHẬT] Sửa chi tiết: PM/Owner có quyền sửa MỌI task (cả cha và con) */}
+                                        {(isProjectManager || canEditSubtask) && isEditable && (
+                                            <DropdownItem icon={Edit} label="Sửa chi tiết" onClick={handleEdit} />
                                         )}
                                         
                                         {(isEditable || !task.parentTask) && <div className="border-t border-gray-200 my-1"></div>}
 
-                                        {/* Start/Hold: TASK CHA (assignee) | TASK CON (chỉ assignee) */}
-                                        {canStartOrHold && (isSubtask ? isSubtaskAssignee : isAssignee) && (
+                                        {/* [CẬP NHẬT] Start/Hold: PM/Owner hoặc Assignee */}
+                                        {canStartOrHold && (isProjectManager || isAssignee) && (
                                             <DropdownItem icon={task.status === TASK_STATUS.IN_PROGRESS ? PauseCircle : PlayCircle} label={task.status === TASK_STATUS.IN_PROGRESS ? 'Tạm dừng' : 'Tiếp tục'} onClick={toggleStartOnHold} />
                                         )}
                                         
-                                        {/* Đánh dấu hoàn thành: TASK CHA (assignee) | TASK CON (chỉ assignee) */}
-                                        {canMarkDone && (isSubtask ? isSubtaskAssignee : isAssignee) && (
+                                        {/* [CẬP NHẬT] Đánh dấu hoàn thành: PM/Owner hoặc Assignee */}
+                                        {canMarkDone && (isProjectManager || isAssignee) && (
                                             <DropdownItem icon={CheckCircle2} label="Đánh dấu Hoàn thành" onClick={handleMarkDoneClick} className="text-green-600 hover:!bg-green-50" />
                                         )}
                                         
-                                        {/* Assignee Select - Chỉ cho task cha */}
+                                        {/* [CẬP NHẬT] Giao việc: PM/Owner hoặc Creator của task cha */}
                                         {!isSubtask && (isProjectManager || isCreator) && (
                                             <div className="p-2 border-t border-gray-200 mt-1">
                                                 <label className="text-xs font-medium text-gray-500 mb-1 block">Giao cho</label>
@@ -654,13 +670,12 @@ export default function TaskItem({
                                                 </select>
                                             </div>
                                         )}
-                                        {/* Cancel / Delete Actions */}
-                                        {/* TASK CHA: PM hoặc creator | TASK CON: PM hoặc parent owner */}
+                                        {/* [CẬP NHẬT] Cancel/Delete: PM/Owner có quyền hủy/xóa MỌI task */}
                                         <div className="border-t border-gray-200 my-1 pt-1">
-                                            {canCancel && (isSubtask ? canManageSubtask : (isProjectManager || isCreator)) && (
+                                            {canCancel && (isProjectManager || canManageSubtask || isCreator) && (
                                                 <DropdownItem icon={XCircle} label="Hủy bỏ" onClick={handleCancelClick} className="text-red-600 hover:!bg-red-50" />
                                             )}
-                                            {canDelete && (isSubtask ? canManageSubtask : (isProjectManager || isCreator)) && (
+                                            {canDelete && (isProjectManager || canManageSubtask || isCreator) && (
                                                 <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
                                             )}
                                         </div>

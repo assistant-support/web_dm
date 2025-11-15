@@ -38,6 +38,7 @@ import CommentList from '@/components/comments/CommentList.client';
 import AttachmentList from '@/components/attachments/AttachmentList.client';
 import CollaboratorsPanel from '@/components/tasks/CollaboratorsPanel.client';
 import PointDistributionPanel from '@/components/tasks/PointDistributionPanel.client';
+import TaskPointsBadge from './TaskPointsBadge.client';
 
 // Dialogs
 import CreateSubtaskDialog from './CreateSubtaskDialog.client';
@@ -462,7 +463,7 @@ export default function TaskDetail({
                                 <MetadataItem icon={BarChart3} label="Độ ưu tiên" iconClassName={priorityInfo.color}><span className={priorityInfo.color}>{priorityInfo.label}</span></MetadataItem>
                                 <MetadataItem icon={CalendarDays} label="Hạn chót">{fmt(task.plannedDueAt)}</MetadataItem>
                                 <MetadataItem icon={CheckCircle2} label="Ngày hoàn thành" iconClassName="text-green-600">{fmt(task.completedAt)}</MetadataItem>
-                                <MetadataItem icon={Circle} label="Điểm">{formatTaskPoints(task)}</MetadataItem>
+                                <MetadataItem icon={Circle} label="Điểm"><TaskPointsBadge task={task} size="md" /></MetadataItem>
                                 <div className="pt-3 pb-3 text-xs text-gray-500 space-y-1">
                                     <div><span className="font-medium">Tạo lúc:</span> {fmt(task.createdAt, true)}</div>
                                     {task.updatedAt && task.updatedAt !== task.createdAt && (<div><span className="font-medium">Cập nhật:</span> {fmt(task.updatedAt, true)}</div>)}

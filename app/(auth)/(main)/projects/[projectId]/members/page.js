@@ -47,25 +47,27 @@ export default async function ProjectMembersPage({ params }) {
     const canManage = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
 
     return (
-        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
-            {/* Header */}
-            <div>
-                <h2 className="text-xl font-semibold text-gray-900">Thành viên dự án</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                    Quản lý thành viên và xem thống kê hiệu suất
-                </p>
-            </div>
+        <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <div className="p-6 space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Thành viên dự án</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                        Quản lý thành viên và xem thống kê hiệu suất
+                    </p>
+                </div>
 
-            {/* Member List - Server Component with stats */}
-            <MemberList
-                projectId={projectId}
-                teamId={project.team}
-                members={project.members || []}
-                usersMap={usersMap}
-                memberStats={memberStatsResult || {}}
-                isManager={canManage}
-                currentUserId={user.externalUserId}
-            />
+                {/* Member List - Server Component with stats */}
+                <MemberList
+                    projectId={projectId}
+                    teamId={project.team}
+                    members={project.members || []}
+                    usersMap={usersMap}
+                    memberStats={memberStatsResult || {}}
+                    isManager={canManage}
+                    currentUserId={user.externalUserId}
+                />
+            </div>
         </div>
     );
 }

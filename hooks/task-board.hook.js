@@ -11,6 +11,7 @@ import { useSensors, useSensor, PointerSensor, KeyboardSensor } from '@dnd-kit/c
 import { arrayMove } from '@dnd-kit/sortable';
 import { updateTaskStatus, updateTask, deleteTask } from '@/actions/task.actions';
 import { useRouter } from 'next/navigation';
+import { updateTaskStatus as serverUpdateTaskStatus } from '@/data/task/actions/server.js';
 
 /**
  * Hook for Kanban board with drag-and-drop functionality.
@@ -108,6 +109,10 @@ export function useTaskBoard(initialProject = {}, initialTasks = []) {
 /**
  * Hook that provides task action handlers for list/calendar views.
  * These actions call server actions with optimistic updates.
+ * 
+ * ✅ FIX: Changed onUpdateStatus to use serverUpdateTaskStatus instead of updateTask
+ * - serverUpdateTaskStatus: Allows any project member to update status
+ * - updateTask: Only allows PM to update (causes 403 for regular members)
  */
 export function useTaskBoardActions() {
     const router = useRouter();
@@ -125,16 +130,35 @@ export function useTaskBoardActions() {
         });
     };
 
+    /**
+     * ✅ FIXED: Use serverUpdateTaskStatus for status updates
+     * This function allows any project member to update task status,
+     * while updateTask requires PM permission.
+     */
     const onUpdateStatus = async (taskId, newStatus) => {
-        startTransition(async () => {
-            const formData = new FormData();
-            formData.append('status', newStatus);
-            const result = await updateTask(taskId, formData);
-            if (result.error) {
-                console.error('Failed to update status:', result.error);
+        try {
+            // Call the correct server action that allows members to update status
+            const result = await serverUpdateTaskStatus(taskId, newStatus);
+            
+            // Check if result indicates failure
+            if (result && result.ok === false) {
+                console.error('Failed to update status:', result.message || result.error);
+                throw new Error(result.message || 'Cập nhật trạng thái thất bại');
             }
+            
+            // Refresh to show updated data
             router.refresh();
-        });
+            return result;
+        } catch (error) {
+            console.error('Error in onUpdateStatus:', error);
+            // Re-throw to allow useAsyncNotifier to catch and display error
+            throw {
+                ok: false,
+                message: error.message || 'Không thể cập nhật trạng thái task',
+                code: error.code || 'UPDATE_STATUS_ERROR',
+                status: error.status || 500
+            };
+        }
     };
 
     const onDelete = async (taskId) => {

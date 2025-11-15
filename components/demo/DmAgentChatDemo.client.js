@@ -3,6 +3,7 @@
 import React from 'react';
 import { Send, CheckCircle, Edit3, Loader2 } from 'lucide-react';
 import TaskPreviewCard from './TaskPreviewCard.client';
+import MessageFormatter from './MessageFormatter.client';
 
 /**
  * Dumb UI component for DM-Agent chat.
@@ -208,7 +209,7 @@ export default function DmAgentChatDemo({
                   <div className="flex justify-start">
                     <div className="max-w-[85%] space-y-2">
                       <div className="rounded-lg bg-gray-100 px-4 py-3 text-sm text-gray-900 shadow-sm">
-                        {msg.message}
+                        <MessageFormatter message={msg.message} />
                       </div>
 
                       {/* Debug: Show raw message data */}

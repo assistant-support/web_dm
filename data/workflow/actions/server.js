@@ -245,7 +245,7 @@ export async function getByProjectAction(payload) {
 
 /**
  * ACTION: Tạo workflow cho parent task
- * Chỉ assignee của parent task mới tạo được
+ * Chỉ Project Manager hoặc người tạo task mới được tạo workflow
  */
 export async function createTaskWorkflow(parentTaskId, { name, nodes, edges }) {
     await connectDB();
@@ -253,9 +253,26 @@ export async function createTaskWorkflow(parentTaskId, { name, nodes, edges }) {
         const uid = user.externalUserId;
         const Task = (await import('@/model/task.model.js')).default;
         
-        const task = await Task.findById(parentTaskId);
+        // Fetch task và populate project với members để kiểm tra quyền
+        const task = await Task.findById(parentTaskId)
+            .populate({
+                path: 'project',
+                select: '_id name members',
+            })
+            .lean();
         assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
-        assert(task.assignee === uid, 'Bạn không phải là người đứng chính task', 'FORBIDDEN', 403);
+        
+        const project = task.project;
+        assert(project, 'Dự án của task không tồn tại', 'NOT_FOUND', 404);
+        
+        // Kiểm tra quyền: Phải là Project Manager hoặc người tạo task
+        const canCreate = canManageProject(project, uid) || String(task.createdBy) === String(uid);
+        assert(
+            canCreate,
+            'Chỉ quản lý dự án hoặc người tạo task mới có quyền tạo workflow',
+            'FORBIDDEN',
+            403
+        );
         
         // Check if workflow already exists
         if (task.workflowId) {

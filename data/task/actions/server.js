@@ -6,7 +6,7 @@
 import mongoose from 'mongoose';
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
-import { canManageProject } from '@/lib/permissions.js';
+import { canManageProject, canCreateTask } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
 import Task from '@/model/task.model.js';
@@ -16,6 +16,7 @@ import { TASK_STATUS, TASK_SCOPE } from '@/model/common/enums.js';
 import { asPlainTask } from '@/lib/serialize.js';
 import { revalidatePath } from 'next/cache';
 import { sendZalo } from '@/lib/noti';
+import { notifyTaskAssignment } from '@/lib/noti-helpers.js';
 import { buildTaskUrl } from '@/lib/url.js';
 import { resolveMonthlyDriveFolderId } from '@/lib/drive-utils.js';
 /**
@@ -426,6 +427,14 @@ export async function createTask(projectId, payload) {
 
         assert(isMember, 'FORBIDDEN', 'Bạn không có quyền tạo công việc trong dự án này.', 403);
 
+        // **Kiểm tra quyền tạo ROOT TASK - chỉ Project Manager mới được tạo**
+        assert(
+            canCreateTask(project, uid),
+            'Chỉ quản lý dự án mới được tạo công việc gốc',
+            'FORBIDDEN',
+            403
+        );
+
         const hasManagePermission = canManageProject(project, uid);
 
         // **THÊM MỚI: Kiểm tra và thêm assignee vào project nếu chưa có**
@@ -569,11 +578,17 @@ export async function createTask(projectId, payload) {
 
         // --- Send Zalo Notification ---
         if (shouldNotifyAssignee && payload.assignee) {
+            // Sử dụng helper function để gửi notification đơn giản
+            notifyTaskAssignment(task.title, String(payload.assignee)).catch(err => {
+                console.error(`[createTask ${task._id}] Failed to send Zalo notification to ${payload.assignee}:`, err);
+            });
+            
+            // Note: Nếu cần message chi tiết hơn (với link, deadline, etc.), 
+            // có thể uncomment block sau và comment dòng notifyTaskAssignment ở trên:
+            /*
             try {
-                // Ensure task details are available for the message
                 const taskLink = buildTaskUrl(task._id);
-                const creatorName = user.name || user.email || 'Quản lý'; // Get creator's name/email
-
+                const creatorName = user.name || user.email || 'Quản lý';
                 const zaloMessage = `🔔 Công việc mới được giao
 --------------------
 Công việc: ${task.title}
@@ -586,15 +601,13 @@ Vui lòng vào hệ thống để xem chi tiết và xác nhận nhận việc.
 🔗 Link công việc:
 ${taskLink}
 `;
-                // Call sendZalo action (no need to await if background notification is ok)
                 sendZalo(payload.assignee, zaloMessage).catch(err => {
                     console.error(`[createTask ${task._id}] Failed to send Zalo notification to ${payload.assignee}:`, err);
                 });
-
             } catch (notifyErr) {
                 console.error(`[createTask ${task._id}] Error preparing Zalo notification for ${payload.assignee}:`, notifyErr);
-                // Log error but proceed
             }
+            */
         }
         // -----------------------------
 
@@ -646,6 +659,45 @@ export async function updateTask(taskId, payload) {
 
             const hasManagePermission = canManageProject(project, uid);
             assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        }
+
+        // Validate finalPoints nếu được cập nhật
+        if (payload.finalPoints !== undefined && payload.finalPoints !== null) {
+            // 1. Tìm các subtask đã hoàn thành
+            const completedSubtasks = await Task.find({
+                parentTask: taskId,
+                status: TASK_STATUS.COMPLETED,
+                deletedAt: null
+            }).lean();
+
+            // 2. Tính tổng điểm subtask (chỉ tính finalPoints)
+            const totalSubtaskPoints = completedSubtasks.reduce((sum, st) => 
+                sum + (st.finalPoints || 0), 0
+            );
+
+            // 3. Validate: finalPoints mới phải >= tổng điểm subtask
+            assert(
+                Number(payload.finalPoints) >= totalSubtaskPoints,
+                `Điểm chốt mới (${payload.finalPoints}) phải lớn hơn hoặc bằng tổng điểm subtask đã chốt (${totalSubtaskPoints}).`,
+                'BAD_REQUEST',
+                400
+            );
+        }
+
+        // Validate quyền hủy task (cancel)
+        if (payload.status === TASK_STATUS.CANCELLED && task.status !== TASK_STATUS.CANCELLED) {
+            // Đang chuyển sang CANCELLED - kiểm tra quyền
+            const canCancel = 
+                canManageProject(project, uid) ||
+                String(task.createdBy) === String(uid) ||
+                String(task.assignee) === String(uid);
+            
+            assert(
+                canCancel,
+                'Bạn không có quyền hủy task này. Chỉ quản lý dự án, người tạo hoặc người được giao task mới có quyền hủy.',
+                'FORBIDDEN',
+                403
+            );
         }
 
         // Update fields

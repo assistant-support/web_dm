@@ -48,8 +48,10 @@ export default async function ProjectSettingsPage({ params }) {
     }
 
     return (
-        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 border border-gray-200 rounded-md">
-            <ProjectSettings project={project} />
+        <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <div className="p-6 space-y-6">
+                <ProjectSettings project={project} />
+            </div>
         </div>
     );
 }

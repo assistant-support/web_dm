@@ -48,8 +48,9 @@ export default async function ProjectOverviewPage({ params }) {
     const usersMapObj = Object.fromEntries(usersMap);
 
     return (
-        <div className="flex flex-col space-y-6 w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 py-4 rounded-md">
-            <ProjectMetrics
+        <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+            <div className="p-6 space-y-6">
+                <ProjectMetrics
                 taskStats={analytics.tasks}
                 completionRate={analytics.completionRate}
             />
@@ -63,13 +64,14 @@ export default async function ProjectOverviewPage({ params }) {
                 initialAnalytics={analytics}
             />
 
-            {isManager && (
-                <PendingApprovalSection
-                    initialTasks={reviewTasks}
-                    usersMap={usersMapObj}
-                    projectId={projectId}
-                />
-            )}
+                {isManager && (
+                    <PendingApprovalSection
+                        initialTasks={reviewTasks}
+                        usersMap={usersMapObj}
+                        projectId={projectId}
+                    />
+                )}
+            </div>
         </div>
     );
 }

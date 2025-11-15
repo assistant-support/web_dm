@@ -177,6 +177,18 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
         assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
         assert(task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW, 'Task không ở trạng thái chờ duyệt hoàn thành', 'BAD_REQUEST', 400);
 
+        // Kiểm tra và cảnh báo nếu task có subtasks chưa hoàn thành
+        const pendingSubtasks = await Task.countDocuments({
+            parentTask: taskId,
+            status: { $nin: [TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED] },
+            deletedAt: null
+        });
+
+        if (pendingSubtasks > 0) {
+            console.warn(`[POINTS][WARN] Task ${taskId} được duyệt nhưng còn ${pendingSubtasks} subtasks chưa hoàn thành.`);
+            // Tương lai có thể thêm một notification cho manager tại đây
+        }
+
         const project = await Project.findById(task.project);
         assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 

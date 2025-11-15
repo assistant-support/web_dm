@@ -17,7 +17,11 @@ import clsx from 'clsx';
 import { getWorkTypeByCode, getWorkTypeColor } from '@/data/workTypes/constants';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 import Dropdown from '@/components/ui/dropdown';
+import SubtaskApprovalButton from './SubtaskApprovalButton.client';
+import UserDisplay from '@/components/ui/user-display';
 import { formatTaskPoints } from '@/lib/points';
+import Button from '@/components/ui/button';
+import TaskPointsBadge from './TaskPointsBadge.client';
 
 const getStatusInfo = (status) => {
     switch (status) {
@@ -252,8 +256,8 @@ function SubtaskItem({ subtask, users, currentUserId, canManageSubtask, onStatus
                         <span>{dueDate}</span>
                     </div>
                     
-                    <div className="flex-shrink-0 text-xs font-semibold text-gray-700 w-12 text-center px-2 py-1 bg-gray-50 rounded border border-gray-200">
-                        {formatTaskPoints(subtask)}
+                    <div className="flex-shrink-0">
+                        <TaskPointsBadge task={subtask} size="sm" />
                     </div>
                 </div>
                 

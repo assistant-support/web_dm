@@ -72,10 +72,28 @@ export async function deleteComment(commentId) {
         const comment = await commentData.findCommentById(commentId);
         if (!comment) return { success: false, error: 'Comment not found.' };
 
-        // Permission Check: only author or a project manager can delete
-        // (A more complex check might be needed for project managers)
-        if (comment.author.toString() !== user.id) {
-            return { success: false, error: 'Permission denied.' };
+        // Permission Check: Author HOẶC PM/Owner của project
+        const isAuthor = comment.author.toString() === user.id;
+        
+        // Nếu không phải author, kiểm tra quyền PM/Owner
+        if (!isAuthor) {
+            // Nếu comment trên task, lấy task để check project permission
+            if (comment.targetType === 'task') {
+                const task = await taskData.findTaskById(comment.targetId);
+                if (task && task.project) {
+                    const { canManageProject } = await import('@/lib/permissions.js');
+                    const canDelete = await canManageProject(task.project, user.id);
+                    if (!canDelete) {
+                        return { success: false, error: 'Permission denied.' };
+                    }
+                } else {
+                    // Task không có project hoặc không tìm thấy
+                    return { success: false, error: 'Permission denied.' };
+                }
+            } else {
+                // Comment trên project - cần implement logic tương tự
+                return { success: false, error: 'Permission denied.' };
+            }
         }
 
         await commentData.deleteCommentById(commentId);
