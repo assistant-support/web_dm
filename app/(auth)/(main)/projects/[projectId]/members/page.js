@@ -48,7 +48,7 @@ export default async function ProjectMembersPage({ params }) {
 
     return (
         <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-            <div className="p-6 space-y-6">
+            <div className="pt-6 space-y-6">
                 {/* Header */}
                 <div>
                     <h2 className="text-xl font-semibold text-gray-900">Thành viên dự án</h2>

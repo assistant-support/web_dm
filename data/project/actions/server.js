@@ -77,9 +77,9 @@ export async function create(payload) {
             const team = await getTeamById(data.team, { lean: true }); // Tối ưu: Dùng repo team
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(
-                isTeamManager(team, user.externalUserId), 
-                'Chỉ quản lý nhóm mới được tạo dự án', 
-                'FORBIDDEN', 
+                isTeamManager(team, user.externalUserId),
+                'Chỉ quản lý nhóm mới được tạo dự án',
+                'FORBIDDEN',
                 403
             );
         }
@@ -102,6 +102,7 @@ export async function update(projectId, patch) {
     return runAction(async ({ user }) => {
         const id = validate(projectIdSchema, projectId);
         const data = validate(projectUpdateSchema, patch);
+        console.log(data, 'hi');
 
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false vì repo update cần Mongoose doc)
         const raw = await getDetail(id, { lean: false });
@@ -109,6 +110,11 @@ export async function update(projectId, patch) {
         assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await updateProject(id, data); // Repo trả về doc đã populate team
+        console.log(updated, 1);
+
+        // Kiểm tra nếu updateProject trả về null (ví dụ bị xóa đồng thời)
+        assert(updated, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.updated', payload: data });
         await revalidateMany([tags.team(updated.team?._id), tags.project(id)]);
 
@@ -160,15 +166,15 @@ export async function addMemberAction(projectId, payload) {
         }
 
         const updated = await addMember(id, data); // Repo trả về doc đã populate team
-        
-        await logActivity({ 
-            actor: user.externalUserId, 
-            project: id, 
-            team: updated.team?._id, 
-            type: isOutsider ? 'project.member.added.outsider' : 'project.member.added', 
-            payload: { ...data, isOutsider } 
+
+        await logActivity({
+            actor: user.externalUserId,
+            project: id,
+            team: updated.team?._id,
+            type: isOutsider ? 'project.member.added.outsider' : 'project.member.added',
+            payload: { ...data, isOutsider }
         });
-        
+
         // --- Send Zalo Notification for Project Member Added ---
         notifyProjectMemberAdded(
             updated.name || 'dự án',
@@ -177,7 +183,7 @@ export async function addMemberAction(projectId, payload) {
             console.error(`[addMemberAction] Failed to send Zalo notification to user ${data.userId}:`, err);
         });
         // -------------------------------------------------------
-        
+
         await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);
@@ -242,7 +248,7 @@ export async function deleteProjectAction(projectId) {
         const isOwner = (raw.members || []).some(m => String(m.userId) === String(user.externalUserId) && m.role === PROJECT_ROLE.OWNER);
         assert(isOwner, 'FORBIDDEN', 'FORBIDDEN', 403);
 
-    const updated = await archiveProject(id);
+        const updated = await archiveProject(id);
 
         await logActivity({
             actor: user.externalUserId, project: id, team: updated.team?._id,

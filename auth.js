@@ -30,8 +30,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             client: { id_token_signed_response_alg: 'HS256' },
             issuer: process.env.MY_PROVIDER_URL || 'http://localhost:3000',
             profile(profile) {
-                // ⚠️ CRITICAL: Use externalUserId if available, otherwise fallback to sub
-                // OAuth provider might return MongoDB _id in `sub`, but we need externalUserId
                 const userId = profile.externalUserId || profile.external_user_id || profile.sub;
                 
                 console.log('[AUTH] Profile mapping:', {
@@ -143,20 +141,38 @@ async function refreshAccessToken(refreshToken) {
         client_secret: process.env.MY_PROVIDER_CLIENT_SECRET,
     });
 
-    const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString(),
-    });
+    // Retry logic for network errors
+    let retries = 3;
+    while (retries > 0) {
+        try {
+            const response = await fetch(tokenUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: params.toString(),
+            });
 
-    const tokens = await response.json();
+            const tokens = await response.json();
 
-    if (!response.ok) {
-        console.error('[AUTH] Refresh token error:', tokens);
-        throw new Error(tokens.error || 'Failed to refresh token');
+            if (!response.ok) {
+                // Don't retry if it's a 4xx error (client error), only network/server errors
+                if (response.status >= 400 && response.status < 500) {
+                    console.error('[AUTH] Refresh token error:', tokens);
+                    throw new Error(tokens.error || 'Failed to refresh token');
+                }
+                throw new Error(`Server error: ${response.status}`);
+            }
+
+            return tokens;
+        } catch (error) {
+            retries--;
+            if (retries === 0) {
+                console.error('[AUTH] Refresh token failed after retries:', error);
+                throw error;
+            }
+            console.warn(`[AUTH] Refresh token failed, retrying... (${retries} left)`, error.message);
+            await new Promise(r => setTimeout(r, 1000));
+        }
     }
-
-    return tokens;
 }

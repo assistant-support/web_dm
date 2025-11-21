@@ -27,8 +27,8 @@ export default function MemberList({
     currentUserId 
 }) {
     return (
-        <div className="bg-white rounded-lg border">
-            <div className="p-4 border-b flex justify-between items-center">
+        <div className="bg-white rounded-lg border border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
                 <div>
                     <h3 className="text-lg font-semibold">Thành viên ({members.length})</h3>
                     <p className="text-xs text-gray-500 mt-0.5">

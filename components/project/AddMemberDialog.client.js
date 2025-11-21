@@ -9,15 +9,16 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { UserPlus, AlertTriangle } from 'lucide-react';
+import { UserPlus, AlertTriangle, Search, X, User } from 'lucide-react';
 import DialogComponent from '@/components/ui/dialog';
-import { Select, Checkbox } from '@/components/ui/input';
+import { Select, Checkbox, Input } from '@/components/ui/input';
 import FormActions from '@/components/ui/FormActions';
 import { PROJECT_ROLE } from '@/model/common/enums';
 import { addMemberAction } from '@/data/project/actions/server';
 import { getByIdAction } from '@/data/team/actions/server';
 import { listForPicker } from '@/data/appUser/actions';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
+import Image from 'next/image';
 
 // Schema validation
 const memberSchema = z.object({
@@ -56,8 +57,11 @@ export function AddMemberButton({ projectId, teamId, currentMembers = [] }) {
 export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, onClose, onSuccess }) {
     const router = useRouter();
     const { run, Overlays } = useAsyncNotifier({ enableNoti: false, enableLoading: true });
-    const [teamMembers, setTeamMembers] = useState([]);
-    const [allUsers, setAllUsers] = useState([]);
+    
+    // Raw data from server
+    const [fetchedUsers, setFetchedUsers] = useState([]);
+    const [fetchedTeam, setFetchedTeam] = useState(null);
+    
     const [loading, setLoading] = useState(false);
     const [showOutsiders, setShowOutsiders] = useState(false);
 
@@ -70,6 +74,16 @@ export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, 
         },
     });
 
+    // Derived state
+    const currentMemberIds = currentMembers.map(m => m.userId);
+    
+    // Filter users who are not already members
+    const allAvailableUsers = fetchedUsers.filter(u => !currentMemberIds.includes(u.value));
+    
+    // Filter users who are in the team
+    const teamMemberIds = fetchedTeam?.members?.map(m => m.userId) || [];
+    const teamMembers = allAvailableUsers.filter(u => teamMemberIds.includes(u.value));
+
     const selectedUserId = form.watch('userId');
     const confirmOutsider = form.watch('confirmOutsider');
 
@@ -77,7 +91,7 @@ export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, 
     const isOutsider = selectedUserId && teamId && teamMembers.length > 0 && 
         !teamMembers.find(u => u.value === selectedUserId);
 
-    // Load users when dialog opens
+    // Load users when dialog opens - Only fetch once per open
     useEffect(() => {
         if (open) {
             setLoading(true);
@@ -90,30 +104,18 @@ export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, 
                         listForPicker()
                     ]);
 
-                    const currentMemberIds = currentMembers.map(m => m.userId);
-                    const allAvailableUsers = (usersResult?.ok ? usersResult.data.items : [])
-                        .filter(u => !currentMemberIds.includes(u.value));
+                    if (usersResult?.ok) {
+                        setFetchedUsers(usersResult.data.items || []);
+                    }
 
-                    setAllUsers(allAvailableUsers);
-
-                    if (teamId && teamResult?.ok) {
-                        const team = teamResult.data;
-                        const teamMemberIds = (team.members || []).map(m => m.userId);
-                        
-                        // Filter to team members only
-                        const teamMembersOnly = allAvailableUsers.filter(u => 
-                            teamMemberIds.includes(u.value)
-                        );
-                        
-                        setTeamMembers(teamMembersOnly);
-                    } else {
-                        // No team - show all users
-                        setTeamMembers(allAvailableUsers);
+                    if (teamResult?.ok) {
+                        setFetchedTeam(teamResult.data);
                     }
                 } catch (err) {
                     console.error('Error loading users:', err);
+                } finally {
+                    setLoading(false);
                 }
-                setLoading(false);
             };
 
             loadData();
@@ -124,7 +126,7 @@ export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, 
                 confirmOutsider: false,
             });
         }
-    }, [open, teamId, currentMembers, form]);
+    }, [open, teamId, form]); // Removed currentMembers to prevent re-fetching
 
     const onSubmit = async (data) => {
         // Validate outsider confirmation
@@ -161,8 +163,34 @@ export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, 
         }, 'none');
     };
 
-    const displayUsers = showOutsiders ? allUsers : teamMembers;
-    const hasTeam = teamId && teamMembers.length > 0;
+    const hasTeam = !!(teamId && fetchedTeam);
+    const displayUsers = showOutsiders ? allAvailableUsers : (hasTeam ? teamMembers : allAvailableUsers);
+
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    // Filter displayUsers based on search query
+    const filteredUsers = displayUsers.filter(user => 
+        user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    // Get selected user object
+    const selectedUserObj = displayUsers.find(u => u.value === selectedUserId);
+
+    // Handle user selection
+    const handleSelectUser = (userId) => {
+        form.setValue('userId', userId, { shouldValidate: true });
+        setIsDropdownOpen(false);
+        setSearchQuery('');
+    };
+
+    // Clear selection
+    const handleClearSelection = () => {
+        form.setValue('userId', '', { shouldValidate: true });
+        form.setValue('confirmOutsider', false);
+    };
 
     return (
         <>
@@ -208,18 +236,92 @@ export function AddMemberDialog({ projectId, teamId, currentMembers = [], open, 
                                 </div>
                             )}
 
-                            <Select
-                                label="Thành viên"
-                                error={form.formState.errors.userId?.message}
-                                {...form.register('userId')}
-                            >
-                                <option value="">-- Chọn thành viên --</option>
-                                {displayUsers.map(user => (
-                                    <option key={user.value} value={user.value}>
-                                        {user.name} ({user.email})
-                                    </option>
-                                ))}
-                            </Select>
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium text-gray-700">Thành viên</label>
+                                
+                                {selectedUserObj ? (
+                                    <div className="flex items-center justify-between p-2 border rounded-md bg-gray-50">
+                                        <div className="flex items-center gap-2">
+                                            {selectedUserObj.image ? (
+                                                <Image 
+                                                    src={selectedUserObj.image} 
+                                                    alt={selectedUserObj.name} 
+                                                    width={24} 
+                                                    height={24} 
+                                                    className="rounded-full"
+                                                />
+                                            ) : (
+                                                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+                                                    <User size={14} className="text-gray-500" />
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-sm font-medium">{selectedUserObj.name}</p>
+                                                <p className="text-xs text-gray-500">{selectedUserObj.email}</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            type="button"
+                                            onClick={handleClearSelection}
+                                            className="p-1 hover:bg-gray-200 rounded-full text-gray-500"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        <Input
+                                            placeholder="Tìm kiếm theo tên hoặc email..."
+                                            leftIcon={<Search size={16} />}
+                                            value={searchQuery}
+                                            onChange={(e) => {
+                                                setSearchQuery(e.target.value);
+                                                setIsDropdownOpen(true);
+                                            }}
+                                            onFocus={() => setIsDropdownOpen(true)}
+                                        />
+                                        
+                                        {isDropdownOpen && (
+                                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                                                {filteredUsers.length > 0 ? (
+                                                    filteredUsers.map(user => (
+                                                        <div
+                                                            key={user.value}
+                                                            className="flex items-center gap-2 p-2 hover:bg-gray-100 cursor-pointer"
+                                                            onClick={() => handleSelectUser(user.value)}
+                                                        >
+                                                            {user.image ? (
+                                                                <Image 
+                                                                    src={user.image} 
+                                                                    alt={user.name} 
+                                                                    width={24} 
+                                                                    height={24} 
+                                                                    className="rounded-full"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+                                                                    <User size={14} className="text-gray-500" />
+                                                                </div>
+                                                            )}
+                                                            <div>
+                                                                <p className="text-sm font-medium">{user.name}</p>
+                                                                <p className="text-xs text-gray-500">{user.email}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="p-3 text-center text-sm text-gray-500">
+                                                        Không tìm thấy kết quả
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {form.formState.errors.userId && (
+                                    <p className="text-sm text-red-600">{form.formState.errors.userId.message}</p>
+                                )}
+                            </div>
 
                             {/* Warning for outsiders */}
                             {isOutsider && (

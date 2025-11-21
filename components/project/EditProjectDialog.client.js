@@ -45,11 +45,17 @@ export default function EditProjectDialog({ project, open, onClose, onSuccess })
 
     const onSubmit = async (data) => {
         await run(async () => {
-            const result = await updateProject(project.id, data);
+            // Use _id because project object from asPlainProject has _id, not id
+            const result = await updateProject(project._id || project.id, data);
             
             if (!result.ok) {
                 // Set form errors
-                if (result.errors) {
+                if (result.issues && Array.isArray(result.issues)) {
+                    result.issues.forEach((issue) => {
+                        const field = issue.path || 'root';
+                        form.setError(field, { type: 'server', message: issue.message });
+                    });
+                } else if (result.errors) {
                     Object.entries(result.errors).forEach(([field, message]) => {
                         form.setError(field, { type: 'server', message });
                     });
