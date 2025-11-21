@@ -25,6 +25,10 @@ export async function ensureTaskDriveFolder(taskId) {
     const task = await taskData.findTaskById(taskId);
     if (!task) return { success: false, error: 'Task not found', folderId: null };
 
+    if (!canEditTask(task, user)) {
+        return { success: false, error: 'Permission denied', folderId: null };
+    }
+
     // Check if folder already exists
     if (task.driveFolderId) {
         return { success: true, folderId: task.driveFolderId, error: null };
@@ -87,7 +91,7 @@ export async function attachFileToTask(formData) {
     }
 
     const task = await taskData.findTaskById(taskId);
-    if (!task || !canEditTask(task, user.id)) {
+    if (!task || !canEditTask(task, user)) {
         return { success: false, error: 'Permission denied.' };
     }
 

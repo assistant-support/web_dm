@@ -30,8 +30,9 @@ export async function userMonthly(payload) {
                 .object({ ym: ymSchema, userId: z.string().optional() })
                 .parse(payload || {});
             const target = userId || uid;
+            const isAdmin = user.role === 'admin';
             assert(
-                String(target) === String(uid),
+                isAdmin || String(target) === String(uid),
                 'Bạn chỉ xem được báo cáo của chính bạn',
                 'FORBIDDEN',
                 403
@@ -59,7 +60,7 @@ export async function projectSummary(payload) {
             const project = await Project.findById(projectId).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
             // dùng await để an toàn nếu helpers async
-            assert(await canViewProject(project, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
             const data = await projectSummaryAgg(projectId, ym);
 
@@ -90,8 +91,9 @@ export async function getUserReportData(payload) {
                 .parse(payload || {});
             
             const targetUser = userId || uid;
+            const isAdmin = user.role === 'admin';
             assert(
-                String(targetUser) === String(uid),
+                isAdmin || String(targetUser) === String(uid),
                 'Bạn chỉ xem được báo cáo của chính bạn',
                 'FORBIDDEN',
                 403

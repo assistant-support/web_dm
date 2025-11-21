@@ -49,7 +49,7 @@ export default async function ProjectFilesPage({ params, searchParams }) {
 
     return (
         <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-            <div className="p-6 space-y-6">
+            <div className="space-y-6">
                 <FilesManager
                     initialFilesPromise={filesPromise}
                     statsPromise={statsPromise}

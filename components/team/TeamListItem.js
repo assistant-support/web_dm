@@ -29,33 +29,33 @@ export default function TeamListItem({ team, currentUserId }) {
                 {/* Left: Team info */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
-                        <h3 className="text-base font-semibold text-gray-900 truncate">
+                        <h3 className="text-base font-semibold text-gray-900 truncate" title={team.name}>
                             {team.name}
                         </h3>
-                        <Badge 
-                            variant={team.isActive ? 'success' : 'secondary'}
-                            className={
-                                team.isActive
-                                    ? 'bg-green-100 text-green-800 border-green-200'
-                                    : 'bg-gray-200 text-gray-700 border-gray-300'
-                            }
-                        >
-                            {team.isActive ? 'Đang hoạt động' : 'Đã lưu trữ'}
-                        </Badge>
-                        {isManager && (
+                        <div className="flex items-center gap-2 flex-shrink-0">
                             <Badge 
-                                variant="default"
-                                className="bg-purple-100 text-purple-800 border-purple-200"
+                                variant={team.isActive ? 'success' : 'secondary'}
+                                className={
+                                    team.isActive
+                                        ? 'bg-green-100 text-green-800 border-green-200'
+                                        : 'bg-gray-200 text-gray-700 border-gray-300'
+                                }
                             >
-                                Quản lý
+                                {team.isActive ? 'Đang hoạt động' : 'Đã lưu trữ'}
                             </Badge>
-                        )}
+                            {isManager && (
+                                <Badge 
+                                    variant="default"
+                                    className="bg-purple-100 text-purple-800 border-purple-200"
+                                >
+                                    Quản lý
+                                </Badge>
+                            )}
+                        </div>
                     </div>
-                    {team.description && (
-                        <p className="text-sm text-gray-600 line-clamp-1">
-                            {team.description}
-                        </p>
-                    )}
+                    <p className="text-sm text-gray-600 truncate h-5">
+                        {team.description || <span className="invisible">No description</span>}
+                    </p>
                 </div>
 
                 {/* Right: Stats */}

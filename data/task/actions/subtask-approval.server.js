@@ -5,11 +5,13 @@
 
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
+import { canManageProject, canApproveSubtask } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import { notifyEvent } from '@/lib/noti.js';
 import * as tags from '@/data/_shared/tags.js';
 
 import Task from '@/model/task.model.js';
+import Project from '@/model/project.model.js';
 import { TASK_STATUS } from '@/model/common/enums.js';
 import { asPlainTask } from '@/lib/serialize.js';
 import { updateParentProgress } from '@/data/task/processors/progress.js';
@@ -32,7 +34,14 @@ export async function approveSubtaskCompletion(subtaskId, { approve, finalPoints
         
         const parentTask = await Task.findById(subtask.parentTask);
         assert(parentTask, 'Parent task không tồn tại', 'NOT_FOUND', 404);
-        assert(parentTask.assignee === uid, 'Bạn không phải là người đứng chính task', 'FORBIDDEN', 403);
+        
+        // Fetch project for permission check
+        if (parentTask.project) {
+            const project = await import('@/model/project.model.js').then(m => m.default.findById(parentTask.project).lean());
+            if (project) parentTask.project = project;
+        }
+
+        assert(canApproveSubtask(subtask, parentTask, user), 'Bạn không có quyền duyệt subtask', 'FORBIDDEN', 403);
         
         if (approve) {
             // Validate finalPoints
@@ -105,7 +114,18 @@ export async function distributePointsToSubtasks(parentTaskId, distribution) {
         
         const task = await Task.findById(parentTaskId);
         assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
-        assert(task.assignee === uid, 'Bạn không phải là người đứng chính task', 'FORBIDDEN', 403);
+        
+        // Check permission: Assignee OR Project Manager OR Admin
+        let canDistribute = task.assignee === uid;
+        if (!canDistribute && task.project) {
+            const project = await Project.findById(task.project).lean();
+            if (project && canManageProject(project, user)) {
+                canDistribute = true;
+            }
+        }
+        if (user.role === 'admin') canDistribute = true;
+
+        assert(canDistribute, 'Bạn không có quyền chia điểm', 'FORBIDDEN', 403);
         
         // Validate distribution
         assert(Array.isArray(distribution), 'Distribution phải là array', 'BAD_REQUEST', 400);

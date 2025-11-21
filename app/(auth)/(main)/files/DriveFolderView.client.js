@@ -3,12 +3,13 @@
 import { useMemo, useState, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { FolderIcon, FolderOpen, ChevronRight, Home, File as FileIcon, ArrowRightLeft } from 'lucide-react';
+import { FolderIcon, FolderOpen, ChevronRight, Home, File as FileIcon, ArrowRightLeft, Copy, Check } from 'lucide-react';
 import FileActions from './FileActions.client.js';
 import FilePrefetcher from './FilePrefetcher.client.js';
 import { getFileIconConfig } from './file-icon.config.js';
 import { formatSize, formatRelativeDate } from './file-format.js';
 import MoveFileModal from './MoveFileModal.client.js';
+import { getGoogleDriveFolderLink } from '@/lib/drive-utils.js';
 
 const ROOT_NODE_ID = '__root__';
 const UNASSIGNED_PROJECT_ID = '__unassigned__';
@@ -17,6 +18,7 @@ export default function DriveFolderView({ files = [] }) {
     const tree = useMemo(() => buildDriveTree(files), [files]);
     const [path, setPath] = useState([]);
     const [movingFile, setMovingFile] = useState(null);
+    const [copiedFolderId, setCopiedFolderId] = useState(null);
     const router = useRouter();
 
     const currentNode = useMemo(() => resolveNode(tree, path), [tree, path]);
@@ -56,6 +58,24 @@ export default function DriveFolderView({ files = [] }) {
         router.refresh();
         setMovingFile(null);
     }, [router]);
+
+    const handleCopyFolderLink = useCallback(async (folderId) => {
+        const link = getGoogleDriveFolderLink(folderId);
+        if (!link) return;
+
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(link);
+                setCopiedFolderId(folderId);
+                setTimeout(() => setCopiedFolderId(null), 2000);
+            } else {
+                window.prompt('Sao chép link thư mục:', link);
+            }
+        } catch (error) {
+            console.error('Failed to copy folder link', error);
+            window.prompt('Sao chép link thư mục:', link);
+        }
+    }, []);
 
     return (
         <>
@@ -100,24 +120,42 @@ export default function DriveFolderView({ files = [] }) {
                         <h2 className="mb-3 text-sm font-semibold text-gray-600">Thư mục ({folders.length})</h2>
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                             {folders.map((folder) => (
-                                <button
-                                    key={folder.id}
-                                    type="button"
-                                    onClick={() => enterNode(folder.id)}
-                                    className="group flex flex-col gap-4 rounded-md border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <FolderIcon className="h-10 w-10 rounded-md bg-blue-50 p-2 text-blue-600 transition group-hover:bg-blue-100 group-hover:text-blue-700" />
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-semibold text-gray-900" title={folder.name || 'Chưa đặt tên'}>
-                                                {folder.name || 'Chưa đặt tên'}
-                                            </p>
-                                            <p className="text-xs text-gray-500">
-                                                {formatFolderMeta(folder)}
-                                            </p>
+                                <div key={folder.id} className="relative group">
+                                    <button
+                                        type="button"
+                                        onClick={() => enterNode(folder.id)}
+                                        className="w-full flex flex-col gap-4 rounded-md border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <FolderIcon className="h-10 w-10 rounded-md bg-blue-50 p-2 text-blue-600 transition group-hover:bg-blue-100 group-hover:text-blue-700" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-semibold text-gray-900" title={folder.name || 'Chưa đặt tên'}>
+                                                    {folder.name || 'Chưa đặt tên'}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    {formatFolderMeta(folder)}
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
-                                </button>
+                                    </button>
+                                    {folder.driveFolderId && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCopyFolderLink(folder.driveFolderId);
+                                            }}
+                                            className="absolute top-2 right-2 p-2 rounded-full bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                            title="Sao chép link thư mục"
+                                        >
+                                            {copiedFolderId === folder.driveFolderId ? (
+                                                <Check className="h-4 w-4 text-green-600" />
+                                            ) : (
+                                                <Copy className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </section>
@@ -266,7 +304,8 @@ function buildDriveTree(files) {
         const projectId = file.project?.id || UNASSIGNED_PROJECT_ID;
         const projectName = file.project?.name || 'Chưa gán dự án';
         const projectType = file.project ? 'project' : 'uncategorized';
-        const projectNode = ensureChild(root, projectId, projectName, projectType);
+        const projectDriveFolderId = file.project?.driveFolderId || null;
+        const projectNode = ensureChild(root, projectId, projectName, projectType, projectDriveFolderId);
 
         const taskSegments = normalizeTaskSegments(file);
         let targetNode = projectNode;
@@ -274,7 +313,7 @@ function buildDriveTree(files) {
             taskSegments.forEach((segment) => {
                 const segmentId = segment.id || segment.title || segment.name || '';
                 const segmentName = segment.title || segment.name || 'Chưa đặt tên';
-                targetNode = ensureChild(targetNode, segmentId, segmentName, 'task');
+                targetNode = ensureChild(targetNode, segmentId, segmentName, 'task', segment.driveFolderId);
             });
         }
         targetNode.files.push(file);
@@ -289,19 +328,25 @@ function normalizeTaskSegments(file) {
         return file.taskPath.map((segment) => ({
             id: segment.id || segment.taskId || segment,
             title: segment.title || segment.name || null,
+            driveFolderId: segment.driveFolderId || null,
         }));
     }
     if (file.task && file.task.id) {
-        return [{ id: file.task.id, title: file.task.title || null }];
+        return [{ 
+            id: file.task.id, 
+            title: file.task.title || null,
+            driveFolderId: file.task.driveFolderId || null,
+        }];
     }
     return [];
 }
 
-function createNode(id, name, type) {
+function createNode(id, name, type, driveFolderId = null) {
     return {
         id,
         name,
         type,
+        driveFolderId,
         files: [],
         childrenMap: new Map(),
         children: [],
@@ -309,12 +354,12 @@ function createNode(id, name, type) {
     };
 }
 
-function ensureChild(parent, id, name, type) {
+function ensureChild(parent, id, name, type, driveFolderId = null) {
     const key = String(id || `${parent.id}-${type}-${name || 'node'}`);
     if (!parent.childrenMap.has(key)) {
         parent.childrenMap.set(
             key,
-            createNode(key, name || 'Chưa đặt tên', type),
+            createNode(key, name || 'Chưa đặt tên', type, driveFolderId),
         );
     }
     return parent.childrenMap.get(key);

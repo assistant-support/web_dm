@@ -34,7 +34,7 @@ export async function approveTaskCreation(taskId, { approve, note, initialPoints
 
         const project = await Project.findById(task.project);
         assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-        assert(canManageProject(project, uid), 'Bạn không có quyền duyệt task', 'FORBIDDEN', 403);
+        assert(canManageProject(project, user), 'Bạn không có quyền duyệt task', 'FORBIDDEN', 403);
 
         if (approve) {
             task.approval.status = APPROVAL_STATUS.APPROVED;
@@ -191,6 +191,7 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
 
         const project = await Project.findById(task.project);
         assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+        assert(canManageProject(project, user), 'Bạn không có quyền duyệt hoàn thành task', 'FORBIDDEN', 403);
 
         if (approve) {
             const points = Number(finalPoints) || 0;

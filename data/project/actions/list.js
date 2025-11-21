@@ -17,12 +17,19 @@ export async function listMyProjects({ search = '', teamId = null } = {}) {
     return runAction(
         async ({ user }) => {
             await connectDB();
+            
+            console.log('[listMyProjects] User:', user);
 
             const query = {
-                'members.userId': user.externalUserId,
                 isActive: true, // Thường chỉ muốn list project active
                 // deletedAt: null, // Thêm nếu bạn có soft delete
             };
+            
+            // Nếu không phải admin, chỉ lấy project mình tham gia
+            if (user.role !== 'admin') {
+                query['members.userId'] = user.externalUserId;
+            }
+
             if (teamId) {
                 query.team = teamId;
             }
@@ -73,7 +80,8 @@ export async function getProjectDetail(projectId) {
             const isMember = (project.members || []).some(
                 m => String(m.userId) === String(user.externalUserId)
             );
-            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const isAdmin = user.role === 'admin';
+            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
 
             // Hàm repo đã populate và lean, chỉ cần serialize
             return JSON.parse(JSON.stringify(project));

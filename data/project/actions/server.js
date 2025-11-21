@@ -39,8 +39,10 @@ export async function listByTeamAction(teamId) {
         // Tối ưu: Dùng hàm repo team đã cache
         const team = await getTeamById(id, { lean: true });
         assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
+        
         const isMember = (team.members || []).some((m) => String(m.userId) === String(user.externalUserId));
-        assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+        const isAdmin = user.role === 'admin';
+        assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
 
         // Gọi hàm repo project
         const rows = await listByTeam(id); // Hàm này đã populate team và lean
@@ -60,7 +62,8 @@ export async function getDetailAction(projectId) {
 
         // Quyền xem tối thiểu: là thành viên project
         const isMember = (proj.members || []).some((m) => String(m.userId) === String(user.externalUserId));
-        assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+        const isAdmin = user.role === 'admin';
+        assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
 
         return asPlainProject(proj); // Dùng asPlainProject để serialize
     }, { requireAuth: true });
@@ -77,9 +80,9 @@ export async function create(payload) {
             const team = await getTeamById(data.team, { lean: true }); // Tối ưu: Dùng repo team
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
             assert(
-                isTeamManager(team, user.externalUserId),
-                'Chỉ quản lý nhóm mới được tạo dự án',
-                'FORBIDDEN',
+                isTeamManager(team, user), 
+                'Chỉ quản lý nhóm mới được tạo dự án', 
+                'FORBIDDEN', 
                 403
             );
         }
@@ -107,7 +110,7 @@ export async function update(projectId, patch) {
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false vì repo update cần Mongoose doc)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(canManageProject(raw, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await updateProject(id, data); // Repo trả về doc đã populate team
         console.log(updated, 1);
@@ -130,7 +133,7 @@ export async function archive(projectId) {
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(canManageProject(raw, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await archiveProject(id); // Repo trả về doc đã populate team
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.archived' });
@@ -150,7 +153,7 @@ export async function addMemberAction(projectId, payload) {
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(canManageProject(raw, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         // **CHO PHÉP THÊM NGƯỜI NGOÀI TEAM** - Chỉ log warning
         let isOutsider = false;
@@ -200,7 +203,7 @@ export async function removeMemberAction(projectId, payload) {
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(canManageProject(raw, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await removeMember(id, data.userId); // Repo trả về doc đã populate team
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.removed', payload: { userId: data.userId } });
@@ -220,7 +223,7 @@ export async function changeRole(projectId, payload) {
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false)
         const raw = await getDetail(id, { lean: false });
         assert(raw, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(canManageProject(raw, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(canManageProject(raw, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await changeMemberRole(id, data.userId, data.role); // Repo trả về doc đã populate team
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.role_changed', payload: { ...data } });
@@ -246,7 +249,11 @@ export async function deleteProjectAction(projectId) {
 
         // Chỉ owner mới có quyền xóa
         const isOwner = (raw.members || []).some(m => String(m.userId) === String(user.externalUserId) && m.role === PROJECT_ROLE.OWNER);
-        assert(isOwner, 'FORBIDDEN', 'FORBIDDEN', 403);
+        
+        // Allow global admin to delete project
+        const isAdmin = user.role === 'admin';
+        
+        assert(isOwner || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await archiveProject(id);
 

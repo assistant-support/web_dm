@@ -127,7 +127,7 @@ export default function FilesManager({
     return (
         <div className="flex h-full flex-col bg-gray-50">
             <main className="flex-1 overflow-hidden">
-                <div className="w-full space-y-6 px-6 py-6">
+                <div className="w-full space-y-6">
                     <section className="rounded-md border border-gray-200 bg-white p-6 shadow-sm">
                         <div className="flex flex-col gap-5">
                             <div className="flex flex-wrap items-center justify-between gap-3">

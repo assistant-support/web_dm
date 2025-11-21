@@ -41,7 +41,7 @@ export async function inviteCollaborator(taskId, { userId, role = 'contributor' 
             canInvite = true;
         } else if (task.project) {
             const project = await Project.findById(task.project);
-            if (project && canManageProject(project, uid)) {
+            if (project && canManageProject(project, user)) {
                 canInvite = true;
             }
         }
@@ -135,7 +135,7 @@ export async function removeCollaboratorFromTask(taskId, userId) {
             canRemove = true;
         } else if (task.project) {
             const project = await Project.findById(task.project);
-            if (project && canManageProject(project, uid)) {
+            if (project && canManageProject(project, user)) {
                 canRemove = true;
             }
         }
@@ -188,7 +188,7 @@ export async function listTaskCollaborators(taskId) {
         if (!canView && task.project) {
             const project = await Project.findById(task.project).select({ members: 1 }).lean();
             if (project) {
-                canView = canViewProject(project, userId);
+                canView = canViewProject(project, user);
             }
         }
 

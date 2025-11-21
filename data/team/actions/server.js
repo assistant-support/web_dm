@@ -9,6 +9,7 @@ import { isTeamManager } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
 import { asPlainTeam } from '@/lib/serialize.js';
+import Team from '@/model/team.model.js';
 
 import {
     validate,
@@ -38,6 +39,14 @@ export async function listMy() {
     return await runAction(
         async ({ user }) => {
             await connectDB();
+            
+            console.log('[listMyTeams] User:', user);
+
+            if (user.role === 'admin') {
+                const teams = await Team.find({ isActive: true }).lean();
+                return teams.map(asPlainTeam);
+            }
+
             const teams = await listByUser(user.externalUserId);
             return teams.map(asPlainTeam);
         },
@@ -51,10 +60,16 @@ export async function listManagedTeams() {
     return await runAction(
         async ({ user }) => {
             await connectDB();
+            
+            if (user.role === 'admin') {
+                const teams = await Team.find({ isActive: true }).lean();
+                return teams.map(asPlainTeam);
+            }
+
             const teams = await listByUser(user.externalUserId);
             // Chỉ lấy teams mà user là manager
             const managedTeams = teams.filter(team => 
-                isTeamManager(team, user.externalUserId)
+                isTeamManager(team, user)
             );
             return managedTeams.map(asPlainTeam);
         },
@@ -76,7 +91,8 @@ export async function getByIdAction(teamId) {
             const isMember = (team.members || []).some(
                 (m) => String(m.userId) === String(user.externalUserId)
             );
-            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const isAdmin = user.role === 'admin';
+            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
 
             return asPlainTeam(team);
         },

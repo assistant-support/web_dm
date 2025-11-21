@@ -39,7 +39,7 @@ export async function addComment(formData) {
         // Permission Check
         if (targetType === 'task') {
             const task = await taskData.findTaskById(targetId);
-            if (!task || !canViewTask(task, user.id)) {
+            if (!task || !canViewTask(task, user)) {
                 return { success: false, error: 'Permission denied.' };
             }
         } // Add similar check for 'project' if needed
@@ -82,7 +82,7 @@ export async function deleteComment(commentId) {
                 const task = await taskData.findTaskById(comment.targetId);
                 if (task && task.project) {
                     const { canManageProject } = await import('@/lib/permissions.js');
-                    const canDelete = await canManageProject(task.project, user.id);
+                    const canDelete = await canManageProject(task.project, user);
                     if (!canDelete) {
                         return { success: false, error: 'Permission denied.' };
                     }

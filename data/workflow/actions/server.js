@@ -47,7 +47,7 @@ export async function create(payload) {
             const project = await Project.findById(data.projectId).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
             assert(
-                await canManageProject(project, uid),
+                await canManageProject(project, user),
                 'Bạn không có quyền quản lý workflow của project này',
                 'FORBIDDEN',
                 403
@@ -89,7 +89,7 @@ export async function update(payload) {
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
-                await canManageProject(project, uid),
+                await canManageProject(project, user),
                 'Bạn không có quyền quản lý workflow của project này',
                 'FORBIDDEN',
                 403
@@ -124,7 +124,7 @@ export async function attachTask(payload) {
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
-                await canManageProject(project, uid),
+                await canManageProject(project, user),
                 'Bạn không có quyền quản lý workflow của project này',
                 'FORBIDDEN',
                 403
@@ -159,7 +159,7 @@ export async function activate(payload) {
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
-                await canManageProject(project, uid),
+                await canManageProject(project, user),
                 'Bạn không có quyền quản lý workflow của project này',
                 'FORBIDDEN',
                 403
@@ -194,7 +194,7 @@ export async function deactivate(payload) {
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
-                await canManageProject(project, uid),
+                await canManageProject(project, user),
                 'Bạn không có quyền quản lý workflow của project này',
                 'FORBIDDEN',
                 403
@@ -227,7 +227,7 @@ export async function getByProjectAction(payload) {
             const project = await Project.findById(projectId).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
             assert(
-                await canViewProject(project, uid),
+                await canViewProject(project, user),
                 'Bạn không có quyền xem workflow của project này',
                 'FORBIDDEN',
                 403
@@ -266,7 +266,7 @@ export async function createTaskWorkflow(parentTaskId, { name, nodes, edges }) {
         assert(project, 'Dự án của task không tồn tại', 'NOT_FOUND', 404);
         
         // Kiểm tra quyền: Phải là Project Manager hoặc người tạo task
-        const canCreate = canManageProject(project, uid) || String(task.createdBy) === String(uid);
+        const canCreate = canManageProject(project, user) || String(task.createdBy) === String(uid);
         assert(
             canCreate,
             'Chỉ quản lý dự án hoặc người tạo task mới có quyền tạo workflow',
@@ -378,7 +378,10 @@ export async function updateNodeStatus(workflowId, nodeKey, status) {
         
         if (workflow.parentTask) {
             const task = await Task.findById(workflow.parentTask);
-            assert(task?.assignee === uid, 'Bạn không có quyền cập nhật workflow', 'FORBIDDEN', 403);
+            // Allow assignee OR admin
+            const isAssignee = task?.assignee === uid;
+            const isAdmin = user.role === 'admin';
+            assert(isAssignee || isAdmin, 'Bạn không có quyền cập nhật workflow', 'FORBIDDEN', 403);
         }
         
         const updated = await updateWorkflowNodeStatus(workflowId, nodeKey, status);

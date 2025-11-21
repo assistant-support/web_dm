@@ -116,8 +116,8 @@ export async function createAttachment(formData) {
 
             if (scope === 'project') {
                 assert(
-                    (await canManageProject(project, uid)) ||
-                    (allowMembers && (await canViewProject(project, uid))),
+                    (await canManageProject(project, user)) ||
+                    (allowMembers && (await canViewProject(project, user))),
                     'Bạn không có quyền upload vào project',
                     'FORBIDDEN',
                     403
@@ -125,7 +125,7 @@ export async function createAttachment(formData) {
             } else {
                 const taskForPerm = task ? { ...task, project } : null;
                 assert(
-                    await canEditTask(taskForPerm, uid),
+                    await canEditTask(taskForPerm, user),
                     'Bạn không có quyền upload vào task',
                     'FORBIDDEN',
                     403
@@ -225,8 +225,8 @@ export async function upload(payload) {
 
             if (input.scope === 'project') {
                 assert(
-                    (await canManageProject(project, uid)) ||
-                    (allowMembers && (await canViewProject(project, uid))),
+                    (await canManageProject(project, user)) ||
+                    (allowMembers && (await canViewProject(project, user))),
                     'Bạn không có quyền upload vào project',
                     'FORBIDDEN',
                     403
@@ -235,7 +235,7 @@ export async function upload(payload) {
                 // Dùng canEditTask trên task có kèm project để canManageProject(project, uid) hoạt động đúng bên trong canEditTask
                 const taskForPerm = task ? { ...task, project } : null;
                 assert(
-                    await canEditTask(taskForPerm, uid),
+                    await canEditTask(taskForPerm, user),
                     'Bạn không có quyền upload vào task',
                     'FORBIDDEN',
                     403
@@ -314,7 +314,7 @@ export async function listProjectAttachments(projectId) {
 
             const project = await Project.findById(projectId).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-            assert(await canViewProject(project, uid), 'Bạn không có quyền xem project này', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem project này', 'FORBIDDEN', 403);
 
             const items = await listByProject(projectId);
             // Serialize để tránh lỗi MongoDB ObjectId
@@ -336,7 +336,7 @@ export async function listTaskAttachments(taskId) {
 
             const project = await Project.findById(task.project).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-            assert(await canViewProject(project, uid), 'Bạn không có quyền xem task này', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem task này', 'FORBIDDEN', 403);
 
             const items = await listByTask(taskId);
             // Serialize để tránh lỗi MongoDB ObjectId
@@ -360,7 +360,7 @@ export async function rename(payload) {
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 
             const isOwner = String(att.author) === String(uid);
-            const isMgr = await canManageProject(project, uid);
+            const isMgr = await canManageProject(project, user);
             assert(isOwner || isMgr, 'Không có quyền đổi tên', 'FORBIDDEN', 403);
 
             if (att.driveFileId) await renameDriveFile({ driveFileId: att.driveFileId, name: input.name });
@@ -424,7 +424,7 @@ export async function move(payload) {
                 );
             }
 
-            const isMgr = await canManageProject(project, uid);
+            const isMgr = await canManageProject(project, user);
 
             // Quyền theo nguồn/đích:
             // - source = task? cần canEditTask(source)
@@ -432,12 +432,12 @@ export async function move(payload) {
             // - dest   = task? cần canEditTask(dest)
             // - dest   = project? cần member project (canViewProject)
             const canEditSource = fromTask
-                ? await canEditTask({ ...fromTask, project }, uid)
-                : await canViewProject(project, uid);
+                ? await canEditTask({ ...fromTask, project }, user)
+                : await canViewProject(project, user);
 
             const canEditDest = toTask
-                ? await canEditTask({ ...toTask, project }, uid)
-                : await canViewProject(project, uid);
+                ? await canEditTask({ ...toTask, project }, user)
+                : await canViewProject(project, user);
 
             assert(isMgr || (canEditSource && canEditDest), 'Không có quyền move', 'FORBIDDEN', 403);
 
@@ -505,7 +505,7 @@ export async function remove(payload) {
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 
             const isOwner = String(att.author) === String(uid);
-            const isMgr = await canManageProject(project, uid);
+            const isMgr = await canManageProject(project, user);
             assert(isOwner || isMgr, 'Không có quyền xóa', 'FORBIDDEN', 403);
 
             const hard = String(process.env.ATTACHMENTS_DELETE || '').toLowerCase() === 'hard';

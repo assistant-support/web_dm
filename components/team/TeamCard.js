@@ -53,11 +53,9 @@ export default function TeamCard({ team, currentUserId, prefetch = true }) {
                     </div>
 
                     {/* Description */}
-                    {team.description && (
-                        <p className="text-sm text-gray-600 line-clamp-2">
-                            {team.description}
-                        </p>
-                    )}
+                    <p className="text-sm text-gray-600 line-clamp-2 h-10" title={team.description}>
+                        {team.description || <span className="invisible">No description</span>}
+                    </p>
 
                     {/* Footer info */}
                     <div className="flex items-center justify-between text-sm text-gray-500 pt-2 border-t border-gray-100">

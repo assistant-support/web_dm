@@ -48,12 +48,12 @@ import {
 } from '@/data/task/processors/repo.js';
 
 /** Helper: kiểm tra quyền manager dựa trên origin (nếu có) */
-async function assertManagerByOrigin(task, uid) {
+async function assertManagerByOrigin(task, user) {
     const originProjectId = task?.public?.origin?.project || null;
     if (!originProjectId) return false; // không có origin → không assert manager ở đây
     const project = await Project.findById(originProjectId).lean();
     assert(project, 'Project gốc không tồn tại', 'NOT_FOUND', 404);
-    const isMgr = await canManageProject(project, uid);
+    const isMgr = await canManageProject(project, user);
     assert(isMgr, 'Bạn không có quyền quản lý project gốc', 'FORBIDDEN', 403);
     return true;
 }
@@ -116,7 +116,7 @@ export async function publish(payload) {
                 // Require manager project gốc
                 const project = await Project.findById(task.project).lean();
                 assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-                assert(await canManageProject(project, uid), 'Bạn không có quyền publish từ project', 'FORBIDDEN', 403);
+                assert(await canManageProject(project, user), 'Bạn không có quyền publish từ project', 'FORBIDDEN', 403);
 
                 const pub = await publishFromProjectTask(String(task._id), {
                     postedBy: uid,
@@ -176,7 +176,7 @@ export async function unpublish(payload) {
 
             let originProjectId = null;
             if (task.public?.origin?.project) {
-                await assertManagerByOrigin(task, uid);
+                await assertManagerByOrigin(task, user);
                 originProjectId = String(task.public.origin.project);
             } else {
                 assertOwnerOfPublicDraft(task.toObject(), uid);
@@ -272,7 +272,7 @@ export async function decide(payload) {
 
             let originProjectId = null;
             if (t.public?.origin?.project) {
-                await assertManagerByOrigin(t, uid);
+                await assertManagerByOrigin(t, user);
                 originProjectId = String(t.public.origin.project);
             } else {
                 const by = t.public?.postedBy || t.createdBy || null;
@@ -328,7 +328,7 @@ export async function approveCompletionWithSplitAction(payload) {
 
             let originProjectId = null;
             if (t.public?.origin?.project) {
-                await assertManagerByOrigin(t, uid);
+                await assertManagerByOrigin(t, user);
                 originProjectId = String(t.public.origin.project);
             } else {
                 const by = t.public?.postedBy || t.createdBy || null;

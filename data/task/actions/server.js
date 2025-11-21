@@ -45,7 +45,8 @@ export async function listByProject(projectId, filters = {}) {
                 isMember = Boolean(teamMembershipExists);
             }
 
-            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const isAdmin = user.role === 'admin';
+            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
             const query = {
                 project: new mongoose.Types.ObjectId(projectId),
                 scope: TASK_SCOPE.PROJECT,
@@ -371,7 +372,8 @@ export async function getTaskDetail(taskId) {
 
             // Kiểm tra thành viên trực tiếp từ task.team
             const isMember = (task.team?.members || []).some((m) => String(m.userId) === String(uid));
-            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const isAdmin = user.role === 'admin';
+            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
         // Không cần asPlainTask nếu aggregation đã trả về POJO (Plain Old JavaScript Object)
@@ -425,17 +427,18 @@ export async function createTask(projectId, payload) {
             isMember = (team.members || []).some((m) => String(m.userId) === String(uid));
         }
 
-        assert(isMember, 'FORBIDDEN', 'Bạn không có quyền tạo công việc trong dự án này.', 403);
+        const isAdmin = user.role === 'admin';
+        assert(isMember || isAdmin, 'FORBIDDEN', 'Bạn không có quyền tạo công việc trong dự án này.', 403);
 
         // **Kiểm tra quyền tạo ROOT TASK - chỉ Project Manager mới được tạo**
         assert(
-            canCreateTask(project, uid),
+            canCreateTask(project, user),
             'Chỉ quản lý dự án mới được tạo công việc gốc',
             'FORBIDDEN',
             403
         );
 
-        const hasManagePermission = canManageProject(project, uid);
+        const hasManagePermission = canManageProject(project, user);
 
         // **THÊM MỚI: Kiểm tra và thêm assignee vào project nếu chưa có**
         if (payload.assignee && payload.assignee !== uid) {
@@ -657,7 +660,7 @@ export async function updateTask(taskId, payload) {
             const project = await Project.findById(task.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const hasManagePermission = canManageProject(project, uid);
+            const hasManagePermission = canManageProject(project, user);
             assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
@@ -688,7 +691,7 @@ export async function updateTask(taskId, payload) {
         if (payload.status === TASK_STATUS.CANCELLED && task.status !== TASK_STATUS.CANCELLED) {
             // Đang chuyển sang CANCELLED - kiểm tra quyền
             const canCancel = 
-                canManageProject(project, uid) ||
+                canManageProject(project, user) ||
                 String(task.createdBy) === String(uid) ||
                 String(task.assignee) === String(uid);
             
@@ -749,7 +752,7 @@ export async function deleteTask(taskId) {
             const project = await Project.findById(task.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const hasManagePermission = canManageProject(project, uid);
+            const hasManagePermission = canManageProject(project, user);
             assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
@@ -792,7 +795,8 @@ export async function updateTaskStatus(taskId, status) {
 
             const team = await Team.findById(project.team).lean();
             const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
-            assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const isAdmin = user.role === 'admin';
+            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
         const oldStatus = task.status;

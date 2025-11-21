@@ -86,7 +86,7 @@ export async function createSubtask(parentTaskId, payload) {
         
         // **Kiểm tra quyền tạo SUBTASK - Manager hoặc Creator/Assignee của task cha**
         assert(
-            canCreateSubtask(parentTask, project, uid),
+            canCreateSubtask(parentTask, project, user),
             'Không có quyền tạo công việc con cho task này',
             'FORBIDDEN',
             403
@@ -205,7 +205,7 @@ export async function updateSubtask(subtaskId, payload) {
             const project = await Project.findById(subtask.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const hasManagePermission = await canManageProject(project, uid);
+            const hasManagePermission = await canManageProject(project, user);
             assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
@@ -264,7 +264,7 @@ export async function deleteSubtask(subtaskId) {
             const project = await Project.findById(subtask.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const hasManagePermission = await canManageProject(project, uid);
+            const hasManagePermission = await canManageProject(project, user);
             assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
@@ -331,7 +331,7 @@ export async function reorderSubtasks(parentTaskId, subtaskIds) {
             const project = await Project.findById(parentTask.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const hasManagePermission = await canManageProject(project, uid);
+            const hasManagePermission = await canManageProject(project, user);
             assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 

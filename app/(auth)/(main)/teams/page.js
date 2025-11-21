@@ -38,7 +38,7 @@ export default async function TeamsPage({ searchParams }) {
     // Handle error state
     if (!result.ok) {
         return (
-            <div className="space-y-6 w-full">
+            <div className="space-y-6 w-full flex flex-col">
                 <div className="rounded-lg bg-red-50 p-6 border border-red-200">
                     <div className="flex items-start gap-3">
                         <svg className="h-6 w-6 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -73,7 +73,7 @@ export default async function TeamsPage({ searchParams }) {
     const hasTeams = sortedTeams.length > 0;
 
     return (
-        <div className="space-y-6 w-full">
+        <div className="space-y-6 w-full flex flex-col">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Nhóm làm việc</h1>

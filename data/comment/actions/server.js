@@ -65,7 +65,7 @@ export async function create(payload) {
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 
             // Quyền: project member
-            assert(await canViewProject(project, uid), 'Bạn không có quyền trong project này', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền trong project này', 'FORBIDDEN', 403);
 
             // Parse mentions & loại bỏ self
             const mentionsRaw = extractMentions(input.body);
@@ -128,7 +128,7 @@ export async function listByTaskAction(payload) {
             const project = await Project.findById(task.project).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 
-            assert(await canViewProject(project, uid), 'Bạn không có quyền xem', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem', 'FORBIDDEN', 403);
 
             const items = await listByTask(input.taskId, {
                 limit: input.limit ?? 30,
@@ -181,7 +181,7 @@ export async function remove(payload) {
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
 
             const isAuthor = String(comment.author) === String(uid);
-            const isMgr = await canManageProject(project, uid);
+            const isMgr = await canManageProject(project, user);
             assert(isAuthor || isMgr, 'Không có quyền xoá', 'FORBIDDEN', 403);
 
             const removedPlain = await deleteComment(input.commentId);

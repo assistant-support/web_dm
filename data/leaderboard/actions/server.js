@@ -38,7 +38,7 @@ export async function team(payload) {
             const teamDoc = await Team.findById(teamId).lean();
             assert(teamDoc, 'Team không tồn tại', 'NOT_FOUND', 404);
             // dùng await để an toàn nếu helper async
-            assert(await isTeamMember(teamDoc, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(await isTeamMember(teamDoc, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
             const data = await teamLeaderboardAgg({ teamId, ym, limit: limit ?? 20, cursor });
 
@@ -69,7 +69,7 @@ export async function project(payload) {
             const project = await Project.findById(projectId).lean();
             assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
             // dùng await để an toàn nếu helper async
-            assert(await canViewProject(project, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
             const data = await projectLeaderboardAgg({ projectId, ym, limit: limit ?? 20, cursor });
 

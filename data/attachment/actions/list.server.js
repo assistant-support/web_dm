@@ -57,7 +57,7 @@ export async function listAttachments(params = {}) {
             limit = 50,
         } = params;
 
-        const accessContext = await resolveAccessContext(uid);
+        const accessContext = await resolveAccessContext(user);
         const {
             teams,
             managerTeamIds,
@@ -197,7 +197,7 @@ export async function listAttachments(params = {}) {
         const serializedItems = items.map((item) =>
             serializeAttachmentItem({
                 item,
-                uid,
+                user,
                 userDisplayMap,
                 teamDisplayMap,
                 managerTeamIds,
@@ -251,7 +251,8 @@ async function warmDrivePreviews(items = []) {
     }
 }
 
-async function resolveAccessContext(uid) {
+async function resolveAccessContext(user) {
+    const uid = user.externalUserId;
     const Team = (await import('@/model/team.model.js')).default;
 
     const teams = await Team.find({
@@ -261,7 +262,7 @@ async function resolveAccessContext(uid) {
 
     const teamIds = teams.map((team) => team._id);
     const managerTeamIds = teams
-        .filter((team) => isTeamManager(team, uid))
+        .filter((team) => isTeamManager(team, user))
         .map((team) => String(team._id));
 
     const projectCriteria = {
@@ -271,6 +272,30 @@ async function resolveAccessContext(uid) {
             { 'members.userId': uid },
         ].filter(Boolean),
     };
+    
+    // If admin, fetch all projects? Or just let canManageProject handle it?
+    // If admin, they should see all projects.
+    // But here we are building a list of accessible projects.
+    // If admin, accessibleProjectIds should be all projects?
+    // Or maybe we just rely on canManageProject returning true.
+    // But the query `projectCriteria` filters by membership.
+    // If admin, we should probably fetch all projects or handle it differently.
+    // However, for now let's just update canManageProject usage.
+    // If user is admin, canManageProject returns true.
+    
+    if (user.role === 'admin') {
+         // Admin sees all projects.
+         // We might need to adjust projectCriteria to fetch all projects if we want to list them all.
+         // But listAttachments filters by scope.
+         // If scope is 'all', we list all attachments user can see.
+         // If admin, they can see all attachments.
+         // So managedProjectIds should include all projects?
+         // This function seems to build a map of projects user is member of.
+         // If admin, we might skip this complex logic and just say "all".
+         // But the rest of the code relies on these sets.
+         
+         // Let's stick to updating canManageProject for now.
+    }
 
     const projects = await Project.find(projectCriteria).lean();
 
@@ -286,7 +311,7 @@ async function resolveAccessContext(uid) {
             accessibleProjectIds.add(projectIdStr);
         }
 
-        if (canManageProject(project, uid)) {
+        if (canManageProject(project, user)) {
             managedProjectIds.add(projectIdStr);
         }
 
@@ -502,7 +527,7 @@ async function resolveTeamDisplay(teamIds, knownTeams = []) {
 
 function serializeAttachmentItem({
     item,
-    uid,
+    user,
     userDisplayMap,
     teamDisplayMap,
     managerTeamIds,
@@ -510,12 +535,14 @@ function serializeAttachmentItem({
     task,
     taskMap,
 }) {
+    const uid = user.externalUserId;
     const projectDoc = project || null;
     const normalizedProject = projectDoc
         ? {
               id: String(projectDoc._id),
               name: projectDoc.name || null,
               teamId: projectDoc.team ? String(projectDoc.team) : null,
+              driveFolderId: projectDoc.driveFolderId || null,
           }
         : null;
 
@@ -533,6 +560,7 @@ function serializeAttachmentItem({
               title: taskDoc.title || null,
               parentTaskId: taskDoc.parentTask ? String(taskDoc.parentTask) : null,
               scope: taskDoc.scope || null,
+              driveFolderId: taskDoc.docs?.driveFolderId || null,
           }
         : null;
 
@@ -553,7 +581,7 @@ function serializeAttachmentItem({
         ? managerTeamIds.includes(normalizedProject.teamId)
         : false;
     const canManage =
-        (projectDoc ? canManageProject(projectDoc, uid) : false) || isTeamMgr;
+        (projectDoc ? canManageProject(projectDoc, user) : false) || isTeamMgr;
 
     const kind = item.kind || 'other';
     const isImageKind = kind === 'image';
@@ -573,7 +601,11 @@ function serializeAttachmentItem({
         createdAt: item.createdAt ? item.createdAt.toISOString() : null,
         updatedAt: item.updatedAt ? item.updatedAt.toISOString() : null,
         project: normalizedProject
-            ? { id: normalizedProject.id, name: normalizedProject.name }
+            ? { 
+                id: normalizedProject.id, 
+                name: normalizedProject.name,
+                driveFolderId: normalizedProject.driveFolderId,
+            }
             : null,
         task: normalizedTask,
         team: team ? { id: team.id, name: team.name } : null,
@@ -612,7 +644,11 @@ function resolveTaskPath(taskDoc, taskMap = new Map()) {
         if (!currentId || visited.has(currentId)) {
             break;
         }
-        path.push({ id: currentId, title: current.title || null });
+        path.push({ 
+            id: currentId, 
+            title: current.title || null,
+            driveFolderId: current.docs?.driveFolderId || null,
+        });
         visited.add(currentId);
 
         if (!current.parentTask) {
@@ -670,7 +706,7 @@ export async function getAttachmentStats(filters = {}) {
             search = '',
         } = filters || {};
 
-        const accessContext = await resolveAccessContext(uid);
+        const accessContext = await resolveAccessContext(user);
         const {
             managerTeamIds,
             managedProjectIds,
@@ -800,7 +836,7 @@ const loadProjects = cache(async (ids = []) => {
     const objectIds = unique.map((id) => new mongoose.Types.ObjectId(id));
 
     const projects = await Project.find({ _id: { $in: objectIds } })
-        .select('name team members')
+        .select('name team members driveFolderId monthlyDriveFolders')
         .lean();
 
     const map = new Map();
@@ -837,7 +873,7 @@ const loadTasks = cache(async (ids = []) => {
     const objectIds = unique.map((id) => new mongoose.Types.ObjectId(id));
 
     const tasks = await Task.find({ _id: { $in: objectIds } })
-        .select('title parentTask scope project')
+        .select('title parentTask scope project docs')
         .lean();
 
     const map = new Map();

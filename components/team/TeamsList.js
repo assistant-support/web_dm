@@ -48,14 +48,16 @@ export default function TeamsList({ teams, currentUserId, viewMode = 'card' }) {
 
     // Card view (default)
     return (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {teams.map((team) => (
-                <TeamCard 
-                    key={team._id}
-                    team={team} 
-                    currentUserId={currentUserId}
-                />
-            ))}
+        <div className='flex-1 overflow-y-auto'>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ">
+                {teams.map((team) => (
+                    <TeamCard
+                        key={team._id}
+                        team={team}
+                        currentUserId={currentUserId}
+                    />
+                ))}
+            </div>
         </div>
     );
 }
