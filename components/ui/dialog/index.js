@@ -58,7 +58,7 @@ export default function DialogComponent({
                     onPointerDownOutside={(e) => e.preventDefault()}
                 >
                     {/* Header */}
-                    <div className="flex items-start justify-between border-b border-gray-200 p-6">
+                    <div className="flex items-start justify-between border-b border-gray-200 p-6 py-4">
                         <div>
                             {title && (
                                 <Dialog.Title className="text-lg font-semibold text-gray-900">
@@ -71,7 +71,7 @@ export default function DialogComponent({
                                 </Dialog.Description>
                             )}
                         </div>
-                        <Dialog.Close className="rounded-md opacity-70 ring-offset-white transition-opacity hover:opacity-100 hover:bg-gray-100 p-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                        <Dialog.Close className="cursor-pointer rounded-md opacity-70 ring-offset-white transition-opacity hover:opacity-100 hover:bg-gray-100 p-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
                             <X className="h-5 w-5" />
                             <span className="sr-only">Close</span>
                         </Dialog.Close>
@@ -84,7 +84,7 @@ export default function DialogComponent({
 
                     {/* Footer */}
                     {footer && (
-                        <div className="flex items-center justify-end gap-2 border-t border-gray-200 p-6">
+                        <div className="flex items-center justify-end gap-2 border-t border-gray-200 p-6 py-4">
                             {footer}
                         </div>
                     )}

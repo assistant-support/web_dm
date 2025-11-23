@@ -130,7 +130,7 @@ export const Select = forwardRef(function Select(
     const internalId = useId();
     const selectId = id || internalId;
 
-    const baseClasses = 'border-muted-100 bg-white text-foreground hover:border-muted-200 focus:border-[var(--brand-600)] focus:ring-2 focus:ring-[var(--brand-600)]/30';
+    const baseClasses = 'border-muted-100 bg-white text-foreground hover:border-gray-200 focus:border-[var(--brand-600)] focus:ring-2 focus:ring-[var(--brand-600)]/30 py-2.5';
 
     return (
         <div className={clsx('w-full', className)}>

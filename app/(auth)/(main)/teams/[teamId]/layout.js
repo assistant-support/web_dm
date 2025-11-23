@@ -40,7 +40,6 @@ export default async function TeamLayout({ children, params }) {
         );
     }
 
-    // Serialize team data để tránh lỗi MongoDB ObjectId
     const team = JSON.parse(JSON.stringify(result.data));
     const currentUserId = user?.externalUserId;
     const userIsManager = isTeamManager(team, currentUserId);
@@ -50,7 +49,7 @@ export default async function TeamLayout({ children, params }) {
             <TeamHeader team={team} isManager={userIsManager} />
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col flex-1">
                 <TeamTabs teamId={team._id} isManager={userIsManager} />
-                <div className="p-6 overflow-scroll flex-1 flex flex-col">
+                <div className="p-6 pr-4 overflow-scroll flex-1 flex flex-col">
                     {children}
                 </div>
             </div>
