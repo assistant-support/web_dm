@@ -318,7 +318,7 @@ export default function PersonalTasksClient({
         <div className="flex flex-col flex-1 w-full h-full">
             {/* Header Section */}
             <div className="flex-none mb-4">
-                <div className="bg-white rounded-md border border-gray-200 shadow-sm">
+                <div className="bg-white rounded-md border border-gray-200">
                     <div className="px-4 sm:px-6 py-3">
                         {/* Toolbar and Action Buttons */}
                         <div className="flex items-center justify-between gap-4">
@@ -326,7 +326,7 @@ export default function PersonalTasksClient({
                                 <TaskToolbar view={view} onViewChange={setView} />
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
-                                <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 gap-1 shadow-sm">
+                                <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 gap-1">
                                     <Button variant="ghost" size="sm" onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)} className={'!py-1.5 !text-xs'} icon={isHeaderCollapsed ? ChevronDown : ChevronUp}>
                                         <span>{isHeaderCollapsed ? "Mở rộng" : "Thu gọn"}</span>
                                     </Button>
@@ -340,7 +340,7 @@ export default function PersonalTasksClient({
                                         </Button>
                                     )}
                                 </div>
-                                <Button variant="primary" size="sm" onClick={() => setShowCreateDialog(true)} icon={Plus} className="!py-1.5 !text-xs shadow-sm">
+                                <Button variant="primary" size="sm" onClick={() => setShowCreateDialog(true)} icon={Plus} className="!py-2.5 !text-xs">
                                     <span className="hidden sm:inline">Tạo nhiệm vụ</span>
                                     <span className="sm:hidden">Tạo</span>
                                 </Button>

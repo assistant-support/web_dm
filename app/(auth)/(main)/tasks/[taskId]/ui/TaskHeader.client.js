@@ -29,6 +29,7 @@ import Dropdown from '@/components/ui/dropdown';
 // Dialogs
 import EditTaskDialog from '@/components/tasks/EditTaskDialog.client';
 import NotifyZaloDialog from '@/components/zalo/NotifyZaloDialog.client';
+import ApproveTaskDialog from '@/components/tasks/ApproveTaskDialog.client';
 
 // Enums and Helpers
 import { TASK_STATUS } from '@/model/common/enums';
@@ -75,7 +76,7 @@ const getPriorityInfo = (priority) => {
     switch (priority) {
         case 'urgent': return { color: 'text-red-600', label: '🔥 Khẩn' };
         case 'high': return { color: 'text-orange-600', label: 'Cao' };
-        case 'medium': return { color: 'text-gray-600', label: 'TB' };
+        case 'medium': return { color: 'text-gray-600', label: 'Trung' };
         case 'low': return { color: 'text-gray-400', label: 'Thấp' };
         default: return { color: 'text-gray-400', label: '-' };
     }
@@ -140,13 +141,15 @@ export default function TaskHeader({
     projectMembers, // Dùng cho dialog
     workTypes, // Dùng cho dialog
     platforms, // Dùng cho dialog
-    subtasksCount = 0
+    subtasksCount = 0,
+    maxPoints = null // [NEW] Giới hạn điểm cho subtask
 }) {
     const router = useRouter();
     const { run } = useAsyncNotifier();
 
     // State (Giữ nguyên)
     const [showEditTask, setShowEditTask] = useState(false);
+    const [showApproveDialog, setShowApproveDialog] = useState(false); // [NEW]
     const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
     const [notifyRecipient, setNotifyRecipient] = useState(null);
     const [notifyContext, setNotifyContext] = useState('');
@@ -183,22 +186,31 @@ export default function TaskHeader({
         });
     };
     const handleApproveCompletion = async (approve) => {
-        let note = ''; let finalPoints = task.initialPoints || 0;
         if (approve) {
-            const pointsInput = prompt('Duyệt hoàn thành. Nhập điểm cuối cùng:', finalPoints); if (pointsInput === null) return;
-            finalPoints = Number(pointsInput) || 0; note = prompt('Nhập ghi chú (không bắt buộc):'); if (note === null) return;
-        } else {
-            note = prompt('Vui lòng nhập lý do yêu cầu làm lại:');
-            if (note === null || note.trim() === "") {
-                alert('Vui lòng nhập lý do.');
-                return;
-            }
+            setShowApproveDialog(true);
+            return;
         }
-        await run(() => approveTaskCompletion(task._id, { approve, note, finalPoints }), {
-            loadingMessage: approve ? 'Đang duyệt hoàn thành...' : 'Đang gửi yêu cầu làm lại...',
-            successMessage: approve ? 'Task đã hoàn thành!' : 'Đã gửi yêu cầu làm lại.', onSuccess: router.refresh
+        
+        // Logic từ chối (Làm lại) giữ nguyên dùng prompt hoặc có thể nâng cấp sau
+        const note = prompt('Vui lòng nhập lý do yêu cầu làm lại:');
+        if (note === null || note.trim() === "") {
+            alert('Vui lòng nhập lý do.');
+            return;
+        }
+        
+        await run(() => approveTaskCompletion(task._id, { approve: false, note, finalPoints: 0 }), {
+            loadingMessage: 'Đang gửi yêu cầu làm lại...',
+            successMessage: 'Đã gửi yêu cầu làm lại.', onSuccess: router.refresh
         });
     };
+
+    const onApproveConfirm = async ({ finalPoints, note }) => {
+        await run(() => approveTaskCompletion(task._id, { approve: true, note, finalPoints }), {
+            loadingMessage: 'Đang duyệt hoàn thành...',
+            successMessage: 'Task đã hoàn thành!', onSuccess: router.refresh
+        });
+    };
+
     const handleDelete = () => {
         if (!confirm('Bạn có chắc muốn XÓA vĩnh viễn nhiệm vụ này? Hành động này không thể hoàn tác.')) return;
         run(async () => { const result = await deleteTask(task._id); if (!result.ok) throw new Error(result.message); return result; }, {
@@ -260,25 +272,15 @@ export default function TaskHeader({
 
     return (
         <>
-            <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8 pt-4 pb-4 border-b border-gray-200 bg-white space-y-3">
-
-                {/* HÀNG 1: Tiêu đề và Nút hành động chính (Giữ nguyên) */}
+            <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8 rounded-md pt-4 pb-4 border border-gray-200 bg-white space-y-3">
                 <div className="flex items-center justify-between gap-4">
                     {/* Bên trái: Tiêu đề và nút Sửa */}
                     <div className="flex items-center gap-2 min-w-0">
-                        <h1 className="text-xl lg:text-2xl font-bold text-gray-900 truncate" title={task.title}>
+
+                        <h1 className="text-xl lg:text-2xl font-bold text-gray-900 truncate first-letter:uppercase" title={task.title}>
                             {task.title}
                         </h1>
-                        {canEditTask && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                icon={Edit}
-                                onClick={() => setShowEditTask(true)}
-                                className="!p-1.5 text-gray-500 hover:text-blue-600 flex-shrink-0"
-                                title="Sửa chi tiết"
-                            />
-                        )}
+
                     </div>
 
                     {/* Bên phải: Các nút hành động (Giữ nguyên) */}
@@ -328,6 +330,28 @@ export default function TaskHeader({
                                 )}
                             </>
                         )}
+                        {parentTask && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                icon={CornerUpLeft}
+                                onClick={() => router.push(`/tasks/${parentTask._id}`)}
+                                className="!px-2 sm:!px-3"
+                                title={`Quay lại công việc cha: ${parentTask.title}`}
+                            ><span className="hidden sm:inline ml-1.5 whitespace-nowrap">Quay lại</span>
+                            </Button>
+                        )}
+                        {canEditTask && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                icon={Edit}
+                                onClick={() => setShowEditTask(true)}
+                                className="!px-2 sm:!px-3"
+                                title="Sửa chi tiết"
+                            ><span className="hidden sm:inline ml-1.5 whitespace-nowrap">Cập nhật</span>
+                            </Button>
+                        )}
                         {!isWaitingConfirm && !isPendingApproval && !isPendingCompletionReview && (
                             <Dropdown>
                                 <Dropdown.Trigger>
@@ -360,7 +384,7 @@ export default function TaskHeader({
                 </div>
 
                 {/* HÀNG 2: Metadata Summary (Giữ nguyên, đã bỏ nút thu gọn) */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 border-t border-gray-100 pt-3 mt-2">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-600 border-t border-gray-100 pt-3 mt-2">
                     <div className="flex items-center gap-1" title="Trạng thái">
                         <statusInfo.icon className={clsx("h-3.5 w-3.5", statusInfo.color)} />
                         <span className={clsx("font-medium", statusInfo.color)}>{statusInfo.label}</span>
@@ -371,13 +395,13 @@ export default function TaskHeader({
                     </div>
                     <div className="flex items-center gap-1" title="Ngày bắt đầu dự kiến">
                         <FolderClock className="h-3.5 w-3.5 text-gray-400" />
-                        <span>{fmt(task.plannedStartAt) || 'N/A'}</span>
+                        <span>Ngày tạo: {fmt(task.plannedStartAt) || 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-1" title="Hạn chót">
                         <CalendarDays className="h-3.5 w-3.5 text-red-500" />
-                        <span>{fmt(task.plannedDueAt) || 'N/A'}</span>
+                        <span>Hạn chót: {fmt(task.plannedDueAt) || 'N/A'}</span>
                     </div>
-                    {task.startedAt && <div className="flex items-center gap-1" title={`Bắt đầu ${formatRelativeTime(task.startedAt)}`}><Play className="h-3.5 w-3.5 text-blue-500" /><span>{fmt(task.startedAt)}</span></div>}
+                    {task.startedAt && <div className="flex items-center gap-1" title={`Bắt đầu ${formatRelativeTime(task.startedAt)}`}><Play className="h-3.5 w-3.5 text-blue-500" /><span>Thực hiện: {fmt(task.startedAt)}</span></div>}
                     {task.completedAt && <div className="flex items-center gap-1" title={`Hoàn thành ${formatRelativeTime(task.completedAt)}`}><CheckCircle2 className="h-3.5 w-3.5 text-green-600" /><span>{fmt(task.completedAt)}</span></div>}
                     {!task.parentTask && task.progress?.total > 0 && (
                         <div className="flex items-center gap-1" title={`Tiến độ (${task.progress.completed}/${task.progress.total})`}>
@@ -410,7 +434,33 @@ export default function TaskHeader({
             </div>
 
             {/* --- Dialogs (Giữ nguyên) --- */}
-            {showEditTask && (<EditTaskDialog open={showEditTask} onClose={() => setShowEditTask(false)} mode="edit" task={task} projectMembers={projectMembers} users={users} allUsersWithDetails={allUsersWithDetails} onSuccess={() => { router.refresh(); setShowEditTask(false); }} workTypes={workTypes} platforms={platforms} />)}
+            {showEditTask && (
+                <EditTaskDialog
+                    open={showEditTask}
+                    onClose={() => setShowEditTask(false)}
+                    mode="edit"
+                    task={task}
+                    projectMembers={projectMembers}
+                    users={users}
+                    allUsersWithDetails={allUsersWithDetails}
+                    onSuccess={() => { router.refresh(); setShowEditTask(false); }}
+                    workTypes={workTypes}
+                    platforms={platforms}
+                    canManage={isProjectManager}
+                    currentUserId={currentUser?.externalUserId || currentUser?.id || null}
+                />
+            )}
+
+            {showApproveDialog && (
+                <ApproveTaskDialog
+                    open={showApproveDialog}
+                    onClose={() => setShowApproveDialog(false)}
+                    onApprove={onApproveConfirm}
+                    task={task}
+                    maxPoints={maxPoints}
+                    isSubtask={!!task.parentTask}
+                />
+            )}
 
             <NotifyZaloDialog
                 open={notifyDialogOpen}

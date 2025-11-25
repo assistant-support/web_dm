@@ -100,7 +100,7 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
 
     if (tasks.length === 0) {
         return (
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="bg-white rounded-lg border border-gray-200">
                 <div className="px-6 py-4 border-b border-gray-200">
                     <h3 className="text-lg font-semibold text-gray-900">
                         Công việc chờ duyệt (0)
@@ -127,7 +127,7 @@ export default function PendingApprovalSection({ initialTasks, usersMap, project
     }
 
     return (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+        <div className="bg-white rounded-lg border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">
                     Công việc chờ duyệt ({tasks.length})

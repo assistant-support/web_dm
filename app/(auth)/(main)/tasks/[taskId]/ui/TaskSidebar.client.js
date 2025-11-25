@@ -178,14 +178,14 @@ export default function TaskSidebar({
         .sort((a, b) => new Date(b.time) - new Date(a.time));
 
     return (
-        <div className="flex-shrink-0 lg:w-80 xl:w-96 space-y-4">
+        <div className="w-full min-[1600px]:w-96 flex-shrink-0 space-y-4">
 
             {/* --- 1. Thông tin chi tiết (Giữ nguyên) --- */}
             <div className="bg-white border border-gray-200 rounded-md shadow-sm">
                 <div className="px-4 py-3 border-b border-gray-200">
                     <h3 className="text-base font-semibold text-gray-800">Thông tin chi tiết</h3>
                 </div>
-                <div className="px-4 py-2">
+                <div className="p-4">
                     <div className="divide-y divide-gray-100">
                         <InfoRow icon={FolderIcon} label="Dự án">
                             {task.project?._id ? (
@@ -242,7 +242,7 @@ export default function TaskSidebar({
                 <div className="px-4 py-3 border-b border-gray-200">
                     <h3 className="text-base font-semibold text-gray-800">Hoạt động</h3>
                 </div>
-                <div className="px-4 py-3 max-h-96 overflow-y-auto custom-scrollbar">
+                <div className="p-4 max-h-96 overflow-y-auto custom-scrollbar">
                     <ul className="space-y-3">
                         {mockActivity.map(activity => (
                             <li key={activity.id} className="flex items-start gap-2">

@@ -19,7 +19,6 @@ export default function CommentList({ taskId, currentUser, canManage, initialCou
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    console.log(comments);
     
     const loadComments = useCallback(async () => {
         try {

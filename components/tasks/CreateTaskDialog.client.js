@@ -14,6 +14,7 @@ import DialogComponent from '@/components/ui/dialog';
 import { Input, Textarea, Checkbox } from '@/components/ui/input';
 import Dropdown, { DropdownContext } from '@/components/ui/dropdown';
 import { Info, User, Loader2, Search, ChevronDown } from 'lucide-react';
+import Avatar from '@/components/ui/avatar';
 import { WORK_TYPES } from '@/data/workTypes/constants';
 import { PRIORITY } from '@/model/common/enums.js';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
@@ -105,6 +106,8 @@ export default function CreateTaskDialog({
     projectId,
     projectMembers = [],
     users = [],
+    // New prop: full detailed user list prepared by the page
+    allUsersWithDetails = [],
     canManage = false,
     currentUserId = '',
     onSuccess
@@ -178,26 +181,42 @@ export default function CreateTaskDialog({
     const assigneeOptions = useMemo(() => {
         if (!canManage) return [];
         const defaultOption = { value: '', label: '-- Giao sau --', name: '-- Giao sau --' };
-        // Sử dụng users (team members) thay vì projectMembers
-        const memberOptions = users.map(user => ({
+
+        // Prefer `allUsersWithDetails` when available; it's an array of objects like
+        // { id, name, email, avatarUrl, label }
+        if (Array.isArray(allUsersWithDetails) && allUsersWithDetails.length > 0) {
+            const mapped = allUsersWithDetails.map(u => {
+                const uid = u.id || u.value;
+                const inProject = (projectMembers || []).some(pm => String(pm.userId) === String(uid));
+                return {
+                    value: uid,
+                    label: u.label || `${u.name} (${u.email || ''})`,
+                    name: u.name || u.label || u.email || uid,
+                    avatarUrl: u.avatarUrl || u.avatar || null,
+                    inProject,
+                };
+            });
+            return [defaultOption, ...mapped];
+        }
+
+        // Fallback to older `users` shape
+        const memberOptions = (users || []).map(user => ({
             value: user.value,
             label: user.label || user.name,
             name: user.name
         }));
         return [defaultOption, ...memberOptions];
-    }, [canManage, users]);
+    }, [canManage, users, allUsersWithDetails, projectMembers]);
 
     const filteredAssigneeOptions = useMemo(() => {
         if (!assigneeSearch) return assigneeOptions;
         return assigneeOptions.filter(opt =>
-            opt.name.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
-            opt.label.toLowerCase().includes(assigneeSearch.toLowerCase())
+            (opt.name || '').toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+            (opt.label || '').toLowerCase().includes(assigneeSearch.toLowerCase())
         );
     }, [assigneeOptions, assigneeSearch]);
 
-    const selectedAssignee = useMemo(() => {
-        return assigneeOptions.find(opt => opt.value === assignee);
-    }, [assignee, assigneeOptions]);
+    const selectedAssignee = useMemo(() => assigneeOptions.find(opt => opt.value === assignee), [assignee, assigneeOptions]);
 
 
     // --- THÊM MỚI: MEMO CHO WORK TYPE ---
@@ -423,8 +442,29 @@ export default function CreateTaskDialog({
                                                         onClick={() => setAssignee(opt.value)}
                                                         isActive={assignee === opt.value}
                                                     >
-                                                        {opt.name}
-                                                        {opt.value === currentUserId && ' (Bản thân)'}
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex-shrink-0">
+                                                                <Avatar name={opt.name} src={opt.avatarUrl} size="sm" />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-sm font-medium text-gray-900 truncate" title={opt.name || opt.label}>
+                                                                    {opt.name || opt.label}
+                                                                    {opt.value === currentUserId && <span className="text-gray-500"> {' (Bản thân)'}</span>}
+                                                                </p>
+                                                                {opt.label && opt.label !== opt.name && (
+                                                                    <p className="text-xs text-gray-500 truncate" title={opt.label}>{opt.label}</p>
+                                                                )}
+                                                            </div>
+                                                            {!opt.inProject && (
+                                                                <span
+                                                                    className="inline-flex items-center text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5"
+                                                                    title="Tự động thêm vào dự án"
+                                                                    aria-label="Tự động thêm vào dự án"
+                                                                >
+                                                                    Chưa trong dự án
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </DropdownItem>
                                                 ))}
                                             </div>

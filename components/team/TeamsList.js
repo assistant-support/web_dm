@@ -32,7 +32,7 @@ export default function TeamsList({ teams, currentUserId, viewMode = 'card' }) {
 
     if (viewMode === 'list') {
         return (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-scroll">
                 <div className="divide-y divide-gray-200">
                     {teams.map((team) => (
                         <TeamListItem

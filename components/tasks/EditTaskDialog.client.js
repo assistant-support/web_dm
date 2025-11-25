@@ -8,6 +8,7 @@ import DialogComponent from '@/components/ui/dialog';
 import { Input, Textarea, Select } from '@/components/ui/input';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 import { updateTask } from '@/data/task/actions/server';
+import { assignTask } from '@/data/task/actions/server';
 import { createSubtask } from '@/data/task/actions/subtasks.server.js';
 import { WORK_TYPES } from '@/data/workTypes/constants';
 import { PRIORITY } from '@/model/common/enums.js';
@@ -38,10 +39,14 @@ export default function EditTaskDialog({
     parentTaskId = null,
     projectId = null,
     users = [],
+    allUsersWithDetails = [],
     onSuccess,
-    mode = 'edit' // 'edit' or 'createSubtask'
+    mode = 'edit', // 'edit' or 'createSubtask'
+    // caller props
+    canManage = false,
+    currentUserId = null,
 }) {
-    console.log('hi');
+    
 
     const { run, Overlays } = useAsyncNotifier();
 
@@ -51,6 +56,7 @@ export default function EditTaskDialog({
     priority: PRIORITY.MEDIUM,
         workType: '',
         assignee: '',
+        estimatedHours: '',
         plannedStartAt: '',
         plannedDueAt: '',
         tags: '',
@@ -59,12 +65,23 @@ export default function EditTaskDialog({
     // Sync form với task data khi dialog mở (edit mode)
     useEffect(() => {
         if (open && mode === 'edit' && task) {
+            // Normalize assignee to externalUserId string when task.assignee may be populated as an object
+            let assigneeValue = '';
+            if (task.assignee) {
+                if (typeof task.assignee === 'object') {
+                    assigneeValue = task.assignee.externalUserId || task.assignee.id || task.assignee._id || '';
+                } else {
+                    assigneeValue = task.assignee;
+                }
+            }
+
             setFormData({
                 title: task.title || '',
                 description: task.description || '',
                 priority: task.priority || PRIORITY.MEDIUM,
                 workType: task.workType || '',
-                assignee: task.assignee || '',
+                assignee: assigneeValue || '',
+                estimatedHours: task.estimatedHours || '',
                 plannedStartAt: task.plannedStartAt ? new Date(task.plannedStartAt).toISOString().slice(0, 16) : '',
                 plannedDueAt: task.plannedDueAt ? new Date(task.plannedDueAt).toISOString().slice(0, 16) : '',
                 tags: Array.isArray(task.tags) ? task.tags.join(', ') : '',
@@ -77,6 +94,7 @@ export default function EditTaskDialog({
                 priority: PRIORITY.MEDIUM,
                 workType: '',
                 assignee: '',
+                estimatedHours: '',
                 plannedStartAt: '',
                 plannedDueAt: '',
                 tags: '',
@@ -87,6 +105,17 @@ export default function EditTaskDialog({
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
+
+    // Determine which user list to show in the assignee picker.
+    // For creating subtasks we want to allow selecting any user in the system.
+    let assigneeOptions = [];
+    if (mode === 'createSubtask' && Array.isArray(allUsersWithDetails) && allUsersWithDetails.length) {
+        assigneeOptions = allUsersWithDetails.map(u => ({ value: u.id || u._id || u.value, label: u.label || u.name }));
+    } else if (Array.isArray(users)) {
+        assigneeOptions = users;
+    } else {
+        assigneeOptions = [];
+    }
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -102,6 +131,7 @@ export default function EditTaskDialog({
             priority: formData.priority,
             workType: formData.workType || null,
             assignee: formData.assignee || null,
+            estimatedHours: formData.estimatedHours ? Number(formData.estimatedHours) : null,
             plannedStartAt: formData.plannedStartAt || null,
             plannedDueAt: formData.plannedDueAt || null,
             tags: formData.tags
@@ -110,6 +140,37 @@ export default function EditTaskDialog({
         };
 
         if (mode === 'edit') {
+            // If assignee changed and caller is not a manager, prefer using assignTask first
+            // Normalize originalAssignee to string (task.assignee may be populated object)
+            let originalAssignee = null;
+            if (task?.assignee) {
+                if (typeof task.assignee === 'object') {
+                    originalAssignee = task.assignee.externalUserId || task.assignee.id || task.assignee._id || null;
+                } else {
+                    originalAssignee = task.assignee;
+                }
+            }
+            const newAssignee = payload.assignee || null;
+
+            if (originalAssignee !== newAssignee && !canManage) {
+                // perform assign via assignTask, then remove assignee from payload to avoid double-handling
+                const assignResult = await run(
+                    () => assignTask(task._id, newAssignee),
+                    {
+                        loadingMessage: 'Đang cập nhật người thực hiện...',
+                        successMessage: 'Cập nhật người thực hiện thành công',
+                        notify: 'all'
+                    }
+                );
+
+                // If assign failed, abort further update to avoid inconsistent state
+                if (!assignResult || assignResult.ok === false) {
+                    return; // run() already shows error notification
+                }
+
+                delete payload.assignee;
+            }
+
             await run(
                 () => updateTask(task._id, payload),
                 {
@@ -215,12 +276,21 @@ export default function EditTaskDialog({
                                 onChange={(e) => handleChange('assignee', e.target.value)}
                             >
                                 <option value="">-- Chưa gán --</option>
-                                {users.map(u => (
+                                {assigneeOptions.map(u => (
                                     <option key={u.value} value={u.value}>
                                         {u.label}
                                     </option>
                                 ))}
                             </Select>
+
+                            <Input
+                                label="Thời gian ước tính (giờ)"
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={formData.estimatedHours}
+                                onChange={(e) => handleChange('estimatedHours', e.target.value)}
+                            />
 
                             <Input
                                 label="Ngày bắt đầu"
@@ -249,7 +319,7 @@ export default function EditTaskDialog({
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             {mode === 'edit' ? 'Cập nhật' : 'Tạo công việc con'}
                         </button>

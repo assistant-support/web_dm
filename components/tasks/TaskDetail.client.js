@@ -224,10 +224,10 @@ export default function TaskDetail({
     const handlePanelUpdate = () => { router.refresh(); };
     const handleNotifyAssignee = () => { alert('Đã gửi thông báo nhắc nhở người thực hiện (chức năng đang phát triển).'); };
     const handleNotifyManager = () => { alert('Đã gửi thông báo nhắc nhở quản lý (chức năng đang phát triển).'); };
-    console.log(task);
+    
 
     return (
-        <div className="flex flex-col h-full overflow-hidden w-full">
+        <div className="flex-1 min-h-0 flex flex-col w-full overflow-hidden">
 
             {/* --- Top Section (Not scrollable independently) --- */}
             {/* --- Top Section (Redesigned) --- */}
@@ -494,7 +494,22 @@ export default function TaskDetail({
 
             {/* --- Dialogs --- */}
             {showCreateSubtask && (<CreateSubtaskDialog open={showCreateSubtask} onClose={() => setShowCreateSubtask(false)} parentTask={task} projectMembers={projectMembers} users={users} allUsersWithDetails={allUsersWithDetails} currentUserId={currentUserId} onSuccess={() => { router.refresh(); setShowCreateSubtask(false); }} workTypes={workTypes} platforms={platforms} />)}
-            {showEditTask && (<EditTaskDialog open={showEditTask} onClose={() => setShowEditTask(false)} mode="edit" task={task} projectMembers={projectMembers} users={users} allUsersWithDetails={allUsersWithDetails} onSuccess={() => { router.refresh(); setShowEditTask(false); }} workTypes={workTypes} platforms={platforms} />)}
+            {showEditTask && (
+                <EditTaskDialog
+                    open={showEditTask}
+                    onClose={() => setShowEditTask(false)}
+                    mode="edit"
+                    task={task}
+                    projectMembers={projectMembers}
+                    users={users}
+                    allUsersWithDetails={allUsersWithDetails}
+                    onSuccess={() => { router.refresh(); setShowEditTask(false); }}
+                    workTypes={workTypes}
+                    platforms={platforms}
+                    canManage={canManage}
+                    currentUserId={currentUserId}
+                />
+            )}
         </div>
     );
 }

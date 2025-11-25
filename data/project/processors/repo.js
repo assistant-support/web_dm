@@ -41,7 +41,7 @@ export const getDetail = cache(_getDetail);
  * Tạo Project mới + 12 thư mục Drive hàng tháng cho năm hiện tại.
  */
 export async function createProject(payload, creatorUserId) {
-    console.log('[repo.createProject] START');
+    
 
     let teamDriveFolderId = '1_guao-kh5cGjvcvLYiZVioujTkqJveEG'
     const projectParentFolderId = teamDriveFolderId
@@ -51,7 +51,7 @@ export async function createProject(payload, creatorUserId) {
     );
     const currentYear = new Date().getFullYear();
     const monthlyFoldersData = await createProjectMonthlyFolders(projectRootFolderId, currentYear);
-    console.log(`[repo.createProject] Created ${monthlyFoldersData.length} monthly folders for ${currentYear}`);
+    
 
 
     const docData = {
@@ -76,7 +76,7 @@ export async function createProject(payload, creatorUserId) {
     };
 
     const doc = await Project.create(docData);
-    console.log('[repo.createProject] Project created, _id:', doc._id);
+    
 
     // Populate team name để trả về
     const finalDoc = await getDetail(doc._id, { lean: true }); // Dùng hàm cached để lấy lại

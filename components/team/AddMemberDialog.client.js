@@ -42,34 +42,44 @@ export default function AddMemberDialog({ teamId, existingMemberIds = [], isOpen
     });
 
     const selectedUserId = form.watch('userId');
+    const { reset } = form;
 
     // Load users when dialog opens
     useEffect(() => {
+        let cancelled = false;
+
         if (isOpen) {
             setLoadingData(true);
+
             const loadData = async () => {
                 try {
                     const result = await listForPicker();
-                    if (result.ok) {
+                    if (!cancelled && result.ok) {
                         setFetchedUsers(result.data.items || []);
                     }
                 } catch (err) {
-                    console.error('Error loading users:', err);
+                    if (!cancelled) console.error('Error loading users:', err);
                 } finally {
-                    setLoadingData(false);
+                    if (!cancelled) setLoadingData(false);
                 }
             };
+
             loadData();
-            
-            // Reset form
-            form.reset({
+
+            // Reset form only when opening the dialog
+            reset({
                 userId: '',
                 role: 'member',
             });
             setServerError(null);
             setSearchQuery('');
         }
-    }, [isOpen, form]);
+
+        return () => {
+            cancelled = true;
+            setLoadingData(false);
+        };
+    }, [isOpen, reset]);
 
     // Filter users: Not in existingMemberIds and matches search
     const availableUsers = fetchedUsers.filter(u => !existingMemberIds.includes(u.value));

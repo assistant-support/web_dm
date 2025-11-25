@@ -41,12 +41,13 @@ export default async function ProjectTasksPage({ params }) {
     // Check if user can create root tasks (only project managers)
     const canCreate = canCreateTask(project, user.externalUserId);
 
-    // Get team member IDs if project has team
+    // Build list of user IDs to fetch display info for.
+    // Use the union of project members and team members (deduplicated) so dropdowns see all relevant users.
+    const projectMemberIds = project.members?.map(m => m.userId) || [];
     const team = project.team; // Already populated by getProjectDetail
     const teamMemberIds = team?.members ? team.members.map(m => m.userId) : [];
 
-    // Get user display info for team members only (optimize: don't fetch all users)
-    const usersToFetch = teamMemberIds.length > 0 ? teamMemberIds : project.members?.map(m => m.userId) || [];
+    const usersToFetch = Array.from(new Set([...(projectMemberIds || []), ...(teamMemberIds || [])]));
     const usersMapResult = await getUsersDisplayInfo(usersToFetch);
     
     // Convert to users array for CreateTaskButton
@@ -92,6 +93,7 @@ export default async function ProjectTasksPage({ params }) {
                     <CreateTaskButton
                         projectId={projectId}
                         users={users}
+                        allUsersWithDetails={allUsersWithDetails}
                         projectMembers={project.members || []}
                         currentUserId={user.externalUserId}
                         canManage={canManage}

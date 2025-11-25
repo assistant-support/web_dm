@@ -10,7 +10,7 @@ export default function ProjectTabs({ projectId, isOwnerOrManager }) {
 
     const tabs = [
         { id: 'overview', label: 'Tổng quan', href: `/projects/${projectId}`, icon: Home },
-        { id: 'tasks', label: 'Tasks', href: `/projects/${projectId}/tasks`, icon: Clock },
+        { id: 'tasks', label: 'Công việc', href: `/projects/${projectId}/tasks`, icon: Clock },
         { id: 'members', label: 'Thành viên', href: `/projects/${projectId}/members`, icon: Users },
         { id: 'activity', label: 'Hoạt động', href: `/projects/${projectId}/activity`, icon: Clock },
         { id: 'files', label: 'Files', href: `/projects/${projectId}/files`, icon: FileText },

@@ -13,7 +13,7 @@ import CreateSubtaskDialog from '@/components/tasks/CreateSubtaskDialog.client';
 /**
  * WorkflowEditor - Simple visual workflow editor
  */
-export default function WorkflowEditor({ task, subtasks = [], workflow, users }) {
+export default function WorkflowEditor({ task, subtasks = [], workflow, users, allUsersWithDetails = [] }) {
     const router = useRouter();
     const canvasRef = useRef(null);
     
@@ -185,7 +185,7 @@ export default function WorkflowEditor({ task, subtasks = [], workflow, users })
             }))
         ]);
     };
-    console.log(users);
+    
     
     return (
         <div className="flex flex-col flex-1">
@@ -244,6 +244,7 @@ export default function WorkflowEditor({ task, subtasks = [], workflow, users })
                 parentTask={task}
                 projectId={task.project}
                 users={users} // Pass fetched users
+                allUsersWithDetails={allUsersWithDetails}
                 onSubtaskCreated={(newSubtask) => {
                     const newNode = {
                         key: `subtask-${newSubtask._id}`,

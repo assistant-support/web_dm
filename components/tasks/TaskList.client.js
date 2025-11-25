@@ -201,6 +201,8 @@ export default function TaskList({
                     workTypes={workTypes}
                     platforms={platforms}
                     onSuccess={handleSuccess}
+                    canManage={canManageTask}
+                    currentUserId={currentUserId}
                 />
             )}
 
@@ -213,6 +215,7 @@ export default function TaskList({
                     // Lấy projectMembers của task cha để truyền vào đây
                     projectMembers={createSubtaskDialog.parentTask.projectMembers || []}
                     users={users}
+                    allUsersWithDetails={allUsersWithDetails}
                     workTypes={workTypes}
                     platforms={platforms}
                     currentUserId={currentUserId}

@@ -24,7 +24,7 @@ export default async function SiteHeader() {
     }
     const datauser = user?.oauth;
     return (
-        <div className="px-4 sm:px-6 lg:px-8 z-1">
+        <div className="px-4 sm:px-6 lg:px-8 z-2">
             <div className="flex h-16 items-center justify-between gap-6">
                 {/* Phần Bên Trái */}
                 <div className="flex items-center gap-4">
@@ -52,7 +52,7 @@ export default async function SiteHeader() {
                 <div className="flex items-center gap-3">
                     <ChatBotButton />
                     <NotificationBell currentUser={user} />
-                    <UserMenu user={datauser} />
+                    <UserMenu user={user} />
                 </div>
             </div>
         </div>

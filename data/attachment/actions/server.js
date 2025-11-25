@@ -186,7 +186,23 @@ export async function createAttachment(formData) {
                 attachmentId: created.id,
                 byUserId: uid,
                 toUserIds: Array.from(recipientSet),
+                taskTitle: task ? task.title : null // [NEW]
             });
+
+            // [NEW] If adding to a subtask, notify Parent Task Assignee
+            if (task && task.parentTask) {
+                const parentTask = await Task.findById(task.parentTask).select('assignee').lean();
+                if (parentTask && parentTask.assignee && String(parentTask.assignee) !== uid) {
+                     await notifyEvent('attachment.added', {
+                        projectId: String(project._id),
+                        taskId: taskId,
+                        attachmentId: created.id,
+                        byUserId: uid,
+                        toUserIds: [String(parentTask.assignee)],
+                        taskTitle: task.title
+                    });
+                }
+            }
 
             await revalidateMany(
                 [tags.project(project._id), taskId && tags.task(taskId)].filter(Boolean)

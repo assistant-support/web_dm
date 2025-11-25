@@ -27,7 +27,7 @@ export default function ActivityItem({
     // Lấy targetUserId nếu có (cho member actions, assignee changes)
     const targetUserId = activity.payload?.userId;
     if (actionMessage == 'hoạt động không xác định') {
-        console.log(activity);
+        
 
     }
     return (

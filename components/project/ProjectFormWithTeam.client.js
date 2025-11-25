@@ -73,7 +73,7 @@ export default function ProjectFormWithTeam({ onSuccess }) {
         setServerError(null);
 
         try {
-            console.log('[ProjectForm] Form data:', data);
+            
             
             // Parse tags
             const tags = data.tags
@@ -90,9 +90,9 @@ export default function ProjectFormWithTeam({ onSuccess }) {
                 tags: tags.length > 0 ? tags : undefined,
             };
 
-            console.log('[ProjectForm] Payload to send:', payload);
+            
             const result = await createProject(payload);
-            console.log('[ProjectForm] Result:', result);
+            
 
             if (!result.ok) {
                 console.error('[ProjectForm] Error:', result);

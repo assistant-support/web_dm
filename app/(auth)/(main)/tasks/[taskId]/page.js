@@ -66,6 +66,7 @@ export default async function TaskDetailPage({ params }) {
         getTaskWorkflow(taskId),
         listByTaskAction({ taskId }),
     ]);
+    
 
     // --- Handle Task Fetching Error ---
     if (!taskResult.ok) {
@@ -96,7 +97,7 @@ export default async function TaskDetailPage({ params }) {
         }))
         : [];
     const usersForPickerProp = usersResult.ok ? usersResult.data : { items: [], count: 0 };
-    console.log(commentsResult);
+    
 
     // --- Fetch Parent Task, Subtasks (Sử dụng task đã được populate) ---
     const project = task.project; // Lấy project object
@@ -112,51 +113,94 @@ export default async function TaskDetailPage({ params }) {
         ? listSubtasks(task._id).then(res => res.ok ? JSON.parse(JSON.stringify(res.data || [])) : [])
         : Promise.resolve([]);
 
-    const [fetchedParentTask, fetchedSubtasks] = await Promise.all([
+    // [NEW] Fetch siblings if parent exists (để tính giới hạn điểm khi duyệt)
+    const siblingsPromise = task.parentTask?._id
+        ? listSubtasks(task.parentTask._id).then(res => res.ok ? JSON.parse(JSON.stringify(res.data || [])) : [])
+        : Promise.resolve([]);
+
+    const [fetchedParentTask, fetchedSubtasks, fetchedSiblings] = await Promise.all([
         parentTaskPromise,
-        subtasksPromise
+        subtasksPromise,
+        siblingsPromise
     ]);
 
     parentTask = fetchedParentTask;
     subtasks = fetchedSubtasks;
+    const siblings = fetchedSiblings;
+
+    // [NEW] Tính toán giới hạn điểm
+    // 1. Max Points cho task hiện tại (khi duyệt hoàn thành) - Chỉ áp dụng nếu là subtask
+    let maxPointsForApproval = null;
+    if (parentTask) {
+        const parentTotal = parentTask.initialPoints || 0;
+        const otherSiblingsPoints = siblings
+            .filter(s => s._id !== task._id)
+            .reduce((sum, s) => {
+                const p = (s.status === 'COMPLETED' || s.status === 'COMPLETED_AWAIT_REVIEW')
+                    ? (s.finalPoints ?? s.initialPoints ?? 0)
+                    : (s.initialPoints ?? 0);
+                return sum + p;
+            }, 0);
+        maxPointsForApproval = Math.max(0, parentTotal - otherSiblingsPoints);
+    }
+
+    // 2. Remaining Points cho việc tạo subtask mới (nếu task hiện tại là cha)
+    let remainingPointsForCreation = null;
+    if (!task.parentTask?._id) {
+        const thisTaskTotal = task.initialPoints || 0;
+        const currentSubtasksPoints = subtasks.reduce((sum, s) => {
+            const p = (s.status === 'COMPLETED' || s.status === 'COMPLETED_AWAIT_REVIEW')
+                ? (s.finalPoints ?? s.initialPoints ?? 0)
+                : (s.initialPoints ?? 0);
+            return sum + p;
+        }, 0);
+        remainingPointsForCreation = Math.max(0, thisTaskTotal - currentSubtasksPoints);
+    }
 
     // --- Calculate Permissions & Prepare Props (Giữ nguyên) ---
     const currentUserId = currentUser.externalUserId;
     const hasManagePermission = project ? canManageProject(project, currentUserId) : false;
-    console.log(task,currentUser);
+    
     const isAssignee = getUserId(task.assignee) === currentUserId;
     const isCreator = getUserId(task.createdBy) === currentUserId;
     const canEditTask = hasManagePermission || isCreator;
-    
+
     // Check if user can create subtasks for this task
     const canCreateSubtaskForThisTask = project ? canCreateSubtask(task, project, currentUserId) : false;
-    
+
     const projectName = project?.name || '';
     const projectMembers = team?.members || [];
 
     // --- Render the Client Component ---
     return (
-        <div className="flex flex-col h-full overflow-hidden w-full">
+        <div className="flex-1 min-h-0 flex flex-col w-full gap-4 overflow-y-auto min-[1600px]:overflow-hidden">
             {/* 1. Header Component */}
-            <TaskHeader
-                task={task}
-                parentTask={parentTask}
-                projectName={projectName}
-                canManage={hasManagePermission}
-                canEditTask={canEditTask}
-                isAssignee={isAssignee}
-                isCreator={isCreator}
-                currentUser={currentUser}
-                allUsersWithDetails={allUsersWithDetails}
-                projectMembers={projectMembers}
-                users={usersForPickerProp}
-                workTypes={workTypes}
-                platforms={platforms}
-                subtasksCount={subtasks.length}
-            />
+            <div className="flex-shrink-0">
+                <TaskHeader
+                    task={task}
+                    parentTask={parentTask}
+                    projectName={projectName}
+                    canManage={hasManagePermission}
+                    canEditTask={canEditTask}
+                    isAssignee={isAssignee}
+                    isCreator={isCreator}
+                    currentUser={currentUser}
+                    allUsersWithDetails={allUsersWithDetails}
+                    projectMembers={projectMembers}
+                    users={usersForPickerProp}
+                    workTypes={workTypes}
+                    platforms={platforms}
+                    subtasksCount={subtasks.length}
+                    maxPoints={maxPointsForApproval}
+                />
+            </div>
             {/* 2. Main Content & Sidebar */}
-            <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden pb-6 pt-6 bg-gray-50/50">
-                <div className="flex-1 min-w-0 overflow-y-auto h-full custom-scrollbar">
+            <div className="flex-1 flex flex-col min-[1600px]:flex-row gap-4 bg-gray-50/50 h-fit min-[1600px]:h-full min-[1600px]:overflow-hidden">
+
+                {/* CỘT 1: Main Content */}
+                {/* - Mobile: h-fit (dài tự nhiên), bỏ overflow, bỏ flex-1 (để không ép height) */}
+                {/* - Desktop: flex-1, h-full, overflow-y-auto (để cuộn riêng), min-h-0 */}
+                <div className="w-full h-fit min-[1600px]:flex-1 min-[1600px]:h-full min-[1600px]:min-h-0 min-[1600px]:overflow-y-auto custom-scrollbar min-[1600px]:p-0">
                     <TaskMainContent
                         task={task}
                         subtasks={subtasks}
@@ -172,9 +216,14 @@ export default async function TaskDetailPage({ params }) {
                         workTypes={workTypes}
                         platforms={platforms}
                         comments={comments}
+                        remainingPoints={remainingPointsForCreation}
                     />
                 </div>
-                <div className="lg:w-80 xl:w-96 flex-shrink-0 overflow-y-auto h-full custom-scrollbar">
+
+                {/* CỘT 2: Sidebar */}
+                {/* - Mobile: h-fit (dài tự nhiên), w-full */}
+                {/* - Desktop: h-full, w-96, overflow-y-auto */}
+                <div className="w-full h-fit min-[1600px]:w-96 min-[1600px]:h-full flex-shrink-0 min-[1600px]:overflow-y-auto custom-scrollbar min-[1600px]:px-0">
                     <TaskSidebar
                         task={task}
                         allUsersWithDetails={allUsersWithDetails}

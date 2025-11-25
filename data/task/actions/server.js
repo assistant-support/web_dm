@@ -368,12 +368,31 @@ export async function getTaskDetail(taskId) {
         // Giờ đây 'task.project' và 'task.team' đã là object
         if (task.scope === TASK_SCOPE.PROJECT) {
             assert(task.project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(task.team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
 
-            // Kiểm tra thành viên trực tiếp từ task.team
-            const isMember = (task.team?.members || []).some((m) => String(m.userId) === String(uid));
+            // Do we have a team? team may be null (project can be 'free').
+            // Permission to view: admin OR creator OR assignee OR project member OR team member.
             const isAdmin = user.role === 'admin';
-            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const isCreator = String(task.createdBy) === String(uid);
+
+            // `task.assignee` may be an object (populated) or a string externalUserId
+            let isAssignee = false;
+            if (task.assignee) {
+                if (typeof task.assignee === 'object' && task.assignee.externalUserId) {
+                    isAssignee = String(task.assignee.externalUserId) === String(uid);
+                } else {
+                    isAssignee = String(task.assignee) === String(uid);
+                }
+            }
+
+            const isProjectMember = (task.project?.members || []).some((m) => String(m.userId) === String(uid));
+            const isTeamMember = (task.team?.members || []).some((m) => String(m.userId) === String(uid));
+
+            assert(
+                isAdmin || isCreator || isAssignee || isProjectMember || isTeamMember,
+                'FORBIDDEN',
+                'FORBIDDEN',
+                403
+            );
         }
 
         // Không cần asPlainTask nếu aggregation đã trả về POJO (Plain Old JavaScript Object)
@@ -440,11 +459,13 @@ export async function createTask(projectId, payload) {
 
         const hasManagePermission = canManageProject(project, user);
 
-        // **THÊM MỚI: Kiểm tra và thêm assignee vào project nếu chưa có**
+        // **THÊM MỚI: Thêm assignee vào project nếu chưa có.**
+        // Bỏ qua việc chặn nếu assignee không nằm trong team — cho phép giao cho người ngoài team.
         if (payload.assignee && payload.assignee !== uid) {
+            let assigneeInTeam = false;
             if (team) {
-                const assigneeInTeam = (team.members || []).some((m) => String(m.userId) === String(payload.assignee));
-                assert(assigneeInTeam, 'ASSIGNEE_NOT_IN_TEAM', 'Người được giao việc không thuộc team này.', 400);
+                assigneeInTeam = (team.members || []).some((m) => String(m.userId) === String(payload.assignee));
+                // Do NOT assert; allow assigning to users not in the team.
             }
 
             const assigneeInProject = (project.members || []).some((m) => String(m.userId) === String(payload.assignee));
@@ -471,6 +492,20 @@ export async function createTask(projectId, payload) {
 
                 revalidatePath(`/projects/${projectId}/members`);
                 await revalidateMany([tags.project(projectId)]);
+            }
+
+            // If assignee is not a member of the team, log an activity to make it visible
+            if (team && !assigneeInTeam) {
+                await logActivity({
+                    actor: uid,
+                    team: project.team,
+                    project: projectId,
+                    type: 'task.assignee.outside_team',
+                    payload: {
+                        assigneeId: payload.assignee,
+                        note: 'Assignee does not belong to project team; assignment allowed but will not count as team member for team reports.'
+                    }
+                });
             }
         }
 
@@ -582,36 +617,31 @@ export async function createTask(projectId, payload) {
         // --- Send Zalo Notification ---
         if (shouldNotifyAssignee && payload.assignee) {
             // Sử dụng helper function để gửi notification đơn giản
-            notifyTaskAssignment(task.title, String(payload.assignee)).catch(err => {
+            notifyTaskAssignment(task.title, String(payload.assignee), String(task._id)).catch(err => {
                 console.error(`[createTask ${task._id}] Failed to send Zalo notification to ${payload.assignee}:`, err);
             });
-            
-            // Note: Nếu cần message chi tiết hơn (với link, deadline, etc.), 
-            // có thể uncomment block sau và comment dòng notifyTaskAssignment ở trên:
-            /*
-            try {
-                const taskLink = buildTaskUrl(task._id);
-                const creatorName = user.name || user.email || 'Quản lý';
-                const zaloMessage = `🔔 Công việc mới được giao
---------------------
-Công việc: ${task.title}
-Người giao: ${creatorName}
-Dự án: ${project.name || 'N/A'}
-Hạn chót: ${task.plannedDueAt ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(task.plannedDueAt)) : 'Chưa có'}
---------------------
-Vui lòng vào hệ thống để xem chi tiết và xác nhận nhận việc.
-
-🔗 Link công việc:
-${taskLink}
-`;
-                sendZalo(payload.assignee, zaloMessage).catch(err => {
-                    console.error(`[createTask ${task._id}] Failed to send Zalo notification to ${payload.assignee}:`, err);
-                });
-            } catch (notifyErr) {
-                console.error(`[createTask ${task._id}] Error preparing Zalo notification for ${payload.assignee}:`, notifyErr);
-            }
-            */
         }
+
+        // [NEW] Notify Project Manager (if creator is not PM)
+        // Find PMs
+        const projectManagers = (project.members || [])
+            .filter(m => m.role === 'owner' || m.role === 'manager')
+            .map(m => String(m.userId));
+        
+        // Filter out creator
+        const pmsToNotify = projectManagers.filter(pmId => pmId !== uid);
+
+        if (pmsToNotify.length > 0) {
+             const { notifyEvent } = await import('@/lib/noti.js');
+             notifyEvent('task.created', {
+                taskId: String(task._id),
+                projectId: String(project._id),
+                byUserId: uid,
+                toUserIds: pmsToNotify,
+                taskTitle: task.title
+             }).catch(err => console.error('Failed to notify PMs about new task:', err));
+        }
+        
         // -----------------------------
 
         await logActivity({
@@ -655,13 +685,32 @@ export async function updateTask(taskId, payload) {
         const task = await Task.findById(taskId);
         assert(task, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
 
-        // Verify permission
+        // Load project if applicable and determine permission
+        let project = null;
         if (task.scope === TASK_SCOPE.PROJECT) {
-            const project = await Project.findById(task.project);
+            project = await Project.findById(task.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+        }
 
-            const hasManagePermission = canManageProject(project, user);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+        const hasManagePermission = project ? canManageProject(project, user) : false;
+        const isAssigneeUser = String(task.assignee) === String(uid);
+
+        // If not project manager nor assignee, forbid
+        assert(hasManagePermission || isAssigneeUser, 'FORBIDDEN', 'FORBIDDEN', 403);
+
+        // If current user is assignee (not manager), restrict editable fields to safe list
+        if (!hasManagePermission && isAssigneeUser) {
+            const allowedFields = new Set([
+                'title', 'description', 'priority', 'workType', 'plannedStartAt', 'plannedDueAt',
+                'platforms', 'tags', 'estimatedHours', 'initialPoints'
+            ]);
+            const invalidKeys = Object.keys(payload).filter(k => !allowedFields.has(k));
+            assert(
+                invalidKeys.length === 0,
+                `Bạn không có quyền sửa các trường: ${invalidKeys.join(', ')}`,
+                'FORBIDDEN',
+                403
+            );
         }
 
         // Validate finalPoints nếu được cập nhật
@@ -690,8 +739,8 @@ export async function updateTask(taskId, payload) {
         // Validate quyền hủy task (cancel)
         if (payload.status === TASK_STATUS.CANCELLED && task.status !== TASK_STATUS.CANCELLED) {
             // Đang chuyển sang CANCELLED - kiểm tra quyền
-            const canCancel = 
-                canManageProject(project, user) ||
+                const canCancel = 
+                (project ? canManageProject(project, user) : false) ||
                 String(task.createdBy) === String(uid) ||
                 String(task.assignee) === String(uid);
             
@@ -842,16 +891,65 @@ export async function assignTask(taskId, assigneeId) {
         const task = await Task.findById(taskId);
         assert(task, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
 
-        // Verify permission
+        // Verify permission: allow project managers, task assignee, or task creator to reassign
         if (task.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(task.project);
             assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
-            const hasManagePermission = canManageProject(project, uid);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+            const hasManagePermission = canManageProject(project, user);
+            const isAssigneeUser = String(task.assignee) === String(uid);
+            const isCreatorUser = String(task.createdBy) === String(uid);
+
+            assert(hasManagePermission || isAssigneeUser || isCreatorUser, 'FORBIDDEN', 'FORBIDDEN', 403);
         }
 
         const oldAssignee = task.assignee;
+
+        // Ensure assignee is a member of the project so they can view parent task/subtasks
+        if (task.scope === TASK_SCOPE.PROJECT) {
+            const project = await Project.findById(task.project);
+            if (project) {
+                const assigneeInProject = (project.members || []).some((m) => String(m.userId) === String(assigneeId));
+                if (!assigneeInProject) {
+                    project.members = project.members || [];
+                    project.members.push({ userId: assigneeId, role: 'member', joinedAt: new Date() });
+                    await project.save();
+
+                    await logActivity({
+                        actor: uid,
+                        team: project.team,
+                        project: project._id,
+                        type: 'project.member.added',
+                        payload: {
+                            addedUserId: assigneeId,
+                            reason: 'auto_added_on_task_assignment'
+                        }
+                    });
+
+                    revalidatePath(`/projects/${String(project._id)}/members`);
+                    await revalidateMany([tags.project(String(project._id))]);
+
+                    // If team exists and assignee not in team, log an outside-team assignment
+                    if (project.team) {
+                        const team = await Team.findById(project.team).lean();
+                        const assigneeInTeam = team && (team.members || []).some(m => String(m.userId) === String(assigneeId));
+                        if (!assigneeInTeam) {
+                            await logActivity({
+                                actor: uid,
+                                team: project.team,
+                                project: project._id,
+                                type: 'task.assignee.outside_team',
+                                payload: {
+                                    assigneeId,
+                                    note: 'Assignee does not belong to project team; assignment allowed but will not count as team member for team reports.'
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         task.assignee = assigneeId;
 
         // [THÊM] Logic tự động cho subtask

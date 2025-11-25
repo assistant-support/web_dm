@@ -32,17 +32,4 @@ const testMessages = [
   }
 ];
 
-console.log('🧪 MessageFormatter Visual Tests\n');
-console.log('=' .repeat(80));
-
-testMessages.forEach((test, idx) => {
-  console.log(`\n${idx + 1}. ${test.name}`);
-  console.log('-'.repeat(80));
-  console.log('📥 Input:');
-  console.log(test.input);
-  console.log('\n✅ Expected:');
-  console.log(test.expected);
-  console.log('=' .repeat(80));
-});
-
-console.log('\n✨ Test in browser by sending these messages to the chatbot!\n');
+ 

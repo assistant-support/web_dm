@@ -9,7 +9,14 @@ import { isTeamManager } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
 import { asPlainTeam } from '@/lib/serialize.js';
+import { 
+    notifyTeamMemberAdded, 
+    notifyTeamMemberRemoved, 
+    notifyTeamMemberRoleUpdated 
+} from '@/lib/noti-helpers.js'; // [NEW]
+import { listByTeam as listProjectsByTeam, archiveProject } from '@/data/project/processors/repo.js'; // [NEW]
 import Team from '@/model/team.model.js';
+import { TEAM_ROLE } from '@/model/common/enums.js';
 
 import {
     validate,
@@ -40,7 +47,7 @@ export async function listMy() {
         async ({ user }) => {
             await connectDB();
             
-            console.log('[listMyTeams] User:', user);
+            
 
             if (user.role === 'admin') {
                 const teams = await Team.find({ isActive: true }).lean();
@@ -107,6 +114,9 @@ export async function create(payload) {
         async ({ user }) => {
             await connectDB();
             const data = validate(teamCreateSchema, payload);
+            // Only allow app users with role 'admin' to create teams
+            assert(user && user.role === 'admin', 'Chỉ admin mới được tạo team', 'FORBIDDEN', 403);
+
             const doc = await createTeam(data, user.externalUserId);
 
             await logActivity({
@@ -151,7 +161,7 @@ export async function update(teamId, patch) {
     );
 }
 
-/** Archive team (chỉ manager) */
+/** Archive team (chỉ manager/owner) */
 export async function archive(teamId) {
     'use server';
     return await runAction(
@@ -162,15 +172,31 @@ export async function archive(teamId) {
             assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
             assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
 
+            // 1. Archive Team
             const updated = await archiveTeam(id);
+
+            // 2. Archive Related Projects
+            const projects = await listProjectsByTeam(id);
+            const projectIds = [];
+            for (const proj of projects) {
+                await archiveProject(proj._id);
+                projectIds.push(proj._id);
+            }
 
             await logActivity({
                 actor: user.externalUserId,
                 team: id,
                 type: 'team.archived',
+                payload: { archivedProjectsCount: projects.length }
             });
 
-            await revalidateMany([tags.team(id)]);
+            // Revalidate team and all archived projects
+            const tagsToRevalidate = [
+                tags.team(id), 
+                ...projectIds.map(pid => tags.project(pid))
+            ];
+            await revalidateMany(tagsToRevalidate);
+            
             return asPlainTeam(updated);
         },
         { requireAuth: true }
@@ -199,7 +225,16 @@ export async function addMemberAction(teamId, payload) {
                 payload: { ...data },
             });
 
-            await revalidateMany([tags.team(id), tags.userInbox(data.userId)]);
+            // [NEW] Notify new member
+            notifyTeamMemberAdded(
+                updated.name || 'nhóm',
+                String(data.userId),
+                String(id)
+            ).catch(err => {
+                console.error(`[addMemberAction] Failed to send notification to user ${data.userId}:`, err);
+            });
+
+            await revalidateMany([tags.team(id)]);
             return asPlainTeam(updated);
         },
         { requireAuth: true }
@@ -226,6 +261,20 @@ export async function removeMemberAction(teamId, payload) {
                 team: id,
                 type: 'team.member.removed',
                 payload: { userId: data.userId },
+            });
+
+            // [NEW] Notify
+            const managers = (team.members || [])
+                .filter(m => m.role === TEAM_ROLE.MANAGER)
+                .map(m => m.userId);
+
+            notifyTeamMemberRemoved(
+                team.name || 'nhóm',
+                String(data.userId),
+                managers,
+                String(id)
+            ).catch(err => {
+                console.error(`[removeMemberAction] Failed to send notification:`, err);
             });
 
             await revalidateMany([tags.team(id), tags.userInbox(data.userId)]);
@@ -255,6 +304,21 @@ export async function changeRole(teamId, payload) {
                 team: id,
                 type: 'team.member.role_changed',
                 payload: { ...data },
+            });
+
+            // [NEW] Notify
+            const managers = (team.members || [])
+                .filter(m => m.role === TEAM_ROLE.MANAGER)
+                .map(m => m.userId);
+
+            notifyTeamMemberRoleUpdated(
+                team.name || 'nhóm',
+                String(data.userId),
+                data.role,
+                managers,
+                String(id)
+            ).catch(err => {
+                console.error(`[changeRole] Failed to send notification:`, err);
             });
 
             await revalidateMany([tags.team(id), tags.userInbox(data.userId)]);

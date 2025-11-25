@@ -15,7 +15,7 @@ const O = (id) => new mongoose.Types.ObjectId(String(id));
  * @returns {Object} Analytics data
  */
 async function _getTeamAnalytics(teamId) {
-    console.log(`[Cache Miss] Running _getTeamAnalytics for ${teamId}`);
+    
     const tid = O(teamId);
 
     const team = await Team.findById(tid).lean();

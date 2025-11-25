@@ -6,7 +6,7 @@ import { Paperclip, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import AttachmentItem from './AttachmentItem.client';
 import { AttachmentUpload } from './AttachmentUpload.client';
 import { listTaskAttachments, listProjectAttachments } from '@/data/attachment/actions/server';
-
+import Button from '@/components/ui/button/index.js';
 /**
  * AttachmentList - List attachments with upload
  */
@@ -23,23 +23,23 @@ export default function AttachmentList({
     const [error, setError] = useState('');
     const [showUpload, setShowUpload] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
-    
+
     const loadAttachments = useCallback(async () => {
         try {
             setLoading(true);
             setError('');
 
-            console.log('[AttachmentList] Loading attachments:', { scope, taskId, projectId });
+            
 
             const result = scope === 'task'
                 ? await listTaskAttachments(taskId)
                 : await listProjectAttachments(projectId);
 
-            console.log('[AttachmentList] Raw API Response:', result);
+            
 
             // Handle different response structures
             let attachmentsData = [];
-            
+
             if (result?.ok === true && result?.data) {
                 // Response: { ok: true, data: [...] }
                 attachmentsData = result.data;
@@ -53,10 +53,6 @@ export default function AttachmentList({
                 // Other structure - try to extract data
                 attachmentsData = result;
             }
-
-            console.log('[AttachmentList] Extracted attachments:', attachmentsData);
-            console.log('[AttachmentList] Attachments count:', Array.isArray(attachmentsData) ? attachmentsData.length : 0);
-            
             // Validate and set
             if (!Array.isArray(attachmentsData)) {
                 console.warn('[AttachmentList] Data is not an array:', typeof attachmentsData, attachmentsData);
@@ -65,14 +61,9 @@ export default function AttachmentList({
 
             // Log each attachment for debugging
             attachmentsData.forEach((att, idx) => {
-                console.log(`[AttachmentList] Attachment ${idx}:`, {
-                    id: att.id || att._id,
-                    name: att.name || att.driveName,
-                    hasId: !!(att.id || att._id),
-                    keys: Object.keys(att)
-                });
+                
             });
-            
+
             setAttachments(attachmentsData);
         } catch (err) {
             console.error('[AttachmentList] Error loading attachments:', err);
@@ -89,14 +80,12 @@ export default function AttachmentList({
     }, [loadAttachments]);
 
     const handleUploaded = (uploadResult) => {
-        console.log('[AttachmentList] Files uploaded:', uploadResult);
         // Reload the list to get fresh data from server
         loadAttachments();
         setShowUpload(false);
     };
 
     const handleDeleted = (attachmentId) => {
-        console.log('[AttachmentList] File deleted:', attachmentId);
         // Reload the list to get fresh data from server
         loadAttachments();
     };
@@ -109,13 +98,13 @@ export default function AttachmentList({
     return (
         <div className="space-y-4 bg-blue">
             {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b">
+            <div className="flex items-center justify-between border bg-white rounded-md px-4 py-3 border-gray-200">
                 <button
                     onClick={() => setIsCollapsed(!isCollapsed)}
                     className="flex items-center gap-2 hover:text-blue-600 transition-colors"
                 >
                     <Paperclip className="w-5 h-5 text-gray-600" />
-                    <h3 className="font-semibold text-lg">
+                    <h3 className="text-base font-semibold text-gray-800">
                         Tệp đính kèm ({attachments.length})
                     </h3>
                     {isCollapsed ? (
@@ -126,12 +115,12 @@ export default function AttachmentList({
                 </button>
 
                 {!isCollapsed && !showUpload && (
-                    <button
+                     <Button
                         onClick={() => setShowUpload(true)}
-                        className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                        variant="outline"
                     >
-                        + Thêm tệp
-                    </button>
+                        Thêm file
+                    </Button>
                 )}
             </div>
 
@@ -189,12 +178,10 @@ export default function AttachmentList({
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {attachments.map((attachment, index) => {
                                     const attachmentId = attachment.id || attachment._id || `attachment-${index}`;
-                                    
-                                    // Debug log
                                     if (!attachment.id && !attachment._id) {
                                         console.warn('[AttachmentList] Missing ID for attachment:', attachment);
                                     }
-                                    
+
                                     return (
                                         <AttachmentItem
                                             key={attachmentId}

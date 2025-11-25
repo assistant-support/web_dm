@@ -15,7 +15,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.className} min-h-screen flex flex-col` }>
         {/* 2. Bao bọc children bằng AuthProvider */}
         <AuthProvider>
           {children}

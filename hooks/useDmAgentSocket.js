@@ -117,7 +117,7 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
       return null;
     }
 
-    console.log('🔍 [DM-Agent] Parsed message:', { message, hasTask: !!task, approved, task });
+    
 
     return {
       message,
@@ -147,17 +147,14 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
         socketRef.current = socket;
 
         socket.onopen = () => {
-          console.log('✅ [DM-Agent] WebSocket connected');
           setConnectionStatus('ready');
           setError(null);
           reconnectCountRef.current = 0;
 
           if (pendingContextRef.current && !hasSentContextRef.current) {
             try {
-              console.log('📤 [DM-Agent] Sending context payload:', pendingContextRef.current);
               socket.send(JSON.stringify(pendingContextRef.current));
               hasSentContextRef.current = true;
-              console.log('✅ [DM-Agent] Context payload sent successfully');
             } catch (err) {
               console.error('❌ [DM-Agent] Failed to send context:', err);
               updateError('Failed to send initial context payload.');
@@ -167,11 +164,11 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
 
         socket.onmessage = (event) => {
           const text = typeof event.data === 'string' ? event.data : String(event.data);
-          console.log('📨 [DM-Agent] Received message:', text);
+          
 
           // detect explicit status success message
           if (text === '{"status":"successful"}' || text === '{"status":"success"}') {
-            console.log('✅ [DM-Agent] Context accepted by server');
+            
             setConnectionStatus('context_sent');
             setError(null);
             return;
@@ -202,7 +199,6 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
         };
 
         socket.onclose = (event) => {
-          console.log('❌ [DM-Agent] WebSocket closed. Code:', event.code, 'Reason:', event.reason);
           hasSentContextRef.current = false;
           socketRef.current = null;
           setConnectionStatus('closed');

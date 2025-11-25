@@ -23,12 +23,7 @@ async function _getBatchMemberTaskStats(projectId, userIds) {
     const mongoose = await import('mongoose');
     const projectObjectId = new mongoose.Types.ObjectId(projectId);
     
-    console.log('   - MongoDB ObjectId:', projectObjectId);
-    console.log('   - Query conditions:');
-    console.log('     • project (ObjectId):', projectObjectId);
-    console.log('     • assignee in:', userIds);
-    console.log('     • deletedAt: null');
-    console.log('     • status not in: [CANCELLED, REJECTED]');
+    
 
     // Aggregation để đếm task theo status và tính tổng điểm
     const results = await Task.aggregate([

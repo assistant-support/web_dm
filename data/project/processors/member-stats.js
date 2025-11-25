@@ -107,7 +107,7 @@ async function _getMemberStats(projectId, userId, ym) {
  * @returns {Object} Map userId -> stats
  */
 async function _getBatchMemberStats(projectId, userIds, ym) {
-    console.log(`[Cache Miss] Running _getBatchMemberStats for project ${projectId}`);
+    
 
     const now = new Date();
     const targetYM = ym || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;

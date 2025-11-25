@@ -87,7 +87,6 @@ export async function scanDueTasks() {
                 }
             }
 
-            console.log('[NOTI][SCAN]', { reminderCount, overdueCount, at: now.toISOString() });
             return { reminderCount, overdueCount, at: now.toISOString() };
         },
         { requireAuth: false }

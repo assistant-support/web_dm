@@ -10,7 +10,7 @@ export default function AppShell({ user, children }) {
     const [mobileOpen, setMobileOpen] = useState(false);
 
     return (
-        <div className="flex h-full w-full loginHero">
+        <div className="flex flex-1 w-full loginHero">
             <AnimatedBackground />
             <Sidebar
                 user={user}

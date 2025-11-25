@@ -9,6 +9,7 @@ import {
     Users,
     BarChart3,
     Settings,
+    BookOpen,
     X
 } from 'lucide-react';
 // Navigation items cho web Digital Marketing
@@ -17,6 +18,7 @@ const navItems = [
     { href: '/projects', label: 'Dự án', icon: FolderKanban },
     { href: '/teams', label: 'Nhóm', icon: Users },
     { href: '/files', label: 'Tài nguyên', icon: BarChart3 },
+    { href: '/guide', label: 'Hướng dẫn', icon: BookOpen },
     // { href: '/settings', label: 'Cài đặt', icon: Settings },
 ];
 
@@ -82,9 +84,9 @@ export default function Sidebar({ user, mobileOpen, setMobileOpen }) {
             <div className="flex-1" />
 
             {/* Footer info */}
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
                 <p className="text-xs text-gray-500 text-center">
-                    Digital Marketing v2.0
+                    Digital Marketing v2.1
                 </p>
             </div>
         </div>

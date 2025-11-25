@@ -62,7 +62,6 @@ export async function sendSystemNotification(toUserIds = [], message = '', meta 
 
         // Không làm gì nếu không có user nào để gửi
         if (uniqueUserIds.length === 0) {
-            console.log('[NOTI][SYSTEM][SKIP]', 'No users to notify');
             return;
         }
 
@@ -82,11 +81,6 @@ export async function sendSystemNotification(toUserIds = [], message = '', meta 
 
         // Lưu vào database
         await Notification.insertMany(notifications);
-        console.log('[NOTI][SYSTEM]', { 
-            created: notifications.length, 
-            type: meta.type || 'system',
-            users: uniqueUserIds 
-        });
     } catch (e) {
         // Log error nhưng không throw để không phá luồng nghiệp vụ
         console.error('[NOTI][SYSTEM][ERROR]', e?.message || e);
@@ -102,7 +96,7 @@ export async function sendSystemNotification(toUserIds = [], message = '', meta 
  */
 export async function sendZaloNotification(toUserIds = [], message = '', meta = {}) {
     try {
-        console.log('[NOTI][ZALO][STUB]', { toUserIds: uniqIds(toUserIds), message, meta });
+        
     } catch (e) {
         console.error('[NOTI][ZALO][ERROR]', e);
     }
@@ -205,7 +199,6 @@ export async function notifyEvent(eventName, payload = {}) {
     if (from) to = to.filter((u) => u !== from); // loại tự thân nếu có
 
     if (!rule || !to.length) {
-        console.log('[NOTI][SKIP]', { event: name, reason: !rule ? 'NO_RULE' : 'EMPTY_RECIPIENTS', payload });
         return;
     }
 

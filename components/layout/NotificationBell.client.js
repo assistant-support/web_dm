@@ -28,9 +28,10 @@ export default function NotificationBell({ currentUser }) {
         // Fetch real notifications from server
         const fetchNotifications = async () => {
             const result = await getMyNotifications({ limit: 10 });
+            
             if (result.ok) {
-                setNotifications(result.data.notifications);
-                setUnreadCount(result.data.unreadCount);
+                setNotifications(result.notifications || []);
+                setUnreadCount(result.unreadCount || 0);
             }
         };
 
@@ -53,7 +54,7 @@ export default function NotificationBell({ currentUser }) {
     const handleMarkAsRead = async (id) => {
         // Optimistic UI update - immediately reflect the change
         setNotifications(prev =>
-            prev.map(n => n.id === id ? { ...n, read: true } : n)
+            prev.map(n => n._id === id ? { ...n, read: true } : n)
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
 
@@ -150,6 +151,33 @@ export default function NotificationBell({ currentUser }) {
                                             <p className={`text-sm ${!notif.read ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
                                                 {notif.message}
                                             </p>
+                                            {notif.metadata?.taskId && (
+                                                <a 
+                                                    href={`/tasks/${notif.metadata.taskId}`}
+                                                    className="text-xs text-blue-600 hover:underline mt-1 block"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    Xem chi tiết công việc
+                                                </a>
+                                            )}
+                                            {notif.metadata?.projectId && (
+                                                <a 
+                                                    href={`/projects/${notif.metadata.projectId}`}
+                                                    className="text-xs text-blue-600 hover:underline mt-1 block"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    Xem dự án
+                                                </a>
+                                            )}
+                                            {notif.metadata?.teamId && (
+                                                <a 
+                                                    href={`/teams/${notif.metadata.teamId}`}
+                                                    className="text-xs text-blue-600 hover:underline mt-1 block"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    Xem nhóm
+                                                </a>
+                                            )}
                                             <p className="text-xs text-gray-500 mt-1">
                                                 {formatDistanceToNow(new Date(notif.createdAt), {
                                                     addSuffix: true,
@@ -163,7 +191,7 @@ export default function NotificationBell({ currentUser }) {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleMarkAsRead(notif.id);
+                                                    handleMarkAsRead(notif._id); // Use _id
                                                 }}
                                                 className="flex-shrink-0 p-1 text-gray-400 hover:text-blue-600 transition-colors"
                                                 title="Đánh dấu đã đọc"

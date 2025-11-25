@@ -133,14 +133,12 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
         socketRef.current = socket;
 
         socket.onopen = () => {
-          console.log('✅ [DM-Agent] WebSocket connected');
           setConnectionStatus('ready');
           setError(null);
           reconnectCountRef.current = 0;
 
           if (pendingContextRef.current && !hasSentContextRef.current) {
             try {
-              console.log('📤 [DM-Agent] Sending context payload...');
               socket.send(JSON.stringify(pendingContextRef.current));
               hasSentContextRef.current = true;
             } catch (err) {
@@ -155,7 +153,6 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
 
           // detect explicit status success message
           if (text === '{"status":"successful"}' || text === '{"status":"success"}') {
-            console.log('✅ [DM-Agent] Context accepted by server');
             setConnectionStatus('context_sent');
             setError(null);
             return;
@@ -165,7 +162,6 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
             try {
               const statusPayload = JSON.parse(text);
               if (statusPayload.status === 'successful' || statusPayload.status === 'success') {
-                console.log('✅ [DM-Agent] Context accepted by server');
                 setConnectionStatus('context_sent');
                 setError(null);
                 return;
@@ -190,7 +186,7 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
           socketRef.current = null;
           setConnectionStatus('closed');
           
-          console.log('❌ [DM-Agent] WebSocket closed');
+          
 
           if (!shouldReconnectRef.current || !reconnect) {
             return;
@@ -204,7 +200,7 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
           reconnectCountRef.current += 1;
           const backoffDelay = Math.min(4000, 500 * Math.pow(2, reconnectCountRef.current - 1));
           
-          console.log(`🔄 [DM-Agent] Reconnecting in ${backoffDelay}ms (attempt ${reconnectCountRef.current}/${reconnectAttempts})...`);
+          
 
           clearReconnectTimer();
           reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -245,7 +241,7 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
     // Only connect once when contextPayload first becomes available
     // Don't reconnect on subsequent contextPayload changes (unless socket is closed)
     if (!isSocketActive && !hasConnectedRef.current && connect) {
-      console.log('🔌 [DM-Agent] Initiating WebSocket connection...');
+      
       hasConnectedRef.current = true;
       connect();
     }
@@ -294,7 +290,7 @@ export default function useDmAgentSocket(contextPayload, options = {}) {
   const latestMessage = useMemo(() => (messages.length ? messages[messages.length - 1] : null), [messages]);
 
   const reconnectSocket = useCallback(() => {
-    console.log('🔄 [DM-Agent] Manual reconnect requested');
+    
     
     if (!pendingContextRef.current) {
       updateError('Không có dữ liệu ngữ cảnh để kết nối lại.');

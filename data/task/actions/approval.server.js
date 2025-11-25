@@ -95,6 +95,7 @@ export async function approveTaskCreation(taskId, { approve, note, initialPoints
             projectId: String(task.project),
             byUserId: uid,
             toUserIds: toUserIds.filter(Boolean),
+            taskTitle: task.title // [NEW]
         });
 
         await revalidateMany([
@@ -255,12 +256,27 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
             payload: { finalPoints: task.finalPoints || 0, note: note || '' },
         });
 
-        await notifyEvent(approve ? 'task.completion.approved' : 'task.completion.rejected', {
+        await notifyEvent(approve ? 'task.completed' : 'task.approval.rejected', {
             taskId: String(task._id),
             projectId: String(task.project),
             byUserId: uid,
             toUserIds: [task.assignee, task.createdBy].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i),
+            taskTitle: task.title
         });
+
+        // [NEW] If this is a subtask, notify Parent Task Assignee
+        if (task.parentTask) {
+             const parentTask = await Task.findById(task.parentTask).select('assignee title').lean();
+             if (parentTask && parentTask.assignee && String(parentTask.assignee) !== uid && String(parentTask.assignee) !== String(task.assignee)) {
+                 await notifyEvent('subtask.completed', {
+                    taskId: String(task._id),
+                    projectId: String(task.project),
+                    byUserId: uid,
+                    toUserIds: [String(parentTask.assignee)],
+                    taskTitle: task.title
+                 });
+             }
+        }
 
         await revalidateMany([
             tags.project(task.project),

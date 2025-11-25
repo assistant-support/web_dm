@@ -9,7 +9,11 @@ import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
 import { isTeamManager, canManageProject } from '@/lib/permissions.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
-import { notifyProjectMemberAdded } from '@/lib/noti-helpers.js';
+import { 
+    notifyProjectMemberAdded,
+    notifyProjectMemberRemoved,
+    notifyProjectMemberRoleUpdated
+} from '@/lib/noti-helpers.js';
 
 // Tối ưu: Import repo của Team và Project
 import { getById as getTeamById } from '@/data/team/processors/repo.js';
@@ -74,17 +78,17 @@ export async function create(payload) {
     await connectDB();
     return runAction(async ({ user }) => {
         const data = validate(projectCreateSchema, payload);
-
-        // PERMISSION CHECK: Chỉ Team Manager mới được tạo project
+        // PERMISSION CHECK:
+        // - Nếu payload có `team` thì người tạo cần là quản lý/owner của team (isTeamManager)
+        // - Nếu không có `team` (project độc lập) thì chỉ global admin mới được tạo
         if (data.team) {
             const team = await getTeamById(data.team, { lean: true }); // Tối ưu: Dùng repo team
             assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
-            assert(
-                isTeamManager(team, user), 
-                'Chỉ quản lý nhóm mới được tạo dự án', 
-                'FORBIDDEN', 
-                403
-            );
+
+            const allowed = isTeamManager(team, user);
+            assert(allowed, 'Chỉ quản lý hoặc người tạo nhóm mới được tạo dự án cho team này', 'FORBIDDEN', 403);
+        } else {
+            assert(user && user.role === 'admin', 'Chỉ admin mới được tạo dự án độc lập', 'FORBIDDEN', 403);
         }
         const doc = await createProject(data, user.externalUserId);
 
@@ -105,7 +109,6 @@ export async function update(projectId, patch) {
     return runAction(async ({ user }) => {
         const id = validate(projectIdSchema, projectId);
         const data = validate(projectUpdateSchema, patch);
-        console.log(data, 'hi');
 
         // Tối ưu: Dùng hàm repo project đã cache (lấy lean false vì repo update cần Mongoose doc)
         const raw = await getDetail(id, { lean: false });
@@ -113,7 +116,6 @@ export async function update(projectId, patch) {
         assert(canManageProject(raw, user), 'FORBIDDEN', 'FORBIDDEN', 403);
 
         const updated = await updateProject(id, data); // Repo trả về doc đã populate team
-        console.log(updated, 1);
 
         // Kiểm tra nếu updateProject trả về null (ví dụ bị xóa đồng thời)
         assert(updated, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
@@ -207,6 +209,21 @@ export async function removeMemberAction(projectId, payload) {
 
         const updated = await removeMember(id, data.userId); // Repo trả về doc đã populate team
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.removed', payload: { userId: data.userId } });
+        
+        // [NEW] Notify
+        const managers = (raw.members || [])
+            .filter(m => m.role === PROJECT_ROLE.OWNER || m.role === PROJECT_ROLE.MANAGER)
+            .map(m => m.userId);
+
+        notifyProjectMemberRemoved(
+            updated.name || 'dự án',
+            String(data.userId),
+            managers,
+            String(id)
+        ).catch(err => {
+            console.error(`[removeMemberAction] Failed to send notification:`, err);
+        });
+
         await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);
@@ -227,6 +244,22 @@ export async function changeRole(projectId, payload) {
 
         const updated = await changeMemberRole(id, data.userId, data.role); // Repo trả về doc đã populate team
         await logActivity({ actor: user.externalUserId, project: id, team: updated.team?._id, type: 'project.member.role_changed', payload: { ...data } });
+        
+        // [NEW] Notify
+        const managers = (raw.members || [])
+            .filter(m => m.role === PROJECT_ROLE.OWNER || m.role === PROJECT_ROLE.MANAGER)
+            .map(m => m.userId);
+
+        notifyProjectMemberRoleUpdated(
+            updated.name || 'dự án',
+            String(data.userId),
+            data.role,
+            managers,
+            String(id)
+        ).catch(err => {
+            console.error(`[changeRole] Failed to send notification:`, err);
+        });
+
         await revalidateMany([tags.team(updated.team?._id), tags.project(id), tags.userInbox(data.userId)]);
 
         return asPlainProject(updated);

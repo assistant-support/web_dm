@@ -12,6 +12,8 @@ export default function CreateTaskButton({
     projectId,
     users = [],
     projectMembers = [],
+    // New prop: detailed list of users (team + project) prepared by the page
+    allUsersWithDetails = [],
     currentUserId,
     canManage = false,
     canCreate = false
@@ -40,7 +42,16 @@ export default function CreateTaskButton({
                     onClose={() => setIsDialogOpen(false)}
                     projectId={projectId}
                     projectMembers={projectMembers}
-                    users={users}
+                    allUsersWithDetails={allUsersWithDetails}
+                    // Prefer a full list of users with details if provided by the page
+                    users={
+                        // If parent passed a combined `allUsersWithDetails` array, use it;
+                        // otherwise fall back to the older `users` shape.
+                        // We accept either shape (array of {id,name,..} or {value,label,...}).
+                        Array.isArray(allUsersWithDetails) && allUsersWithDetails.length > 0
+                            ? allUsersWithDetails.map(u => ({ value: u.id || u.value, label: u.label || u.name, name: u.name }))
+                            : users
+                    }
                     currentUserId={currentUserId}
                     canManage={canManage}
                     onSuccess={() => {

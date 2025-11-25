@@ -18,7 +18,7 @@ export async function listMyProjects({ search = '', teamId = null } = {}) {
         async ({ user }) => {
             await connectDB();
             
-            console.log('[listMyProjects] User:', user);
+            
 
             const query = {
                 isActive: true, // Thường chỉ muốn list project active

@@ -66,7 +66,6 @@ export async function getSubtaskStatsAction(parentTaskId) {
  * Create a subtask
  */
 export async function createSubtask(parentTaskId, payload) {
-    console.log('hello');
     
     await connectDB();
     return runAction(async ({ user }) => {

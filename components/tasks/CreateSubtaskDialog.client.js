@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import DialogComponent from '@/components/ui/dialog';
 import { Input, Textarea, Select, Checkbox } from '@/components/ui/input';
@@ -8,6 +8,8 @@ import { createSubtask } from '@/data/task/actions/subtasks.server';
 import { PRIORITY } from '@/model/common/enums.js';
 import { Loader2, Info } from 'lucide-react';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
+import Dropdown from '@/components/ui/dropdown';
+import { Search, ChevronDown } from 'lucide-react';
 
 const PRIORITY_OPTIONS = [
     { value: PRIORITY.LOW, label: 'Thấp' },
@@ -34,12 +36,15 @@ export default function CreateSubtaskDialog({
     parentTask,
     projectMembers = [],
     users = [],
+    allUsersWithDetails = [],
     workTypes = [],
     platforms = [],
     currentUserId = '',
-    onSuccess
+    onSuccess,
+    remainingPoints = null // [NEW] Điểm còn lại có thể phân bổ
 }) {
-
+    // allUsersWithDetails provided by server; used to build assignee options
+    
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -52,7 +57,19 @@ export default function CreateSubtaskDialog({
             return user ? { value: user.value, label: user.label } : null;
         })
         .filter(Boolean);
-    
+
+    // If `allUsersWithDetails` is provided, allow selecting any user in the system
+    const allUserOptions = Array.isArray(allUsersWithDetails) ? allUsersWithDetails.map(u => ({ value: u.id || u._id || u.value, label: u.label || u.name })) : [];
+
+    const assigneeOptions = (allUserOptions && allUserOptions.length) ? allUserOptions : (Array.isArray(projectUserOptions) ? projectUserOptions : []);
+    const [assigneeSearch, setAssigneeSearch] = useState('');
+
+    const filteredAssigneeOptions = Array.isArray(assigneeOptions) ? assigneeOptions.filter(opt => {
+        if (!assigneeSearch) return true;
+        const q = assigneeSearch.toLowerCase();
+        return (opt.label || '').toLowerCase().includes(q) || (opt.name || '').toLowerCase().includes(q);
+    }) : [];
+
     // Calculate dates only on client side to avoid hydration mismatch
     const [defaultDates, setDefaultDates] = useState({ today: '', tomorrow: '' });
 
@@ -73,6 +90,8 @@ export default function CreateSubtaskDialog({
         initialPoints: 0,
         estimatedHours: '',
     });
+
+    const selectedAssignee = Array.isArray(assigneeOptions) ? assigneeOptions.find(opt => opt.value === formData.assignee) : undefined;
 
     // Update dates once mounted
     useEffect(() => {
@@ -110,8 +129,11 @@ export default function CreateSubtaskDialog({
             }
 
             const parentPoints = parentTask?.initialPoints || 0;
-            if (formData.initialPoints > parentPoints) {
-                throw new Error(`Điểm subtask không được vượt quá ${parentPoints}đ (điểm task cha)`);
+            // [UPDATED] Validate against remainingPoints if provided, otherwise parentPoints
+            const limitPoints = remainingPoints !== null ? remainingPoints : parentPoints;
+            
+            if (formData.initialPoints > limitPoints) {
+                throw new Error(`Điểm subtask không được vượt quá ${limitPoints}đ (số điểm còn lại của task cha)`);
             }
 
             const payload = {
@@ -176,7 +198,9 @@ export default function CreateSubtaskDialog({
     };
 
     const parentPoints = parentTask?.initialPoints || 0;
-    const remainingPoints = parentPoints - (formData.initialPoints || 0);
+    // [UPDATED] Use remainingPoints prop if available
+    const limitPoints = remainingPoints !== null ? remainingPoints : parentPoints;
+    const remainingAfterAllocation = limitPoints - (formData.initialPoints || 0);
 
     return (
         <DialogComponent
@@ -202,7 +226,11 @@ export default function CreateSubtaskDialog({
                     <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-blue-800">
                         <strong>Lưu ý:</strong> Subtask sẽ kế thừa project, team từ task cha.
-                        Điểm task cha: <strong>{parentPoints}đ</strong>
+                        <br />
+                        Điểm task cha: <strong>{parentPoints}đ</strong>. 
+                        {remainingPoints !== null && (
+                            <> Còn lại có thể phân bổ: <strong>{remainingPoints}đ</strong>.</>
+                        )}
                     </div>
                 </div>
 
@@ -268,19 +296,55 @@ export default function CreateSubtaskDialog({
                     </div>
 
                     <div className="space-y-5">
-                        <Select
-                            label="Người thực hiện"
-                            value={formData.assignee}
-                            onChange={(e) => handleChange('assignee', e.target.value)}
-                            disabled={isSubmitting}
-                        >
-                            <option value="">Chưa gán</option>
-                            {projectUserOptions.map(opt => (
-                                <option key={opt.value} value={opt.value}>
-                                    {opt.label} {opt.value === currentUserId ? '(Bản thân)' : ''}
-                                </option>
-                            ))}
-                        </Select>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Người thực hiện</label>
+                            <Dropdown>
+                                <Dropdown.Trigger>
+                                    <button
+                                        type="button"
+                                        disabled={isSubmitting}
+                                        className="relative block w-full border border-gray-200 bg-white rounded-md py-2 pl-3 pr-10 text-sm text-left text-foreground hover:border-muted-200 focus:outline-none focus:border-[var(--brand-600)] focus:ring-2 focus:ring-[var(--brand-600)]/30"
+                                    >
+                                        <span className={selectedAssignee?.value ? 'text-gray-900' : 'text-muted-400'}>
+                                            {selectedAssignee?.label || 'Chưa gán'}
+                                            {selectedAssignee?.value === currentUserId ? ' (Bản thân)' : ''}
+                                        </span>
+                                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                    </button>
+                                </Dropdown.Trigger>
+                                <Dropdown.Content className="p-2" width="w-80">
+                                    <Input
+                                        type="text"
+                                        placeholder="Tìm thành viên..."
+                                        value={assigneeSearch}
+                                        onChange={(e) => setAssigneeSearch(e.target.value)}
+                                        leftIcon={<Search size={16} />}
+                                        className="mb-2"
+                                    />
+                                    <div className="max-h-60 overflow-y-auto">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleChange('assignee', '')}
+                                            className={`block w-full text-left px-3 py-1.5 text-sm rounded-md ${formData.assignee === '' ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'}`}
+                                        >
+                                            Chưa gán
+                                        </button>
+                                        {filteredAssigneeOptions.map(opt => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => handleChange('assignee', opt.value)}
+                                                className={`block w-full text-left px-3 py-1.5 text-sm rounded-md ${formData.assignee === opt.value ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'}`}
+                                            >
+                                                {opt.label} {opt.value === currentUserId ? '(Bản thân)' : ''}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </Dropdown.Content>
+                            </Dropdown>
+                        </div>
                         <Select
                             label="Độ ưu tiên"
                             value={formData.priority}
@@ -349,7 +413,7 @@ export default function CreateSubtaskDialog({
                     <button
                         type="submit"
                         disabled={isSubmitting || !formData.title.trim()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                         {isSubmitting ? 'Đang tạo...' : 'Tạo công việc con'}

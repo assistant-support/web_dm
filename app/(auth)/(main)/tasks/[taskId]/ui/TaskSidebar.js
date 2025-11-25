@@ -190,7 +190,7 @@ export default function TaskSidebar({
     );
 
     return (
-        <aside className="flex-shrink-0 space-y-4 lg:w-80 xl:w-96">
+        <aside className="flex-shrink-0 space-y-4">
             <section className="rounded-md border border-gray-200 bg-white shadow-sm">
                 <header className="border-b border-gray-200 px-4 py-3">
                     <h3 className="text-base font-semibold text-gray-800">Thông tin chi tiết</h3>
@@ -296,44 +296,6 @@ export default function TaskSidebar({
                                         taskId={task._id}
                                         initialWatching={isWatching}
                                     />
-                                </dd>
-                            </div>
-                        </div>
-
-                        <div className="flex items-start gap-3 py-2">
-                            <CalendarDays className="mt-0.5 h-4 w-4 text-gray-500" />
-                            <div className="min-w-0 flex-1">
-                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                                    Ngày tạo
-                                </dt>
-                                <dd className="mt-0.5 text-sm text-gray-900">
-                                    <span title={formatAbsolute(task.createdAt, true)}>
-                                        {formatAbsolute(task.createdAt)}{' '}
-                                        {formatRelative(task.createdAt) ? (
-                                            <span className="text-xs text-gray-500">
-                                                ({formatRelative(task.createdAt)})
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                </dd>
-                            </div>
-                        </div>
-
-                        <div className="flex items-start gap-3 py-2">
-                            <Clock className="mt-0.5 h-4 w-4 text-gray-500" />
-                            <div className="min-w-0 flex-1">
-                                <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                                    Cập nhật lần cuối
-                                </dt>
-                                <dd className="mt-0.5 text-sm text-gray-900">
-                                    <span title={formatAbsolute(task.updatedAt, true)}>
-                                        {formatAbsolute(task.updatedAt)}{' '}
-                                        {formatRelative(task.updatedAt) ? (
-                                            <span className="text-xs text-gray-500">
-                                                ({formatRelative(task.updatedAt)})
-                                            </span>
-                                        ) : null}
-                                    </span>
                                 </dd>
                             </div>
                         </div>

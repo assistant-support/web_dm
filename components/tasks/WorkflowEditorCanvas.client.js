@@ -29,6 +29,7 @@ export default function WorkflowEditorCanvas({
     workflowId = null,
     workTypes = [],
     subtasksCount = 0,
+    allUsersWithDetails = [],
 }) {
     const router = useRouter();
     const canvasRef = useRef(null);
@@ -234,6 +235,7 @@ export default function WorkflowEditorCanvas({
                 parentTask={task}
                 projectId={task?.project}
                 users={users}
+                allUsersWithDetails={allUsersWithDetails}
                 workTypes={workTypes}
                 onSuccess={handleSubtaskCreated}
             />

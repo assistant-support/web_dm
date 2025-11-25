@@ -36,6 +36,7 @@ export default function TaskMainContent({
     platforms,
     workflow,
     comments: initialComments,
+    remainingPoints = null // [NEW]
 }) {
     const [newComment, setNewComment] = useState('');
     const router = useRouter();
@@ -58,34 +59,36 @@ export default function TaskMainContent({
 
     // Quyền quản lý attachments
     const canManageAttachments = isAssignee || isCreator;
-    console.log(isAssignee, canManageAttachments, (isAssignee || canManageAttachments) && !task.parentTask);
+    
 
     return (
-        <div className="flex-1 min-w-0 flex flex-col gap-4">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
 
             {/* --- Phần Workflow --- */}
-            <div className="bg-white border border-gray-200 rounded-md shadow-sm">
-                <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                    <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-                        <Workflow size={18} className="text-blue-600" />
-                        Quy trình (Workflow)
-                    </h3>
-                    {(isAssignee || canManageAttachments) && !task.parentTask && (
-                        <Button>
-                            <Link
-                                variant="outline"
-                                size="xs"
-                                href={`/tasks/${task._id}/workflow`}
-                            >
-                                Chỉnh sửa Workflow
-                            </Link>
-                        </Button>
-                    )}
+            {!task.parentTask && (
+                <div className="bg-white border border-gray-200 rounded-md">
+                    <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                            <Workflow size={18} className="text-blue-600" />
+                            Quy trình (Workflow)
+                        </h3>
+                        {(isAssignee || canManageAttachments) && (
+                            <Button>
+                                <Link
+                                    variant="outline"
+                                    size="xs"
+                                    href={`/tasks/${task._id}/workflow`}
+                                >
+                                    Chỉnh sửa Workflow
+                                </Link>
+                            </Button>
+                        )}
+                    </div>
+                    <div className="p-4">
+                        <WorkflowViewer workflow={workflow} />
+                    </div>
                 </div>
-                <div className="p-4">
-                    <WorkflowViewer workflow={workflow} />
-                </div>
-            </div>
+            )}
 
             {/* --- Phần SubtaskList --- */}
             {!task.parentTask && (
@@ -102,11 +105,12 @@ export default function TaskMainContent({
                     workTypes={workTypes}
                     platforms={platforms}
                     isAssignee={isAssignee}
+                    remainingPoints={remainingPoints} // [NEW]
                 />
             )}
 
             {/* --- Phần Bình luận --- */}
-            <div className="bg-white border border-gray-200 rounded-md shadow-sm">
+            <div className="bg-white border border-gray-200 rounded-md">
                 <div className="px-4 py-3 border-b border-gray-200">
                     <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
                         <MessageSquare size={18} className="text-purple-600" />

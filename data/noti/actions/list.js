@@ -18,7 +18,6 @@ export async function getMyNotifications({ limit = 20, unreadOnly = false } = {}
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
-
         // Build query
         const query = { userId: uid };
         if (unreadOnly) {

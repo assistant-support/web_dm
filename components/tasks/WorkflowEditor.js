@@ -170,6 +170,19 @@ export default async function WorkflowEditor({ taskId }) {
         ? usersResult.data.items
         : [];
 
+    // Prepare full user details for client components (allUsersWithDetails)
+    const allUsersWithDetails = Array.isArray(users)
+        ? users.map(u => ({
+            id: u.value,
+            name: u.name,
+            email: u.email,
+            avatarUrl: u.avatar,
+            label: u.label,
+            jobTitle: u.jobTitle,
+            color: u.color,
+        }))
+        : [];
+
     const initialNodes = buildInitialNodes({ workflow, subtasks });
     const initialEdges = buildInitialEdges({ workflow, taskId });
 
@@ -216,6 +229,7 @@ export default async function WorkflowEditor({ taskId }) {
             <WorkflowEditorCanvas
                 task={taskForClient}
                 users={users}
+                allUsersWithDetails={allUsersWithDetails}
                 initialNodes={initialNodes}
                 initialEdges={initialEdges}
                 workflowId={workflow?._id ? String(workflow._id) : null}

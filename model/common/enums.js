@@ -1,7 +1,7 @@
 // cấu trúc thư mục hiện tại: /model/common/enums.js
 // Tác dụng file: Tập trung các hằng số dùng xuyên suốt dự án (role, status, priority, ...).
 
-export const TEAM_ROLE = Object.freeze({ MANAGER: 'manager', MEMBER: 'member' });
+export const TEAM_ROLE = Object.freeze({ OWNER: 'owner', MANAGER: 'manager', MEMBER: 'member' });
 export const PROJECT_ROLE = Object.freeze({ OWNER: 'owner', MANAGER: 'manager', MEMBER: 'member', VIEWER: 'viewer' });
 
 export const TASK_STATUS = Object.freeze({

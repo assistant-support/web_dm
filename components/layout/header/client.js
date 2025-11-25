@@ -1,3 +1,8 @@
+/*
+ * Đường dẫn: @/components/layout/header/client.js
+ * Mô tả: Component quản lý menu chuyển đổi ứng dụng và menu người dùng, bao gồm hiển thị thông tin tài khoản, tích hợp Zalo UID và chatbot.
+ */
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,8 +20,6 @@ const UidSetupDialog = dynamic(() => import('@/components/uid/UidSetupDialog.cli
     ssr: false,
     loading: () => null,
 });
-
-// --- Component cho Menu Ứng Dụng (Bên Trái) ---
 
 const apps = [
     { name: 'Digital Marketing', href: '#', icon: 'https://lh3.googleusercontent.com/d/1PNcTJhUTzndZaHAe4s19sbjZyV6S80d0' },
@@ -53,48 +56,50 @@ export function AppSwitcher() {
     );
 }
 
-// --- Component cho Menu Người Dùng (Bên Phải) ---
 export function UserMenu({ user }) {
     const [showUidDialog, setShowUidDialog] = useState(false);
-    const [hasUid, setHasUid] = useState(true); // Giả định có UID, sẽ kiểm tra sau
-    const [checkingUid, setCheckingUid] = useState(true);
-    const [zaloInfo, setZaloInfo] = useState(null); // { zaloname, zaloavt, uid }
+    const [uidState, setUidState] = useState({
+        hasUid: !!user?.uid,
+        isChecking: true,
+        zaloname: user?.zaloname || '',
+        zaloavt: user?.zaloavt || '',
+        uid: user?.uid || ''
+    });
     const [mounted, setMounted] = useState(false);
 
-    // Chỉ render sau khi client-side mounted để tránh hydration mismatch
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // Kiểm tra UID khi component mount
     useEffect(() => {
-        if (user && mounted) {
-            checkUserUid()
-                .then(result => {
-                    if (result.ok) {
-                        setHasUid(result.hasUid);
-                        if (result.hasUid) {
-                            setZaloInfo({
-                                uid: result.uid,
-                                zaloname: result.zaloname,
-                                zaloavt: result.zaloavt
-                            });
-                        }
-                    }
-                })
-                .catch(err => {
-                    console.error('Error checking UID:', err);
-                })
-                .finally(() => {
-                    setCheckingUid(false);
-                });
-        }
+        if (!user || !mounted) return;
+
+        checkUserUid()
+            .then(result => {
+                if (result.ok) {
+                    setUidState(prev => ({
+                        ...prev,
+                        hasUid: result.hasUid,
+                        isChecking: false,
+                        uid: result.uid || prev.uid,
+                        zaloname: result.zaloname || prev.zaloname,
+                        zaloavt: result.zaloavt || prev.zaloavt
+                    }));
+                }
+            })
+            .catch(() => {
+                setUidState(prev => ({ ...prev, isChecking: false }));
+            });
     }, [user, mounted]);
 
-    // Handler khi cập nhật UID thành công
     const handleUidUpdateSuccess = (updatedInfo) => {
-        setHasUid(true);
-        setZaloInfo(updatedInfo); // Cập nhật thông tin mới
+        setUidState({
+            hasUid: true,
+            isChecking: false,
+            uid: updatedInfo.uid,
+            zaloname: updatedInfo.zaloname,
+            zaloavt: updatedInfo.zaloavt
+        });
         setShowUidDialog(false);
     };
 
@@ -102,19 +107,19 @@ export function UserMenu({ user }) {
         return <Link href="/login" className="px-3 py-2 text-sm font-semibold rounded-md hover:bg-white/20">Đăng nhập</Link>;
     }
 
-    const getInitials = (name) => {
-        return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '';
-    }
-    const avatarUrl = driveImage(user.avt) || null;
+    const getInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase() || '';
     const displayName = user.name || `${user.lastName || ''} ${user.firstName || ''}`.trim() || 'User';
+    const avatarUrl = driveImage(user.avatar) || uidState.zaloavt;
+    const shouldShowWarning = mounted && !uidState.isChecking && !uidState.hasUid;
+    const shouldShowZaloInfo = mounted && !uidState.isChecking && uidState.hasUid;
 
     return (
         <>
             <Dropdown>
                 <Dropdown.Trigger>
                     <button className="cursor-pointer flex items-center gap-2 rounded-full hover:bg-gray-100 p-1 transition-colors relative">
-                        {avatarUrl ? (
-                            <div className="relative">
+                        <div className="relative">
+                            {avatarUrl ? (
                                 <Image
                                     src={avatarUrl}
                                     alt="User Avatar"
@@ -122,26 +127,17 @@ export function UserMenu({ user }) {
                                     height={40}
                                     className="rounded-full ring-2 ring-[var(--brand-600)]/20"
                                 />
-                                {/* Chỉ hiển thị badge khi đã mounted để tránh hydration mismatch */}
-                                {mounted && !checkingUid && !hasUid && (
-                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                                        <span className="text-white text-xs font-bold">!</span>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="relative">
+                            ) : (
                                 <div className="w-10 h-10 rounded-full bg-[var(--brand-600)] flex items-center justify-center text-sm font-bold text-white">
                                     {getInitials(displayName)}
                                 </div>
-                                {/* Chỉ hiển thị badge khi đã mounted để tránh hydration mismatch */}
-                                {mounted && !checkingUid && !hasUid && (
-                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                                        <span className="text-white text-xs font-bold">!</span>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                            )}
+                            {shouldShowWarning && (
+                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                                    <span className="text-white text-xs font-bold">!</span>
+                                </div>
+                            )}
+                        </div>
                     </button>
                 </Dropdown.Trigger>
 
@@ -166,13 +162,12 @@ export function UserMenu({ user }) {
                         </div>
                     </div>
 
-                    {/* Hiển thị thông tin Zalo nếu đã có UID - chỉ sau khi mounted */}
-                    {mounted && !checkingUid && hasUid && zaloInfo && (
+                    {shouldShowZaloInfo && (
                         <div className="mx-2 mb-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center gap-3 mb-2">
-                                {zaloInfo.zaloavt ? (
+                                {uidState.zaloavt ? (
                                     <Image
-                                        src={zaloInfo.zaloavt}
+                                        src={uidState.zaloavt}
                                         alt="Avatar Zalo"
                                         width={40}
                                         height={40}
@@ -182,16 +177,16 @@ export function UserMenu({ user }) {
                                 ) : (
                                     <div className="w-10 h-10 rounded-full bg-green-300 flex items-center justify-center">
                                         <span className="text-sm font-bold text-green-700">
-                                            {zaloInfo.zaloname?.charAt(0) || 'Z'}
+                                            {uidState.zaloname?.charAt(0) || 'Z'}
                                         </span>
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-green-900 truncate">
-                                        {zaloInfo.zaloname || 'Người dùng Zalo'}
+                                        {uidState.zaloname || 'Người dùng Zalo'}
                                     </p>
                                     <p className="text-xs text-green-700 truncate">
-                                        UID: {zaloInfo.uid?.slice(0, 12)}...
+                                        UID: {uidState.uid?.slice(0, 12)}...
                                     </p>
                                 </div>
                             </div>
@@ -204,8 +199,7 @@ export function UserMenu({ user }) {
                         </div>
                     )}
 
-                    {/* Hiển thị cảnh báo nếu chưa có UID - chỉ sau khi mounted */}
-                    {mounted && !checkingUid && !hasUid && (
+                    {shouldShowWarning && (
                         <div className="mx-2 mb-2">
                             <button
                                 onClick={() => setShowUidDialog(true)}

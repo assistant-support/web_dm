@@ -48,6 +48,16 @@ const NotificationSchema = new mongoose.Schema({
             'project.member.added',     // Được thêm vào project
             'subtask.assigned',         // Được giao subtask
             'task.status.changed',      // Trạng thái task thay đổi
+            
+            // [NEW] Added types
+            'task.created',             // Task mới được tạo (cho PM)
+            'subtask.completed',        // Subtask hoàn thành
+            'attachment.added',         // File đính kèm mới
+            'team.member.added',        // Thêm thành viên vào team
+            'team.member.removed',      // Xóa thành viên khỏi team
+            'team.member.updated',      // Cập nhật role thành viên team
+            'project.member.removed',   // Xóa thành viên khỏi project
+            'project.member.updated',   // Cập nhật role thành viên project
         ],
     },
 
@@ -69,6 +79,11 @@ const NotificationSchema = new mongoose.Schema({
         projectId: { 
             type: mongoose.Schema.Types.ObjectId, 
             ref: 'Project',
+        },
+        /** ID của team liên quan (nếu có) */
+        teamId: { 
+            type: mongoose.Schema.Types.ObjectId, 
+            ref: 'Team',
         },
         /** ID của comment liên quan (nếu có) */
         commentId: { 
@@ -155,4 +170,9 @@ NotificationSchema.statics.cleanupOldNotifications = async function(daysOld = 30
 /**
  * Export model với pattern phòng tránh "OverwriteModelError" trong Next.js hot reload
  */
+// [FIX] Delete existing model in development to ensure schema updates (like new enums) are applied immediately
+if (process.env.NODE_ENV !== 'production' && mongoose.models.Notification) {
+    delete mongoose.models.Notification;
+}
+
 export default mongoose.models.Notification || mongoose.model('Notification', NotificationSchema);

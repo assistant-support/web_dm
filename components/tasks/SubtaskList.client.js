@@ -30,7 +30,8 @@ export default function SubtaskList({
     platforms = [],
     currentUserId = '',
     canManage = false,
-    canCreateSubtask = false
+    canCreateSubtask = false,
+    allUsersWithDetails = []
 }) {
     const [subtasks, setSubtasks] = useState([]);
     const [stats, setStats] = useState(null);
@@ -232,6 +233,7 @@ export default function SubtaskList({
                     parentTask={parentTask}
                     projectMembers={projectMembers}
                     users={users}
+                    allUsersWithDetails={allUsersWithDetails}
                     workTypes={workTypes}
                     platforms={platforms}
                     currentUserId={currentUserId}

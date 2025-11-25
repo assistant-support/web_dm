@@ -139,7 +139,6 @@ export async function listByTaskAction(payload) {
             const populatedItems = await Promise.all(
                 items.map(async (comment) => {
                     const author = await User.findOne({ externalUserId: comment.author }).lean();
-                    console.log(author);
                     
                     return {
                         ...comment,

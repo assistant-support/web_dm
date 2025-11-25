@@ -142,14 +142,14 @@ TeamSchema.methods.isMember = function (userId) {
 };
 
 /**
- * Kiểm tra xem một user có vai trò quản lý (Manager) trong team hay không.
+ * Kiểm tra xem một user có vai trò quản lý (Manager hoặc Owner) trong team hay không.
  * @param {string} userId - External User ID cần kiểm tra
- * @returns {boolean} True nếu user là manager
+ * @returns {boolean} True nếu user là manager hoặc owner
  */
 TeamSchema.methods.isManager = function (userId) {
     if (!userId || !this.members) return false;
     return this.members.some(
-        (m) => String(m.userId) === String(userId) && m.role === TEAM_ROLE.MANAGER
+        (m) => String(m.userId) === String(userId) && (m.role === TEAM_ROLE.MANAGER || m.role === TEAM_ROLE.OWNER)
     );
 };
 
@@ -242,7 +242,7 @@ TeamSchema.statics.findByMember = async function (userId, activeOnly = true) {
 };
 
 /**
- * Tìm tất cả team mà một user có vai trò quản lý.
+ * Tìm tất cả team mà một user có vai trò quản lý (Manager hoặc Owner).
  * @param {string} userId - External User ID
  * @param {boolean} activeOnly - Chỉ lấy team đang hoạt động (mặc định: true)
  * @returns {Promise<Team[]>} Danh sách team
@@ -252,7 +252,7 @@ TeamSchema.statics.findByManager = async function (userId, activeOnly = true) {
     
     const query = {
         'members.userId': userId,
-        'members.role': TEAM_ROLE.MANAGER // Only MANAGER role exists in TEAM_ROLE
+        'members.role': { $in: [TEAM_ROLE.MANAGER, TEAM_ROLE.OWNER] }
     };
     if (activeOnly) {
         query.isActive = true;
@@ -262,25 +262,25 @@ TeamSchema.statics.findByManager = async function (userId, activeOnly = true) {
 };
 
 /**
- * Tạo một team mới với manager ban đầu.
+ * Tạo một team mới với owner ban đầu.
  * @param {Object} teamData - Dữ liệu team (name, description, etc.)
- * @param {string} managerId - External User ID của manager
+ * @param {string} ownerId - External User ID của owner
  * @returns {Promise<Team>} Team document mới được tạo
  * @throws {Error} Nếu thiếu thông tin bắt buộc
  */
-TeamSchema.statics.createWithOwner = async function (teamData, managerId) {
+TeamSchema.statics.createWithOwner = async function (teamData, ownerId) {
     await connectDB();
     
     if (!teamData.name) {
         throw new Error('Team name is required');
     }
-    if (!managerId) {
-        throw new Error('Manager ID is required');
+    if (!ownerId) {
+        throw new Error('Owner ID is required');
     }
     
     const team = new this({
         ...teamData,
-        members: [{ userId: managerId, role: TEAM_ROLE.MANAGER }],
+        members: [{ userId: ownerId, role: TEAM_ROLE.OWNER }],
         isActive: true
     });
     
@@ -290,14 +290,13 @@ TeamSchema.statics.createWithOwner = async function (teamData, managerId) {
 // ==================== MIDDLEWARE (HOOKS) ====================
 
 /**
- * Pre-save middleware: Đảm bảo luôn có ít nhất một manager trong team.
- * Note: TEAM_ROLE chỉ có MANAGER và MEMBER (không có OWNER)
+ * Pre-save middleware: Đảm bảo luôn có ít nhất một manager hoặc owner trong team.
  */
 TeamSchema.pre('save', function (next) {
     if (this.members && this.members.length > 0) {
-        const hasManager = this.members.some((m) => m.role === TEAM_ROLE.MANAGER);
-        if (!hasManager) {
-            return next(new Error('Team must have at least one manager'));
+        const hasManagerOrOwner = this.members.some((m) => m.role === TEAM_ROLE.MANAGER || m.role === TEAM_ROLE.OWNER);
+        if (!hasManagerOrOwner) {
+            return next(new Error('Team must have at least one manager or owner'));
         }
     }
     next();

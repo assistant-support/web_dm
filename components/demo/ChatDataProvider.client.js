@@ -73,7 +73,6 @@ export default function ChatDataProvider({ onClose } = {}) {
       setUserMessages(history.userMessages);
       setInitialBotMessages(history.botMessages);
       setChatHistoryLoaded(true);
-      console.log('✓ Loaded chat history:', history.userMessages.length, 'user messages,', history.botMessages.length, 'bot messages');
     } else {
       setChatHistoryLoaded(true);
     }
@@ -177,7 +176,6 @@ export default function ChatDataProvider({ onClose } = {}) {
       // Clear localStorage
       import('@/lib/chat-storage').then(({ clearChatHistory }) => {
         clearChatHistory(username);
-        console.log('🗑️ Cleared chat history');
       });
       
       // Note: socket.messages is managed by the hook, we can't clear it directly
@@ -301,7 +299,6 @@ export default function ChatDataProvider({ onClose } = {}) {
           timestamp: Date.now(),
         };
         saveChatHistory(username, chatData);
-        console.log('💾 Saved chat history on close');
       }
     };
   }, [username, userMessages, socket.messages, chatHistoryLoaded]);

@@ -51,7 +51,6 @@ export const memberAddSchema = z.object({
             try {
                 const user = await AppUser.findById(val);
                 if (user && user.externalUserId) {
-                    console.log(`[Project memberAddSchema] Converting userId from _id (${val}) to externalUserId (${user.externalUserId})`);
                     return user.externalUserId;
                 }
             } catch (err) {

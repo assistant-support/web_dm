@@ -17,7 +17,7 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
     const handleFileSelect = (e) => {
         const files = Array.from(e.target.files || []);
         if (files.length > 0) {
-            console.log('[AttachmentUpload] Files selected:', files.map(f => f.name));
+            
             setSelectedFiles(files);
             setError(null);
             // Initialize progress for each file
@@ -30,7 +30,7 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
     };
 
     const uploadSingleFile = async (file, index) => {
-        console.log(`[AttachmentUpload] Starting upload for file ${index}:`, file.name);
+        
         
         try {
             // Update status to uploading
@@ -51,12 +51,12 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
                 formData.append('scope', 'project');
             }
 
-            console.log(`[AttachmentUpload] Calling createAttachment for:`, file.name);
+            
             
             // Upload to server (chỉ gọi 1 lần)
             const result = await createAttachment(formData);
 
-            console.log(`[AttachmentUpload] Upload result for ${file.name}:`, result);
+            
 
             if (result.ok) {
                 // Success
@@ -92,7 +92,7 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
             setUploading(true);
             setError(null);
 
-            console.log(`[AttachmentUpload] Starting upload for ${selectedFiles.length} file(s)`);
+            
 
             // Upload all files sequentially (để tránh quá tải server)
             const results = [];
@@ -103,7 +103,7 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
 
             // Check if any uploads succeeded
             const successCount = results.filter(r => r.success).length;
-            console.log(`[AttachmentUpload] Upload complete: ${successCount}/${selectedFiles.length} succeeded`);
+            
 
             if (successCount > 0) {
                 // Notify parent to reload the list
@@ -132,7 +132,7 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
     };
 
     const handleCancel = () => {
-        console.log('[AttachmentUpload] Upload cancelled/reset');
+        
         setSelectedFiles([]);
         setUploadProgress({});
         setError(null);

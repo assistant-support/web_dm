@@ -20,7 +20,8 @@ export default function SubtaskList({
     users,
     workTypes,
     platforms,
-    isAssignee
+    isAssignee,
+    remainingPoints = null // [NEW]
 }) {
     const router = useRouter();
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -34,7 +35,7 @@ export default function SubtaskList({
     };
 
     return (
-        <div className="bg-white border border-gray-200 rounded-md shadow-sm">
+        <div className="bg-white border border-gray-200 rounded-md">
             {/* Header: Title và Nút tạo */}
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                 <h3 className="text-base font-semibold text-gray-800">
@@ -96,10 +97,12 @@ export default function SubtaskList({
                     parentTask={parentTask}
                     projectMembers={projectMembers}
                     users={users?.items || []} // Đảm bảo truyền mảng users
+                    allUsersWithDetails={allUsersWithDetails}
                     workTypes={workTypes}
                     platforms={platforms}
                     currentUserId={currentUserId}
                     onSuccess={handleSubtaskCreated}
+                    remainingPoints={remainingPoints} // [NEW]
                 />
             )}
         </div>

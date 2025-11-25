@@ -12,6 +12,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 import { updateTaskStatus, updateTask, deleteTask } from '@/actions/task.actions';
 import { useRouter } from 'next/navigation';
 import { updateTaskStatus as serverUpdateTaskStatus } from '@/data/task/actions/server.js';
+import { assignTask } from '@/data/task/actions/server.js';
 
 /**
  * Hook for Kanban board with drag-and-drop functionality.
@@ -120,11 +121,14 @@ export function useTaskBoardActions() {
 
     const onAssign = async (taskId, assigneeId) => {
         startTransition(async () => {
-            const formData = new FormData();
-            formData.append('assignee', assigneeId);
-            const result = await updateTask(taskId, formData);
-            if (result.error) {
-                console.error('Failed to assign task:', result.error);
+            try {
+                // Use assignTask server action which handles permissive assignment
+                const result = await assignTask(taskId, assigneeId);
+                if (result && result.ok === false) {
+                    console.error('Failed to assign task:', result.message || result.error);
+                }
+            } catch (err) {
+                console.error('Failed to assign task:', err);
             }
             router.refresh();
         });

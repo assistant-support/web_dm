@@ -80,10 +80,12 @@ export default function MemberRow({
                         className={
                             member.role === 'manager'
                                 ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                : member.role === 'owner'
+                                ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
                                 : 'bg-gray-100 text-gray-700 border-gray-200'
                         }
                     >
-                        {member.role === 'manager' ? 'Quản lý' : 'Thành viên'}
+                        {member.role === 'owner' ? 'Chủ sở hữu' : member.role === 'manager' ? 'Quản lý' : 'Thành viên'}
                     </Badge>
 
                     {/* Joined Date */}
