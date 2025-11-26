@@ -18,14 +18,21 @@ import EditTeamDialog from './EditTeamDialog.client.js';
 export default function TeamHeaderActions({ team }) {
     const [isEditOpen, setIsEditOpen] = useState(false);
 
+    const handleOpenEdit = () => {
+        if (!team?.isActive) return; // Prevent opening when archived
+        setIsEditOpen(true);
+    };
+
     return (
         <>
             <Button
-                onClick={() => setIsEditOpen(true)}
+                onClick={handleOpenEdit}
                 variant="outline"
                 size="sm"
                 className="flex items-center gap-6"
                 icon={Edit2}
+                disabled={!team?.isActive}
+                title={team?.isActive ? 'Chỉnh sửa' : 'Team đã lưu trữ — không thể chỉnh sửa'}
             >
                 <span>Chỉnh sửa</span>
             </Button>

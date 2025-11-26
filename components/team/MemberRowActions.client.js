@@ -19,7 +19,7 @@ import { useAsyncNotifier } from '@/hooks/loading.hook';
  * @param {Object} props.member - Member data
  * @param {string} props.teamId - Team ID
  */
-export default function MemberRowActions({ member, teamId }) {
+export default function MemberRowActions({ member, teamId, isActive = true }) {
     const router = useRouter();
     const { run, Overlays } = useAsyncNotifier();
     const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
@@ -71,8 +71,10 @@ export default function MemberRowActions({ member, teamId }) {
             <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                     <button
-                        className="inline-flex items-center justify-center rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2"
+                        className={`inline-flex items-center justify-center rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)] focus:ring-offset-2 ${isActive ? 'text-gray-400 hover:bg-gray-100 hover:text-gray-500' : 'text-gray-300 bg-gray-50 cursor-not-allowed'}`}
                         aria-label="Member actions"
+                        disabled={!isActive}
+                        title={isActive ? 'Thao tác thành viên' : 'Team đã lưu trữ — thao tác bị vô hiệu'}
                     >
                         <MoreVertical className="h-5 w-5" />
                     </button>
@@ -86,7 +88,7 @@ export default function MemberRowActions({ member, teamId }) {
                     >
                         <DropdownMenu.Item
                             className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer outline-none"
-                            onSelect={() => setIsChangeRoleDialogOpen(true)}
+                            onSelect={() => { if (!isActive) return; setIsChangeRoleDialogOpen(true); }}
                         >
                             <UserCog className="h-4 w-4" />
                             Đổi thành {newRoleName}
@@ -96,7 +98,7 @@ export default function MemberRowActions({ member, teamId }) {
 
                         <DropdownMenu.Item
                             className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer outline-none"
-                            onSelect={() => setIsRemoveDialogOpen(true)}
+                            onSelect={() => { if (!isActive) return; setIsRemoveDialogOpen(true); }}
                         >
                             <Trash2 className="h-4 w-4" />
                             Xóa khỏi team

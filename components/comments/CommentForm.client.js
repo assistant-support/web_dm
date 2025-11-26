@@ -12,13 +12,9 @@ import { Button } from '@/components/ui/button';
 
 const initialState = { success: false, error: null };
 
-function SubmitButton() {
-    const { pending } = useFormStatus();
-    return <Button type="submit" disabled={pending}>{pending ? 'Posting...' : 'Post Comment'}</Button>;
-}
-
-export function CommentForm({ targetId, targetType }) {
+export function CommentForm({ targetId, targetType, isActive = true }) {
     const [state, formAction] = useFormState(addComment, initialState);
+    const { pending } = useFormStatus();
     const formRef = useRef(null);
 
     useEffect(() => {
@@ -33,13 +29,15 @@ export function CommentForm({ targetId, targetType }) {
             <input type="hidden" name="targetType" value={targetType} />
             <Textarea
                 name="content"
-                placeholder="Write a comment..."
+                placeholder={isActive ? 'Write a comment...' : 'Comments disabled (archived)'}
                 required
                 rows={3}
+                disabled={!isActive}
+                title={!isActive ? 'Target archived — comments disabled' : undefined}
             />
             {state.error && <p className="text-sm text-red-500">{state.error}</p>}
             <div className="flex justify-end">
-                <SubmitButton />
+                <Button type="submit" disabled={!isActive || pending}>{pending ? 'Posting...' : (isActive ? 'Post Comment' : 'Disabled')}</Button>
             </div>
         </form>
     );

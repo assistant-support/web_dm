@@ -118,7 +118,7 @@ const SYSTEM_GUIDE_DATA = [
         sections: [
             {
                 type: 'text',
-                content: `Chào mừng bạn đến với hệ thống Quản lý công việc (web_dm). Đây là nền tảng quản lý tập trung vào tính kỷ luật, tự động hóa và minh bạch điểm thưởng.
+                content: `Chào mừng bạn đến với hệ thống Quản lý công việc **Digital Marketing**. Đây là nền tảng quản lý tập trung vào tính kỷ luật, tự động hóa và minh bạch điểm thưởng.
                 
                 Hệ thống được thiết kế để giảm thiểu thao tác thủ công thông qua các cơ chế thông minh như [Cơ chế Tự động thêm thành viên](ref:auto-add) và tích hợp sâu với Google Drive.`
             },
@@ -363,7 +363,7 @@ const SYSTEM_GUIDE_DATA = [
             },
             {
                 type: 'video',
-                src: '/videos/tutorials/manage-members.mp4',
+                src: '1PVKHA8fAnu-zepIw3QplSDxh-MMZBYQ0',
                 caption: 'Video: Cách thêm người và phân chia quyền hạn'
             },
             {
@@ -372,7 +372,7 @@ const SYSTEM_GUIDE_DATA = [
                 items: [
                     {
                         title: 'Truy cập Dashboard',
-                        content: 'Vào chi tiết Team -> Chọn tab **"Thống kê"**.'
+                        content: 'Vào chi tiết Team -> Chọn tab **"Tổng quan"**.'
                     },
                     {
                         title: 'Đọc dữ liệu',
@@ -381,9 +381,9 @@ const SYSTEM_GUIDE_DATA = [
                 ]
             },
             {
-                type: 'video',
-                src: '/videos/tutorials/team-analytics.mp4',
-                caption: 'Video: Hướng dẫn xem Thống kê và Bảng xếp hạng'
+                type: 'image',
+                src: 'https://lh3.googleusercontent.com/d/1nf-OcZJ3_XAOWK_iJ0X4dlinNSevbcLP',
+                caption: 'Xem Báo cáo & Thống kê'
             },
             {
                 type: 'steps',
@@ -405,7 +405,7 @@ const SYSTEM_GUIDE_DATA = [
             },
             {
                 type: 'video',
-                src: '/videos/tutorials/archive-delete.mp4',
+                src: '1q5mFaROgsO8V9j4qmfdKRga-Rz3kAlCq',
                 caption: 'Video: Cách Lưu trữ, Khôi phục và Xóa Team an toàn'
             }
         ]

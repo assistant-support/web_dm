@@ -17,6 +17,17 @@ import { AddMemberButton } from './AddMemberDialog.client';
  * @param {string} props.currentUserId - Current user ID.
  * @returns {JSX.Element}
  */
+/**
+ * @param {object} props
+ * @param {string} props.projectId
+ * @param {string} props.teamId
+ * @param {Array<object>} props.members
+ * @param {Object} props.usersMap
+ * @param {Object} props.memberStats
+ * @param {boolean} props.isManager
+ * @param {string} props.currentUserId
+ * @param {boolean} props.isActive - whether the project is active (not archived)
+ */
 export default function MemberList({ 
     projectId,
     teamId,
@@ -24,7 +35,8 @@ export default function MemberList({
     usersMap = {}, 
     memberStats = {}, 
     isManager, 
-    currentUserId 
+    currentUserId,
+    isActive = true,
 }) {
     return (
         <div className="bg-white rounded-lg border border-gray-200">
@@ -40,6 +52,7 @@ export default function MemberList({
                         projectId={projectId}
                         teamId={teamId}
                         currentMembers={members}
+                        isActive={isActive}
                     />
                 )}
             </div>

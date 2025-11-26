@@ -16,16 +16,17 @@ export default function CreateTaskButton({
     allUsersWithDetails = [],
     currentUserId,
     canManage = false,
-    canCreate = false
+    canCreate = false,
+    isActive = true,
 }) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     return (
         <>
             <button
-                onClick={() => setIsDialogOpen(true)}
-                disabled={!canCreate}
-                title={!canCreate ? 'Chỉ quản lý dự án mới được tạo công việc gốc' : 'Tạo công việc mới'}
+                onClick={() => isActive && canCreate && setIsDialogOpen(true)}
+                disabled={!canCreate || !isActive}
+                title={!isActive ? 'Dự án đã lưu trữ — không thể tạo nhiệm vụ' : (!canCreate ? 'Chỉ quản lý dự án mới được tạo công việc gốc' : 'Tạo công việc mới')}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium ${
                     canCreate
                         ? 'bg-[var(--brand-600)] text-white hover:bg-[var(--brand-700)] cursor-pointer'
@@ -57,6 +58,7 @@ export default function CreateTaskButton({
                     onSuccess={() => {
                         setIsDialogOpen(false);
                     }}
+                    isActive={isActive}
                 />
             )}
         </>

@@ -47,6 +47,13 @@ export default async function TeamLayout({ children, params }) {
     return (
         <div className="gap-3 w-full flex flex-col">
             <TeamHeader team={team} isManager={userIsManager} />
+            {!team.isActive && (
+                <div className="px-6">
+                    <div className="rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-900">
+                        <strong>Team đã lưu trữ:</strong> Nhóm này đã được lưu trữ — hầu hết các tương tác (tạo dự án, chỉnh sửa, thêm thành viên, v.v.) hiện bị vô hiệu hóa.
+                    </div>
+                </div>
+            )}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col flex-1">
                 <TeamTabs teamId={team._id} isManager={userIsManager} />
                 <div className="p-6 pr-4 overflow-scroll flex-1 flex flex-col">

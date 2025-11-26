@@ -11,6 +11,7 @@
 
 import Task from '@/model/task.model.js';
 import Project from '@/model/project.model.js';
+import { sanitizeMetadata } from '@/lib/serialize.js';
 
 /** Dedupe mảng user ids -> string[] */
 function uniqIds(arr = []) {
@@ -66,15 +67,23 @@ export async function sendSystemNotification(toUserIds = [], message = '', meta 
         }
 
         // Tạo mảng notifications để insert
+        const cleanMeta = sanitizeMetadata({
+            taskId: meta.taskId,
+            projectId: meta.projectId,
+            commentId: meta.commentId,
+            actorId: meta.actorId,
+            type: meta.type,
+        });
+
         const notifications = uniqueUserIds.map(userId => ({
             userId,
-            type: meta.type || 'system', // Lấy type từ metadata, fallback về 'system'
+            type: cleanMeta.type || 'system', // Lấy type từ metadata, fallback về 'system'
             message,
             metadata: {
-                taskId: meta.taskId || undefined,
-                projectId: meta.projectId || undefined,
-                commentId: meta.commentId || undefined,
-                actorId: meta.actorId || undefined,
+                taskId: cleanMeta.taskId || undefined,
+                projectId: cleanMeta.projectId || undefined,
+                commentId: cleanMeta.commentId || undefined,
+                actorId: cleanMeta.actorId || undefined,
             },
             read: false,
         }));

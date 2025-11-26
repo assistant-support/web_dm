@@ -102,12 +102,17 @@ function formatFileSize(bytes) {
 /**
  * AttachmentItem - Display one attachment
  */
-export default function AttachmentItem({ attachment, canDelete, onDeleted, viewMode = 'list' }) {
+export default function AttachmentItem({ attachment, canDelete, onDeleted, viewMode = 'list', isActive = true }) {
     const [isDeleting, setIsDeleting] = useState(false);
     const [showActions, setShowActions] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
 
     const handleDelete = async () => {
+        if (!isActive) {
+            alert('Tệp này không thể xóa — dự án hoặc nhóm đã được lưu trữ.');
+            return;
+        }
+
         if (!confirm('Bạn có chắc muốn xóa tệp này?')) return;
 
         setIsDeleting(true);
@@ -155,9 +160,9 @@ export default function AttachmentItem({ attachment, canDelete, onDeleted, viewM
                     {canDelete && (
                         <button
                             onClick={handleDelete}
-                            disabled={isDeleting}
-                            className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                            title="Xóa"
+                            disabled={isDeleting || !isActive}
+                            className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow-sm hover:bg-red-50 text-gray-600 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10 disabled:opacity-50"
+                            title={!isActive ? 'Không thể xóa — mục đã được lưu trữ' : 'Xóa'}
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
@@ -266,9 +271,10 @@ export default function AttachmentItem({ attachment, canDelete, onDeleted, viewM
                     {canDelete && (
                         <div className="relative">
                             <button
-                                onClick={() => setShowActions(!showActions)}
-                                className="p-2 hover:bg-gray-100 rounded text-gray-600"
-                                title="Thao tác"
+                                onClick={() => isActive && setShowActions(!showActions)}
+                                disabled={!isActive}
+                                className="p-2 hover:bg-gray-100 rounded text-gray-600 disabled:opacity-50"
+                                title={!isActive ? 'Hành động bị vô hiệu hóa — mục đã lưu trữ' : 'Thao tác'}
                             >
                                 <MoreVertical className="w-4 h-4" />
                             </button>
@@ -285,8 +291,9 @@ export default function AttachmentItem({ attachment, canDelete, onDeleted, viewM
                                     <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[120px]">
                                         <button
                                             onClick={handleDelete}
-                                            disabled={isDeleting}
+                                            disabled={isDeleting || !isActive}
                                             className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-600 disabled:opacity-50"
+                                            title={!isActive ? 'Không thể xóa — mục đã được lưu trữ' : undefined}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                             {isDeleting ? 'Đang xóa...' : 'Xóa'}

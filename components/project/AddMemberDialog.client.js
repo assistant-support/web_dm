@@ -30,14 +30,21 @@ const memberSchema = z.object({
 /**
  * AddMemberButton - Wrapper với state để mở dialog
  */
-export function AddMemberButton({ projectId, teamId, currentMembers = [] }) {
+export function AddMemberButton({ projectId, teamId, currentMembers = [], isActive = true }) {
     const [isOpen, setIsOpen] = useState(false);
 
     return (
         <>
             <button
-                onClick={() => setIsOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => isActive && setIsOpen(true)}
+                disabled={!isActive}
+                className={
+                    `inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ` +
+                    (isActive
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+                }
+                title={isActive ? 'Thêm thành viên' : 'Dự án đã lưu trữ — không thể thêm thành viên'}
             >
                 <UserPlus className="h-4 w-4" />
                 Thêm thành viên

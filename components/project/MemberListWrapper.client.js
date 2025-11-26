@@ -13,7 +13,7 @@ import MemberList from './MemberList';
  * @param {Array} props.initialMembers - Initial members data
  * @param {boolean} props.canManage - User có quyền manage không
  */
-export default function MemberListWrapper({ projectId, initialMembers, canManage }) {
+export default function MemberListWrapper({ projectId, initialMembers, canManage, isActive = true }) {
     const router = useRouter();
 
     const handleRefresh = () => {
@@ -25,6 +25,7 @@ export default function MemberListWrapper({ projectId, initialMembers, canManage
             projectId={projectId}
             members={initialMembers}
             canManage={canManage}
+            isActive={isActive}
             onRefresh={handleRefresh}
         />
     );

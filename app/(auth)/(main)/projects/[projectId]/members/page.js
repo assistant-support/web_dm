@@ -65,6 +65,7 @@ export default async function ProjectMembersPage({ params }) {
                     usersMap={usersMap}
                     memberStats={memberStatsResult || {}}
                     isManager={canManage}
+                    isActive={project.isActive}
                     currentUserId={user.externalUserId}
                 />
             </div>

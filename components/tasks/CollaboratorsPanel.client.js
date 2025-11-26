@@ -36,7 +36,8 @@ export default function CollaboratorsPanel({
     canManage = false,
     onUpdate,
     inviteAction = inviteCollaborator,
-    removeAction = removeCollaboratorFromTask
+    removeAction = removeCollaboratorFromTask,
+    isActive = true // whether the related project/task is active
 }) {
     const { run } = useAsyncNotifier();
     const router = useRouter();
@@ -90,6 +91,10 @@ export default function CollaboratorsPanel({
 
     // Handle invite using useAsyncNotifier
     const handleInvite = async () => {
+        if (!isActive) {
+            setError('Dự án/Task đã lưu trữ — không thể mời cộng tác viên.');
+            return;
+        }
         if (!selectedUserId) {
             setError('Vui lòng chọn người muốn mời');
             return;
@@ -116,6 +121,10 @@ export default function CollaboratorsPanel({
 
     // Handle accept using useAsyncNotifier
     const handleAccept = async () => {
+        if (!isActive) {
+            setError('Dự án/Task đã lưu trữ — không thể thay đổi.');
+            return;
+        }
         await run(() => acceptCollaboratorInvite(task._id), {
             loadingMessage: 'Đang chấp nhận...',
             successMessage: 'Đã chấp nhận lời mời!',
@@ -130,6 +139,10 @@ export default function CollaboratorsPanel({
 
     // Handle remove using useAsyncNotifier
     const handleRemove = async (collaboratorUserIdToRemove) => {
+        if (!isActive) {
+            alert('Dự án/Task đã lưu trữ — không thể xóa cộng tác viên.');
+            return;
+        }
         if (!confirm('Bạn có chắc muốn xóa người này khỏi công việc?')) return;
         await run(() => removeAction(task._id, collaboratorUserIdToRemove), {
             loadingMessage: 'Đang xóa...',
@@ -149,9 +162,10 @@ export default function CollaboratorsPanel({
             <div className="flex items-center justify-end"> {/* Moved button to right */}
                 {canManage && (
                     <button
-                        onClick={() => setIsInvitingFormVisible(!isInvitingFormVisible)}
+                        onClick={() => isActive && setIsInvitingFormVisible(!isInvitingFormVisible)}
                         className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 p-1 hover:bg-blue-50 rounded"
-                        disabled={availableUsersForDropdown.length === 0 && !isInvitingFormVisible} // Disable if no one to invite
+                        disabled={!isActive || (availableUsersForDropdown.length === 0 && !isInvitingFormVisible)} // Disable if archived or no one to invite
+                        title={!isActive ? 'Dự án/Task đã lưu trữ — không thể mời' : (availableUsersForDropdown.length === 0 ? 'Không có người phù hợp để mời' : (isInvitingFormVisible ? 'Đóng mời' : 'Mời người'))}
                     >
                         <UserPlus className="h-3.5 w-3.5" />
                         {isInvitingFormVisible ? 'Đóng mời' : 'Mời người'}
@@ -206,8 +220,9 @@ export default function CollaboratorsPanel({
                         <Button
                             size="xs"
                             onClick={handleInvite}
-                            disabled={!selectedUserId} // Only disable if no user selected
+                            disabled={!isActive || !selectedUserId} // Disable if archived or no user selected
                             icon={Send}
+                            title={!isActive ? 'Dự án/Task đã lưu trữ — không thể gửi lời mời' : !selectedUserId ? 'Chọn người để mời' : 'Gửi lời mời'}
                         >
                             Gửi lời mời
                         </Button>
@@ -283,6 +298,8 @@ export default function CollaboratorsPanel({
                                             variant="success_outline" // Outline style might be less intrusive
                                             onClick={handleAccept}
                                             icon={Check}
+                                            disabled={!isActive}
+                                            title={!isActive ? 'Dự án/Task đã lưu trữ — không thể chấp nhận' : 'Chấp nhận'}
                                         >
                                             Chấp nhận
                                         </Button>
@@ -296,8 +313,9 @@ export default function CollaboratorsPanel({
                                             variant="ghost"
                                             size="icon_xs" // Extra small icon button
                                             className="text-gray-400 hover:text-red-600 hover:bg-red-50"
-                                            onClick={() => handleRemove(collab.userId)}
-                                            tooltip="Xóa" // Assuming Button supports tooltip prop
+                                            onClick={() => isActive && handleRemove(collab.userId)}
+                                            disabled={!isActive}
+                                            tooltip={!isActive ? 'Dự án/Task đã lưu trữ — không thể xóa' : 'Xóa'}
                                         >
                                             <Trash2 className="h-3 w-3" /> {/* Smaller Icon */}
                                         </Button>

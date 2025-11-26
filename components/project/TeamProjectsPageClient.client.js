@@ -29,8 +29,15 @@ export default function TeamProjectsPageClient({ team, initialProjects }) {
                         </p>
                     </div>
                     <button
-                        onClick={() => setShowCreateDialog(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[var(--brand-600)] rounded-lg hover:bg-[var(--brand-700)] transition-colors"
+                        onClick={() => team?.isActive && setShowCreateDialog(true)}
+                        className={
+                            `inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ` +
+                            (team?.isActive
+                                ? 'text-white bg-[var(--brand-600)] hover:bg-[var(--brand-700)]'
+                                : 'text-gray-400 bg-gray-100 cursor-not-allowed')
+                        }
+                        disabled={!team?.isActive}
+                        title={team?.isActive ? 'Tạo dự án mới' : 'Team đã lưu trữ — không thể tạo dự án'}
                     >
                         <Plus className="h-4 w-4" />
                         Tạo dự án mới
@@ -47,6 +54,7 @@ export default function TeamProjectsPageClient({ team, initialProjects }) {
                 onClose={() => setShowCreateDialog(false)}
                 onSuccess={handleCreateSuccess}
                 defaultTeamId={team._id}
+                isActive={team?.isActive}
             />
         </>
     );

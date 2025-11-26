@@ -1,15 +1,15 @@
 // app/(auth)/(main)/teams/page.js
 // Server Component - Trang danh sách teams (Next.js 16 optimized)
 
-import { listMy } from '@/data/team/actions/server.js';
+import { listMy, listMyAll } from '@/data/team/actions/server.js';
 import { getCurrentUser } from '@/lib/request-user.js';
 import { Suspense } from 'react';
-
-// Import các components
+import Button from '@/components/ui/button';
+import Link from 'next/link';
 import TeamsList from '@/components/team/TeamsList.js';
-import ViewModeToggle from '@/components/team/ViewModeToggle.client.js';
 import CreateTeamButton from '@/components/team/CreateTeamButton.client.js';
-
+import TeamsClientList from '@/components/team/TeamsClientList.client.js';
+import { Package } from 'lucide-react';
 // Revalidate every 3 seconds for real-time updates
 export const revalidate = 3;
 
@@ -33,7 +33,8 @@ export default async function TeamsPage({ searchParams }) {
     // Await searchParams once (Next.js 15+)
     const params = await searchParams;
     const user = await getCurrentUser();
-    const result = await listMy();
+    const showArchived = params?.showArchived === '1' || params?.showArchived === 'true';
+    const result = showArchived ? await listMyAll() : await listMy();
 
     // Handle error state
     if (!result.ok) {
@@ -72,34 +73,65 @@ export default async function TeamsPage({ searchParams }) {
     const viewMode = params?.view || 'card';
     const hasTeams = sortedTeams.length > 0;
 
+    // Prepare a client-safe copy of teams for passing to client components
+    const clientTeams = sortedTeams.map(t => JSON.parse(JSON.stringify(t)));
+
     return (
         <div className="space-y-6 w-full flex flex-col">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Nhóm làm việc</h1>
-                    <p className="mt-1 text-sm text-gray-600">
-                        Quản lý và cộng tác với các nhóm của bạn
-                    </p>
-                </div>
+            <div className="sticky top-0 bg-white z-10 p-4 rounded-md border border-gray-200">
+                <div className="max-w-full px-0">
+                    <div className="flex items-center justify-between gap-3">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">Nhóm làm việc</h1>
+                            <p className="mt-1 text-sm text-gray-600">Quản lý và cộng tác với các nhóm của bạn</p>
+                        </div>
 
-                <div className="flex items-center gap-3">
-                    {hasTeams && (
-                        <Suspense fallback={<div className="h-10 w-24 bg-gray-100 rounded-lg animate-pulse" />}>
-                            <ViewModeToggle />
-                        </Suspense>
-                    )}
-                    <CreateTeamButton />
+                        <div className="flex items-center gap-3">
+                            {/* Create button always visible */}
+                            <CreateTeamButton />
+                            <div id="teams-client-controls-root" className="inline-flex items-center ml-2" />
+                            <Link href={showArchived ? '?' : '?showArchived=1'}  >
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    className="!text-white !font-normal"
+                                    tabIndex={-1}
+                                >
+                                    <Package className='w-3.5 h-3.5 mr-4' />
+                                    <p className='text-white text-sm font-semibold'>{showArchived ? 'Ẩn lưu trữ' : 'Tất cả'}</p>
+                                </Button>
+                            </Link>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <Suspense fallback={
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {[...Array(4)].map((_, i) => (
-                        <div key={i} className="h-40 bg-gray-100 rounded-lg animate-pulse" />
-                    ))}
-                </div>
-            }>
-                <TeamsList teams={sortedTeams} currentUserId={user?.externalUserId} viewMode={viewMode} />
-            </Suspense>
+
+            {/* Scrollable list area: constrain height to viewport so long lists scroll and header stays visible */}
+            <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                <Suspense
+                    fallback={
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 p-4">
+                            {[...Array(4)].map((_, i) => (
+                                <div key={i} className="h-40 bg-gray-100 rounded-lg animate-pulse" />
+                            ))}
+                        </div>
+                    }
+                >
+                    {/* Server-rendered initial view (improves FCP/SEO) */}
+                    <div id="teams-server-root">
+                        <TeamsList teams={sortedTeams} currentUserId={user?.externalUserId} viewMode={viewMode} />
+                    </div>
+
+                    {/* Client toggle/renderer: will replace server HTML on demand when users switch view */}
+                    <TeamsClientList
+                        teams={clientTeams}
+                        currentUserId={user?.externalUserId}
+                        initialView={viewMode}
+                        serverRootId="teams-server-root"
+                        controlsRootId="teams-client-controls-root"
+                    />
+                </Suspense>
+            </div>
         </div>
     );
 }

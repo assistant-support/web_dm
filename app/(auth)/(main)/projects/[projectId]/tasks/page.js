@@ -98,6 +98,7 @@ export default async function ProjectTasksPage({ params }) {
                         currentUserId={user.externalUserId}
                         canManage={canManage}
                         canCreate={canCreate}
+                        isActive={project.isActive}
                     />
                 </div>
 

@@ -340,7 +340,22 @@ export default function PersonalTasksClient({
                                         </Button>
                                     )}
                                 </div>
-                                <Button variant="primary" size="sm" onClick={() => setShowCreateDialog(true)} icon={Plus} className="!py-2.5 !text-xs">
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => {
+                                        // If a project is selected and it's archived, block creation
+                                        if (selectedProjectInfo && selectedProjectInfo.isActive === false) {
+                                            alert('Dự án đã lưu trữ — không thể tạo nhiệm vụ');
+                                            return;
+                                        }
+                                        setShowCreateDialog(true);
+                                    }}
+                                    icon={Plus}
+                                    className="!py-2.5 !text-xs"
+                                    disabled={selectedProjectInfo && selectedProjectInfo.isActive === false}
+                                    title={selectedProjectInfo && selectedProjectInfo.isActive === false ? 'Dự án đã lưu trữ — không thể tạo nhiệm vụ' : undefined}
+                                >
                                     <span className="hidden sm:inline">Tạo nhiệm vụ</span>
                                     <span className="sm:hidden">Tạo</span>
                                 </Button>
@@ -452,13 +467,20 @@ export default function PersonalTasksClient({
                                         return (
                                             <button
                                                 key={project._id}
-                                                onClick={() => setSelectedProject(project._id)}
-                                                className="block w-full text-left p-3 border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                                onClick={() => project.isActive !== false && setSelectedProject(project._id)}
+                                                disabled={project.isActive === false}
+                                                title={project.isActive === false ? 'Dự án đã lưu trữ — không thể tạo nhiệm vụ' : `Chọn dự án ${project.name}`}
+                                                className={`block w-full text-left p-3 border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${project.isActive === false ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200 hover:bg-gray-50'}`}
                                             >
-                                                <p className="font-medium text-gray-900">{project.name}</p>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Vai trò của bạn: <span className={roleClass}>{roleLabel}</span>
-                                                </p>
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="font-medium text-gray-900">{project.name}</p>
+                                                        <p className="text-xs text-gray-500 mt-1">Vai trò của bạn: <span className={roleClass}>{roleLabel}</span></p>
+                                                    </div>
+                                                    {project.isActive === false && (
+                                                        <span className="text-xs text-gray-500 italic">Đã lưu trữ</span>
+                                                    )}
+                                                </div>
                                             </button>
                                         );
                                     }) : (
@@ -496,6 +518,8 @@ export default function PersonalTasksClient({
 
                             workTypes={workTypes}
                             platforms={platforms}
+
+                            isActive={selectedProjectInfo.isActive}
 
                             onSuccess={(newTask) => {
                                 handleTaskCreated(newTask);

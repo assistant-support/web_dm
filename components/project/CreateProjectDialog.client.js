@@ -97,7 +97,18 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
         }
     }, [defaultTeamId, form, open]);
 
+    // Watch selected team to detect archived team selection
+    const selectedTeamId = form.watch && form.watch('team');
+    const selectedTeam = managedTeams.find(t => String(t.id) === String(selectedTeamId));
+    const selectedTeamIsArchived = selectedTeam ? (selectedTeam.isActive === false) : false;
+
     const onSubmit = async (data) => {
+        // Prevent creating under archived team (UI-only guard)
+        if (data.team && selectedTeamIsArchived) {
+            form.setError('team', { type: 'manual', message: 'Nhóm được chọn đã được lưu trữ — không thể tạo dự án dưới nhóm này' });
+            return;
+        }
+
         await run(async () => {
             // Transform data: remove empty strings, parse tags
             const tags = data.tags
@@ -165,8 +176,8 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
                     >
                         <option value="">-- Dự án độc lập --</option>
                         {managedTeams.map(team => (
-                            <option key={team.id} value={team.id}>
-                                {team.name}
+                            <option key={team.id} value={team.id} disabled={team.isActive === false}>
+                                {team.name}{team.isActive === false ? ' (Đã lưu trữ)' : ''}
                             </option>
                         ))}
                     </Select>
@@ -218,12 +229,23 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
                         <p className="text-sm text-red-600">{form.formState.errors.root.message}</p>
                     )}
 
-                    <FormActions
-                        submitLabel="Tạo dự án"
-                        cancelLabel="Hủy"
-                        onCancel={onClose}
-                        isSubmitting={form.formState.isSubmitting}
-                    />
+                    {selectedTeamIsArchived && (
+                        <p className="text-sm text-yellow-800">Nhóm được chọn đã bị lưu trữ — vui lòng chọn nhóm khác hoặc tạo dự án độc lập.</p>
+                    )}
+
+                    {selectedTeamIsArchived ? (
+                        <div className="flex items-center justify-end gap-3 pt-4">
+                            <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Hủy</button>
+                            <button type="button" disabled className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gray-300 text-gray-600 rounded-lg cursor-not-allowed" title="Nhóm đã lưu trữ — không thể tạo dự án dưới nhóm này">Tạo dự án</button>
+                        </div>
+                    ) : (
+                        <FormActions
+                            submitLabel="Tạo dự án"
+                            cancelLabel="Hủy"
+                            onCancel={onClose}
+                            isSubmitting={form.formState.isSubmitting}
+                        />
+                    )}
                 </form>
             </DialogComponent>
         </>

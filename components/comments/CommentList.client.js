@@ -15,7 +15,7 @@ import { listByTaskAction } from '@/data/comment/actions/server';
  * @param {boolean} props.canManage - User có quyền manage project không
  * @param {number} props.initialCount - Initial comment count từ task
  */
-export default function CommentList({ taskId, currentUser, canManage, initialCount = 0 }) {
+export default function CommentList({ taskId, currentUser, canManage, initialCount = 0, isActive = true }) {
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -67,7 +67,7 @@ export default function CommentList({ taskId, currentUser, canManage, initialCou
             </div>
 
             {/* Comment Form */}
-            <CommentForm taskId={taskId} onCommentAdded={handleCommentAdded} />
+            <CommentForm taskId={taskId} onCommentAdded={handleCommentAdded} isActive={isActive} />
 
             {/* Comments List */}
             <div className="space-y-0">

@@ -59,6 +59,13 @@ export default function TaskMainContent({
 
     // Quyền quản lý attachments
     const canManageAttachments = isAssignee || isCreator;
+    // Determine project active if available on task
+    const projectActive = (() => {
+        if (!task) return true;
+        if (task.project && typeof task.project === 'object' && 'isActive' in task.project) return task.project.isActive;
+        if ('projectIsActive' in task) return task.projectIsActive;
+        return true;
+    })();
     
 
     return (
@@ -170,6 +177,7 @@ export default function TaskMainContent({
                 currentUser={currentUser}
                 canManage={canManageAttachments}
                 initialCount={task.attachmentsCount || 0}
+                isActive={projectActive}
             />
 
         </div>

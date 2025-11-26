@@ -92,8 +92,10 @@ export default function ProjectHeader({ project, canManage }) {
                     {canManage && (
                         <div className="ml-4 flex-shrink-0">
                             <button
-                                onClick={() => setShowEditDialog(true)}
-                                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                                onClick={() => project?.isActive && setShowEditDialog(true)}
+                                className={`px-3 py-1.5 text-sm font-medium rounded-md ${project?.isActive ? 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50' : 'text-gray-400 bg-gray-100 border border-gray-200 cursor-not-allowed'}`}
+                                disabled={!project?.isActive}
+                                title={project?.isActive ? t('project.editProject') : t('project.archived')}
                             >
                                 {t('project.editProject')}
                             </button>

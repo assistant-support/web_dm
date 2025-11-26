@@ -23,6 +23,7 @@ export default function TaskList({
     // [THÊM] Prop mới để tắt điều hướng khi click vào item
     disableItemNavigation = false,
     parentTask = null // [THÊM] Parent task cho subtask list
+    , projectActive = true // UI-level prop: whether related project is active
 }) {
     const router = useRouter();
     const taskActions = useTaskBoardActions();
@@ -65,6 +66,20 @@ export default function TaskList({
     const handleEdit = (taskId) => {
         const task = initialTasks.find(t => t._id === taskId);
         if (!task) return;
+        // Guard: do not allow editing if the related project is archived
+        const projectActiveFromTask = (t => {
+            if (!t) return true;
+            if (t.project && typeof t.project === 'object' && 'isActive' in t.project) return t.project.isActive;
+            if ('projectIsActive' in t) return t.projectIsActive;
+            return true;
+        })(task);
+
+        // Respect top-level projectActive prop as a UI-wide guard
+        if (!projectActive || !projectActiveFromTask) {
+            alert('Dự án đã lưu trữ — không thể chỉnh sửa nhiệm vụ');
+            return;
+        }
+
         setEditDialog({ open: true, task });
     };
 
@@ -75,6 +90,19 @@ export default function TaskList({
     const handleAddSubtask = (parentTaskId) => {
         const parentTask = initialTasks.find(t => t._id === parentTaskId);
         if (!parentTask) return;
+        // Guard: do not allow creating subtask if parent task's project is archived
+        const projectActiveFromTask = (t => {
+            if (!t) return true;
+            if (t.project && typeof t.project === 'object' && 'isActive' in t.project) return t.project.isActive;
+            if ('projectIsActive' in t) return t.projectIsActive;
+            return true;
+        })(parentTask);
+
+        if (!projectActive || !projectActiveFromTask) {
+            alert('Dự án đã lưu trữ — không thể thêm việc con');
+            return;
+        }
+
         setCreateSubtaskDialog({ open: true, parentTask });
     };
 
@@ -164,6 +192,7 @@ export default function TaskList({
                             onRefresh={onTaskUpdated ? onTaskUpdated : router.refresh} // Ưu tiên callback, fallback refresh
                             // [THAY ĐỔI] Truyền prop disableNavigation xuống TaskItem
                             disableNavigation={disableItemNavigation}
+                            projectActive={projectActive}
                             // [THÊM] Props cho subtask
                             isSubtask={!!parentTask}
                             parentTaskAssignee={parentTask?.assignee || null}
@@ -187,6 +216,7 @@ export default function TaskList({
                 disableItemNavigation={disableItemNavigation}
                 // [THÊM] Truyền parentTask cho subtask
                 parentTask={parentTask}
+                projectActive={projectActive}
             />
 
             {/* Dialog Sửa Task */}
@@ -220,8 +250,10 @@ export default function TaskList({
                     platforms={platforms}
                     currentUserId={currentUserId}
                     onSuccess={handleSuccess}
+                    isActive={projectActive}
                 />
             )}
+
         </>
     );
 }

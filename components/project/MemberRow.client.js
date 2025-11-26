@@ -27,7 +27,7 @@ const ROLE_OPTIONS = [
  * @param {boolean} props.canManage - Có quyền manage không
  * @param {Function} props.onRefresh - Callback để refresh
  */
-export default function MemberRow({ projectId, member, canManage, onRefresh }) {
+export default function MemberRow({ projectId, member, canManage, onRefresh, isActive = true }) {
     const { run, Overlays } = useAsyncNotifier();
     const [error, setError] = useState('');
 
@@ -35,6 +35,8 @@ export default function MemberRow({ projectId, member, canManage, onRefresh }) {
         if (newRole === member.role) return;
 
         setError('');
+
+        if (!isActive) return; // prevent action when project archived
 
         const result = await run(
             async () => await changeRole(projectId, {
@@ -62,6 +64,7 @@ export default function MemberRow({ projectId, member, canManage, onRefresh }) {
         if (!confirm(`Xóa ${userName} khỏi dự án này?`)) {
             return;
         }
+        if (!isActive) return; // prevent action when project archived
 
         setError('');
 

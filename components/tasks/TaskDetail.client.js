@@ -105,6 +105,14 @@ const MetadataItem = ({ icon: Icon, label, children, iconClassName = "text-gray-
 );
 const UserAvatarItem = ({ userId, label, allUsers = [] }) => {
     const user = userId ? allUsers.find(u => u.id === userId) : null;
+    // Determine project active state if available on task
+    const projectActive = (() => {
+        if (!task) return true;
+        if (task.project && typeof task.project === 'object' && 'isActive' in task.project) return task.project.isActive;
+        if ('projectIsActive' in task) return task.projectIsActive;
+        return true;
+    })();
+
     return (
         <MetadataItem icon={UserCheck} label={label}>
             {user ? (
@@ -151,6 +159,14 @@ export default function TaskDetail({
     const priorityInfo = useMemo(() => getPriorityInfo(task.priority), [task.priority]);
     const assigneeId = getUserId(task.assignee);
     const creatorId = getUserId(task.createdBy);
+
+    // Determine whether the related project is active (UI-level)
+    const projectActive = (() => {
+        if (!task) return true;
+        if (task.project && typeof task.project === 'object' && 'isActive' in task.project) return task.project.isActive;
+        if ('projectIsActive' in task) return task.projectIsActive;
+        return true;
+    })();
 
     const fmt = (d, includeTime = false) => {
         if (!d) return '—';
@@ -272,7 +288,7 @@ export default function TaskDetail({
                         )}
                         {/* Edit Button */}
                         {canEditTask && (
-                            <Button variant="outline" size="sm" icon={Edit} onClick={() => setShowEditTask(true)}>
+                            <Button variant="outline" size="sm" icon={Edit} onClick={() => projectActive && setShowEditTask(true)} disabled={!projectActive} title={!projectActive ? 'Dự án đã lưu trữ — không thể chỉnh sửa task' : undefined}>
                                 Sửa
                             </Button>
                         )}
@@ -394,7 +410,11 @@ export default function TaskDetail({
                                 <div className="p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2"><GitMerge className="h-5 w-5 text-gray-500" /> Nhiệm vụ con ({subtasks.length})</h2>
-                                        {(canManage || isAssignee) && (<Button size="xs" variant="outline" icon={PlusCircle} onClick={() => setShowCreateSubtask(true)}>Thêm việc con</Button>)}
+                                        {(canManage || isAssignee) && (
+                                            <Button size="xs" variant="outline" icon={PlusCircle} onClick={() => projectActive && setShowCreateSubtask(true)} disabled={!projectActive} title={!projectActive ? 'Dự án đã lưu trữ — không thể thêm việc con' : undefined}>
+                                                Thêm việc con
+                                            </Button>
+                                        )}
                                     </div>
                                     <div className="space-y-2">
                                         {subtasks.length > 0 ? (subtasks.map(sub => {
@@ -426,14 +446,14 @@ export default function TaskDetail({
                         <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                             <div className="p-5">
                                 <h2 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2"><Paperclip className="h-5 w-5 text-gray-500" /> Tệp đính kèm</h2>
-                                <AttachmentList taskId={task._id} projectId={task.project} scope="task" currentUser={currentUser} canManage={canManage || isCreator || isAssignee} initialCount={task.attachmentsCount || 0} />
+                                <AttachmentList taskId={task._id} projectId={task.project} scope="task" currentUser={currentUser} canManage={canManage || isCreator || isAssignee} initialCount={task.attachmentsCount || 0} isActive={projectActive} />
                             </div>
                         </div>
 
                         {/* Comments */}
                         <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                             <div className="p-5 border-b border-gray-100"> <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2"><MessageSquare className="h-5 w-5 text-gray-500" /> Thảo luận</h2> </div>
-                            <div className="p-5"> <CommentList taskId={task._id} currentUser={currentUser} canManage={canManage} initialCount={task.commentsCount || 0} /> </div>
+                                <div className="p-5"> <CommentList taskId={task._id} currentUser={currentUser} canManage={canManage} initialCount={task.commentsCount || 0} isActive={projectActive} /> </div>
                         </div>
                     </div>
                 </div>
@@ -493,7 +513,21 @@ export default function TaskDetail({
             </div>
 
             {/* --- Dialogs --- */}
-            {showCreateSubtask && (<CreateSubtaskDialog open={showCreateSubtask} onClose={() => setShowCreateSubtask(false)} parentTask={task} projectMembers={projectMembers} users={users} allUsersWithDetails={allUsersWithDetails} currentUserId={currentUserId} onSuccess={() => { router.refresh(); setShowCreateSubtask(false); }} workTypes={workTypes} platforms={platforms} />)}
+            {showCreateSubtask && (
+                <CreateSubtaskDialog
+                    open={showCreateSubtask}
+                    onClose={() => setShowCreateSubtask(false)}
+                    parentTask={task}
+                    projectMembers={projectMembers}
+                    users={users}
+                    allUsersWithDetails={allUsersWithDetails}
+                    currentUserId={currentUserId}
+                    onSuccess={() => { router.refresh(); setShowCreateSubtask(false); }}
+                    workTypes={workTypes}
+                    platforms={platforms}
+                    isActive={projectActive}
+                />
+            )}
             {showEditTask && (
                 <EditTaskDialog
                     open={showEditTask}

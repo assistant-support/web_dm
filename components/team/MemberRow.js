@@ -27,6 +27,7 @@ export default function MemberRow({
     currentUserId,
     userInfo,
     stats,
+    isActive = true,
 }) {
     const isSelf = String(member.userId) === String(currentUserId);
     const canManage = isManager && !isSelf;
@@ -103,6 +104,7 @@ export default function MemberRow({
                         <MemberRowActions
                             member={member}
                             teamId={teamId}
+                            isActive={isActive}
                         />
                     )}
                 </div>

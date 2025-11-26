@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { createAttachment } from '@/data/attachment/actions/server';
 import { Upload, X, Loader2, CheckCircle, XCircle, File } from 'lucide-react';
 
-export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
+export function AttachmentUpload({ taskId, projectId, scope, onUploaded, isActive = true }) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedFiles, setSelectedFiles] = useState([]);
@@ -153,15 +153,17 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
         <div className="space-y-3">
             {/* File input */}
             <div>
-                <label 
-                    htmlFor="file-upload" 
-                    className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                <label
+                    htmlFor="file-upload"
+                    onClick={(e) => { if (!isActive) { e.preventDefault(); } }}
+                    className={"flex items-center justify-center w-full px-4 py-3 border-2 border-dashed rounded-lg transition-colors " + (isActive ? 'border-gray-300 cursor-pointer hover:border-blue-400 hover:bg-blue-50' : 'border-gray-200 bg-gray-50 cursor-not-allowed')}
+                    title={!isActive ? 'Dự án/Task đã lưu trữ — không thể tải lên tệp' : undefined}
                 >
-                    <Upload className="w-5 h-5 text-gray-400 mr-2" />
-                    <span className="text-sm text-gray-600">
-                        {selectedFiles.length > 0 
-                            ? `${selectedFiles.length} tệp đã chọn` 
-                            : 'Chọn tệp để tải lên (nhiều file)'
+                    <Upload className={"w-5 h-5 mr-2 " + (isActive ? 'text-gray-400' : 'text-gray-300')} />
+                    <span className={"text-sm " + (isActive ? 'text-gray-600' : 'text-gray-400')}>
+                        {selectedFiles.length > 0
+                            ? `${selectedFiles.length} tệp đã chọn`
+                            : (isActive ? 'Chọn tệp để tải lên (nhiều file)' : 'Uploads bị vô hiệu hóa')
                         }
                     </span>
                 </label>
@@ -170,7 +172,7 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
                     type="file"
                     className="hidden"
                     onChange={handleFileSelect}
-                    disabled={uploading}
+                    disabled={uploading || !isActive}
                     multiple
                 />
             </div>
@@ -202,7 +204,8 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
                                     <button
                                         onClick={() => removeFile(index)}
                                         className="text-gray-400 hover:text-red-500"
-                                        disabled={uploading}
+                                        disabled={uploading || !isActive}
+                                        title={!isActive ? 'Uploads disabled for archived project' : undefined}
                                     >
                                         <X className="w-4 h-4" />
                                     </button>
@@ -241,8 +244,9 @@ export function AttachmentUpload({ taskId, projectId, scope, onUploaded }) {
                 <div className="flex gap-2">
                     <button
                         onClick={handleUpload}
-                        disabled={uploading}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                disabled={uploading || !isActive}
+                        className={"flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 " + (isActive ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed')}
+                        title={!isActive ? 'Dự án/Task đã lưu trữ — không thể tải lên tệp' : undefined}
                     >
                         {uploading ? (
                             <>

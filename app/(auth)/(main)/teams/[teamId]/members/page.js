@@ -91,6 +91,7 @@ export default async function TeamMembersPage({ params }) {
                     currentUserId={currentUserId}
                     usersMap={usersMapObject}
                     memberStats={memberStats}
+                    isActive={team.isActive}
                 />
             </Suspense>
         </div>

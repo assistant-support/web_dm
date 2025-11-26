@@ -1,7 +1,7 @@
 import MemberRow from './MemberRow.js';
 import AddMemberButton from './AddMemberButton.client.js';
 
-export default function MembersList({ members, teamId, isManager, currentUserId, usersMap, memberStats }) {
+export default function MembersList({ members, teamId, isManager, currentUserId, usersMap, memberStats, isActive = true }) {
     const sortedMembers = [...members].sort((a, b) => {
         if (a.role !== b.role) { return a.role === 'manager' ? -1 : 1; }
         return new Date(a.joinedAt) - new Date(b.joinedAt);
@@ -18,11 +18,14 @@ export default function MembersList({ members, teamId, isManager, currentUserId,
                         {members.length} người trong nhóm
                     </p>
                 </div>
-                {isManager && (
+                {isManager && isActive && (
                     <AddMemberButton
                         teamId={teamId}
                         existingMemberIds={members.map(m => m.userId)}
                     />
+                )}
+                {isManager && !isActive && (
+                    <div className="text-sm text-gray-500">(Team đã lưu trữ — tương tác bị vô hiệu hóa)</div>
                 )}
             </div>
 
@@ -36,6 +39,7 @@ export default function MembersList({ members, teamId, isManager, currentUserId,
                         currentUserId={currentUserId}
                         userInfo={usersMap[member.userId]}
                         stats={memberStats?.[member.userId]}
+                        isActive={isActive}
                     />
                 ))}
             </div>

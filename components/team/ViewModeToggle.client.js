@@ -25,7 +25,7 @@ export default function ViewModeToggle() {
     };
 
     return (
-        <div className="flex items-center rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+        <div className="flex items-center rounded-lg border border-gray-200 bg-white p-1 ">
             <button
                 onClick={() => setViewMode('card')}
                 className={`rounded px-3 py-2 text-sm font-medium transition-all duration-200 ${

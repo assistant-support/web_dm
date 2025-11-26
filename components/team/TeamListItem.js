@@ -1,5 +1,6 @@
 // components/team/TeamListItem.js
-// Server Component - Hiển thị team dưới dạng list item (compact)
+// Client Component - Hiển thị team dưới dạng list item (compact)
+"use client";
 
 import Link from 'next/link';
 import { Users, Calendar } from 'lucide-react';
@@ -21,7 +22,7 @@ export default function TeamListItem({ team, currentUserId }) {
     const memberCount = team.members?.length || 0;
 
     return (
-        <Link 
+        <Link
             href={`/teams/${team._id}`}
             className="block px-6 py-4 hover:bg-gray-50 transition-colors"
         >
@@ -31,9 +32,7 @@ export default function TeamListItem({ team, currentUserId }) {
                     <div className="flex items-center gap-3 mb-1">
                         <h3 className="text-base font-semibold text-gray-900 truncate" title={team.name}>
                             {team.name}
-                        </h3>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            <Badge 
+                            <Badge
                                 variant={team.isActive ? 'success' : 'secondary'}
                                 className={
                                     team.isActive
@@ -43,8 +42,11 @@ export default function TeamListItem({ team, currentUserId }) {
                             >
                                 {team.isActive ? 'Đang hoạt động' : 'Đã lưu trữ'}
                             </Badge>
+                        </h3>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+
                             {isManager && (
-                                <Badge 
+                                <Badge
                                     variant="default"
                                     className="bg-purple-100 text-purple-800 border-purple-200"
                                 >
@@ -65,7 +67,7 @@ export default function TeamListItem({ team, currentUserId }) {
                         <span className="font-medium">{memberCount}</span>
                         <span className="text-gray-500">thành viên</span>
                     </div>
-                    
+
                     {team.updatedAt && (
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                             <Calendar className="h-4 w-4 text-gray-400" />

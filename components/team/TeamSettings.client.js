@@ -157,12 +157,20 @@ export default function TeamSettings({ team, currentUserId, isManager }) {
                                 </div>
                             </div>
                             <button
-                                onClick={() => setIsTransferDialogOpen(true)}
-                                disabled={otherMembers.length === 0}
-                                className="px-4 py-2 text-sm font-medium rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                Chuyển quyền
-                            </button>
+                                    onClick={() => team.isActive && setIsTransferDialogOpen(true)}
+                                    disabled={!team.isActive || otherMembers.length === 0}
+                                    title={!team.isActive ? 'Nhóm đã lưu trữ — không thể chuyển quyền' : (otherMembers.length === 0 ? 'Không có thành viên để chuyển quyền' : 'Chuyển quyền')}
+                                    className={
+                                        "px-4 py-2 text-sm font-medium rounded-lg border transition-all " +
+                                        (!team.isActive
+                                            ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                                            : (otherMembers.length === 0
+                                                ? 'border-blue-200 text-blue-300 cursor-not-allowed'
+                                                : 'border-blue-200 text-blue-700 hover:bg-blue-50'))
+                                    }
+                                >
+                                    Chuyển quyền
+                                </button>
                         </div>
                     </div>
 
@@ -182,12 +190,19 @@ export default function TeamSettings({ team, currentUserId, isManager }) {
                             </div>
                         </div>
                         <button
-                            onClick={() => setIsDeleteDialogOpen(true)}
-                            className="w-full px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-all flex items-center justify-center gap-2"
-                        >
-                            <Trash2 className="h-4 w-4" />
-                            Xóa nhóm
-                        </button>
+                                onClick={() => team.isActive && setIsDeleteDialogOpen(true)}
+                                disabled={!team.isActive}
+                                title={team.isActive ? 'Xóa nhóm' : 'Nhóm đã lưu trữ — không thể xóa'}
+                                className={
+                                    "w-full px-4 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all " +
+                                    (team.isActive
+                                        ? 'bg-red-600 text-white hover:bg-red-700'
+                                        : 'bg-gray-100 text-gray-500 cursor-not-allowed')
+                                }
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Xóa nhóm
+                            </button>
                     </div>
                 </div>
             </div>
@@ -240,12 +255,13 @@ export default function TeamSettings({ team, currentUserId, isManager }) {
                                 Hủy
                             </button>
                             <button
-                                onClick={handleDelete}
-                                disabled={deleteConfirmText.toLowerCase() !== team.name.toLowerCase()}
-                                className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                Xóa nhóm
-                            </button>
+                                    onClick={handleDelete}
+                                    disabled={!team.isActive || deleteConfirmText.toLowerCase() !== team.name.toLowerCase()}
+                                    title={!team.isActive ? 'Nhóm đã lưu trữ — hành động bị vô hiệu' : 'Xóa nhóm'}
+                                    className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                    Xóa nhóm
+                                </button>
                         </div>
                     </div>
                 </div>
@@ -291,12 +307,13 @@ export default function TeamSettings({ team, currentUserId, isManager }) {
                                 Hủy
                             </button>
                             <button
-                                onClick={handleTransferOwnership}
-                                disabled={!selectedNewManager}
-                                className="px-4 py-2 text-sm font-medium bg-[var(--brand-600)] text-white rounded-lg hover:bg-[var(--brand-700)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                            >
-                                Chuyển quyền
-                            </button>
+                                    onClick={handleTransferOwnership}
+                                    disabled={!team.isActive || !selectedNewManager}
+                                    title={!team.isActive ? 'Nhóm đã lưu trữ — không thể chuyển quyền' : (!selectedNewManager ? 'Chọn thành viên để chuyển quyền' : 'Chuyển quyền')}
+                                    className="px-4 py-2 text-sm font-medium bg-[var(--brand-600)] text-white rounded-lg hover:bg-[var(--brand-700)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                >
+                                    Chuyển quyền
+                                </button>
                         </div>
                     </div>
                 </div>

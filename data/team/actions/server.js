@@ -61,6 +61,25 @@ export async function listMy() {
     );
 }
 
+/** Liệt kê tất cả team (bao gồm archived) */
+export async function listMyAll() {
+    'use server';
+    return await runAction(
+        async ({ user }) => {
+            await connectDB();
+
+            if (user.role === 'admin') {
+                const teams = await Team.find({}).lean();
+                return teams.map(asPlainTeam);
+            }
+
+            const teams = await listByUser(user.externalUserId, { activeOnly: false });
+            return teams.map(asPlainTeam);
+        },
+        { requireAuth: true }
+    );
+}
+
 /** Liệt kê team mà user là manager (để chọn khi tạo project) */
 export async function listManagedTeams() {
     'use server';

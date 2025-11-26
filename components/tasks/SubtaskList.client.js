@@ -75,6 +75,15 @@ export default function SubtaskList({
         loadSubtasks();
     }, [loadSubtasks]);
 
+    // Determine whether parent task's project is active (if provided)
+    const projectActive = (() => {
+        const t = parentTask;
+        if (!t) return true;
+        if (t.project && typeof t.project === 'object' && 'isActive' in t.project) return t.project.isActive;
+        if ('projectIsActive' in t) return t.projectIsActive;
+        return true;
+    })();
+
     const handleSubtaskCreated = () => {
         loadSubtasks(); // Refresh list
     };
@@ -180,9 +189,16 @@ export default function SubtaskList({
 
             {/* Add subtask button */}
             <button
-                onClick={() => setShowCreateDialog(true)}
-                disabled={!canCreateSubtask}
-                title={!canCreateSubtask ? 'Bạn không có quyền tạo công việc con cho task này' : 'Thêm công việc con'}
+                onClick={() => {
+                    if (!canCreateSubtask) return;
+                    if (!projectActive) {
+                        alert('Dự án đã lưu trữ — không thể thêm việc con');
+                        return;
+                    }
+                    setShowCreateDialog(true);
+                }}
+                disabled={!canCreateSubtask || !projectActive}
+                title={!canCreateSubtask ? 'Bạn không có quyền tạo công việc con cho task này' : !projectActive ? 'Dự án đã lưu trữ — không thể thêm việc con' : 'Thêm công việc con'}
                 className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium border-2 border-dashed rounded-lg transition-colors ${
                     canCreateSubtask
                         ? 'text-[var(--brand-600)] bg-[var(--brand-50)] border-[var(--brand-200)] hover:bg-[var(--brand-100)] hover:border-[var(--brand-300)] cursor-pointer'
@@ -226,7 +242,7 @@ export default function SubtaskList({
             )}
             
             {/* Create Subtask Dialog */}
-            {canCreateSubtask && showCreateDialog && parentTask && (
+            {canCreateSubtask && showCreateDialog && parentTask && projectActive && (
                 <CreateSubtaskDialog
                     open={showCreateDialog}
                     onClose={() => setShowCreateDialog(false)}
@@ -238,6 +254,7 @@ export default function SubtaskList({
                     platforms={platforms}
                     currentUserId={currentUserId}
                     onSuccess={handleSubtaskCreated}
+                    isActive={projectActive}
                 />
             )}
         </div>

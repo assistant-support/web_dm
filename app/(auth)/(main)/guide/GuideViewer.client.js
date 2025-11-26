@@ -130,7 +130,7 @@ const MediaSection = ({ src, type, caption }) => {
 
     return (
         <div className="my-6">
-            <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-900 relative">
+            <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-gray-900 relative flex justify-center bg-gray-100">
                 {type === 'video' ? (
                     <div className="w-full aspect-video bg-black">
                         <iframe
@@ -144,15 +144,14 @@ const MediaSection = ({ src, type, caption }) => {
                     </div>
                 ) : (
                     <div className="relative w-full max-h-[500px]" style={{ height: 'auto' }}>
-                        <Image
-                            src={src}
-                            alt={caption || 'Minh họa'}
-                            className="object-contain"
-                            style={{ width: '100%', height: '100%' }}
-                            sizes="(max-width: 1024px) 100vw, 800px"
-                            fill
-                            priority={false}
-                        />
+                      <Image
+                        src={src}
+                        alt={caption || 'Minh họa'}
+                        width={0}
+                        height={0}
+                        sizes="100vw"
+                        className="w-full h-auto max-h-[500px] object-contain" 
+                    />
                     </div>
                 )}
             </div>

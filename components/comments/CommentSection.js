@@ -13,7 +13,7 @@ import { CommentForm } from './CommentForm.client';
  * @param {{ targetId: string, targetType: 'task' | 'project' }} props
  * @returns {Promise<JSX.Element>}
  */
-export default async function CommentSection({ targetId, targetType }) {
+export default async function CommentSection({ targetId, targetType, isActive = true }) {
     // Fetch initial comments on the server
     const initialComments = await commentData.findComments({ targetId });
 
@@ -21,7 +21,7 @@ export default async function CommentSection({ targetId, targetType }) {
         <div className="space-y-6">
             <h3 className="text-xl font-semibold border-b pb-2">Comments</h3>
             {/* The form is a client component for interactivity */}
-            <CommentForm targetId={targetId} targetType={targetType} />
+            <CommentForm targetId={targetId} targetType={targetType} isActive={isActive} />
             
             {/* The list is a server component that receives initial data */}
             <Suspense fallback={<p>Loading comments...</p>}>

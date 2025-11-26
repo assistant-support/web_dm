@@ -26,6 +26,15 @@ export default function SubtaskList({
     const router = useRouter();
     const [showCreateDialog, setShowCreateDialog] = useState(false);
 
+    // Determine project active state from parentTask (UI-level)
+    const projectActive = (() => {
+        const t = parentTask;
+        if (!t) return true;
+        if (t.project && typeof t.project === 'object' && 'isActive' in t.project) return t.project.isActive;
+        if ('projectIsActive' in t) return t.projectIsActive;
+        return true;
+    })();
+
     const hasSubtasks = subtasks && subtasks.length > 0;
     const currentUserId = currentUser?.externalUserId;
 
@@ -46,7 +55,12 @@ export default function SubtaskList({
                         variant="ghost"
                         size="sm"
                         icon={PlusCircle}
-                        onClick={() => setShowCreateDialog(true)}
+                        onClick={() => {
+                            if (!projectActive) return alert('Dự án đã lưu trữ — không thể thêm việc con');
+                            setShowCreateDialog(true);
+                        }}
+                        disabled={!projectActive}
+                        title={!projectActive ? 'Dự án đã lưu trữ — không thể thêm việc con' : undefined}
                         className="text-[var(--brand-600)] hover:bg-[var(--brand-50)]"
                     >
                         Thêm việc con
@@ -103,6 +117,7 @@ export default function SubtaskList({
                     currentUserId={currentUserId}
                     onSuccess={handleSubtaskCreated}
                     remainingPoints={remainingPoints} // [NEW]
+                    isActive={projectActive}
                 />
             )}
         </div>

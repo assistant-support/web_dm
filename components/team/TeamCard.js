@@ -1,5 +1,6 @@
 // components/team/TeamCard.js
-// Server Component - Hiển thị thông tin team card (không cần 'use client')
+// Client Component - Hiển thị thông tin team card
+"use client";
 
 import Link from 'next/link';
 import { Users, Calendar } from 'lucide-react';
@@ -34,7 +35,9 @@ export default function TeamCard({ team, currentUserId, prefetch = true }) {
         >
             <Card
                 hoverable
-                className={team.isActive ? '' : 'opacity-60'}
+                className={
+                    `${team.isActive ? '' : 'opacity-60'} h-40 flex flex-col justify-between`
+                }
             >
                 <div className="space-y-3">
                     {/* Header với name và badge */}

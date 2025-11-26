@@ -43,6 +43,14 @@ export default function WorkflowEditorCanvas({
     const [message, setMessage] = useState({ type: '', text: '' });
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
+    // Determine project active state from task (UI-level)
+    const projectActive = (() => {
+        if (!task) return true;
+        if (task.project && typeof task.project === 'object' && 'isActive' in task.project) return task.project.isActive;
+        if ('projectIsActive' in task) return task.projectIsActive;
+        return true;
+    })();
+
     const handleNodeMouseDown = (event, nodeKey) => {
         if (event.button !== 0) return;
         event.stopPropagation();
@@ -184,8 +192,13 @@ export default function WorkflowEditorCanvas({
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setCreateDialogOpen(true)}
-                            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
+                            onClick={() => {
+                                if (!projectActive) return alert('Dự án đã lưu trữ — không thể thêm task con');
+                                setCreateDialogOpen(true);
+                            }}
+                            disabled={!projectActive}
+                            title={!projectActive ? 'Dự án đã lưu trữ — không thể thêm task con' : undefined}
+                            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
                             <Plus className="h-4 w-4" />
                             Tạo task con
@@ -238,6 +251,7 @@ export default function WorkflowEditorCanvas({
                 allUsersWithDetails={allUsersWithDetails}
                 workTypes={workTypes}
                 onSuccess={handleSubtaskCreated}
+                isActive={projectActive}
             />
 
             <div

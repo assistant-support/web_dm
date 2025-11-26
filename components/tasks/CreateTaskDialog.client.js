@@ -111,6 +111,7 @@ export default function CreateTaskDialog({
     canManage = false,
     currentUserId = '',
     onSuccess
+    , isActive = true
 }) {
     const router = useRouter();
     const { run, Overlays, isLoading } = useAsyncNotifier({ enableNoti: false });
@@ -274,6 +275,11 @@ export default function CreateTaskDialog({
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (!isActive) {
+            setError('Dự án đã lưu trữ — không thể tạo nhiệm vụ');
+            return;
+        }
 
         if (!formData.title.trim()) {
             setError('Tiêu đề task là bắt buộc');
@@ -638,14 +644,14 @@ export default function CreateTaskDialog({
                         <button
                             type="button"
                             onClick={onClose}
-                            disabled={isLoading}
+                            disabled={isLoading || !isActive}
                             className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                         >
                             Hủy
                         </button>
                         <button
                             type="submit"
-                            disabled={!formData.title.trim() || isLoading}
+                            disabled={!formData.title.trim() || isLoading || !isActive}
                             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                         >
                             {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}

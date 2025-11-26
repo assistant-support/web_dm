@@ -126,6 +126,14 @@ export default function TaskItem({
     const { run } = useAsyncNotifier();
     const [isBlocking, setIsBlocking] = useState(false);
 
+    // Helper: determine whether the related project is active
+    const projectActive = (() => {
+        if (!task) return true;
+        if (task.project && typeof task.project === 'object' && 'isActive' in task.project) return task.project.isActive;
+        if ('projectIsActive' in task) return task.projectIsActive;
+        return true;
+    })();
+
     const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
     const [notifyRecipient, setNotifyRecipient] = useState(null);
     const [notifyContext, setNotifyContext] = useState('');
@@ -167,6 +175,10 @@ export default function TaskItem({
     const showPendingApproval = isSubtaskAssignee && isPendingCompletionReview && !canApproveOrReject;
 
     const handleConfirmAssignment = async (accept) => {
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         let note = '';
         if (!accept) {
             note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):');
@@ -188,6 +200,10 @@ export default function TaskItem({
     };
 
     const handleApproveCreation = async (approve) => {
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         let note = '';
         const initialPoints = task.initialPoints || 0;
         if (!approve) {
@@ -210,6 +226,10 @@ export default function TaskItem({
     };
 
     const handleApproveCompletion = async (approve) => {
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         let note = '';
         let finalPoints = task.initialPoints || 0;
         if (approve) {
@@ -257,8 +277,15 @@ export default function TaskItem({
 
     const handleEdit = (e) => { e.stopPropagation(); onEdit?.(task._id); };
 
+    // Guard edit to prevent opening edit when project archived
+    const handleEditGuarded = (e) => { e.stopPropagation(); if (!projectActive) { alert('Dự án đã lưu trữ — không thể chỉnh sửa nhiệm vụ'); return; } onEdit?.(task._id); };
+
     const handleDelete = async (e) => {
         e.stopPropagation();
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — không thể xóa nhiệm vụ');
+            return;
+        }
         if (!confirm('Bạn có chắc muốn XÓA vĩnh viễn nhiệm vụ này? Hành động này không thể hoàn tác.')) return;
         if (onDelete) {
             setIsBlocking(true);
@@ -276,8 +303,14 @@ export default function TaskItem({
 
     const handleAddSubtask = (e) => { e.stopPropagation(); onAddSubtask?.(task._id); };
 
+    const handleAddSubtaskGuarded = (e) => { e.stopPropagation(); if (!projectActive) { alert('Dự án đã lưu trữ — không thể thêm việc con'); return; } onAddSubtask?.(task._id); };
+
     const toggleStartOnHold = async (e) => {
         e.stopPropagation();
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         let targetStatus = TASK_STATUS.IN_PROGRESS;
         let loadingMsg = 'Đang bắt đầu công việc...';
         let successMsg = 'Đã bắt đầu công việc!';
@@ -312,6 +345,10 @@ export default function TaskItem({
 
     const handleMarkDoneClick = async (e) => {
         e.stopPropagation();
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         if (![TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status)) return;
 
         if (onUpdateStatus) {
@@ -339,6 +376,10 @@ export default function TaskItem({
 
     const handleCancelClick = async (e) => {
         e.stopPropagation();
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         if ([TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED].includes(task.status)) return;
         if (!confirm('Bạn có chắc muốn HỦY nhiệm vụ này?')) return;
         if (onUpdateStatus) {
@@ -357,6 +398,10 @@ export default function TaskItem({
 
     const handleRevertToDraft = async (e) => {
         e.stopPropagation();
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
         if (!confirm('Chắc chắn đưa task về trạng thái NHÁP để sửa/giao lại?')) return;
         if (!onUpdateStatus) return;
         setIsBlocking(true);

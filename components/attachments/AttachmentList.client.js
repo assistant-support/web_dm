@@ -17,6 +17,7 @@ export default function AttachmentList({
     currentUser,
     canManage,
     initialCount = 0,
+    isActive = true,
 }) {
     const [attachments, setAttachments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -116,8 +117,10 @@ export default function AttachmentList({
 
                 {!isCollapsed && !showUpload && (
                      <Button
-                        onClick={() => setShowUpload(true)}
+                        onClick={() => isActive && setShowUpload(true)}
                         variant="outline"
+                        disabled={!isActive}
+                        title={!isActive ? 'Dự án/Task đã lưu trữ — không thể tải lên tệp' : undefined}
                     >
                         Thêm file
                     </Button>
@@ -151,6 +154,7 @@ export default function AttachmentList({
                                 projectId={projectId}
                                 scope={scope}
                                 onUploaded={handleUploaded}
+                                isActive={isActive}
                             />
                         </div>
                     )}
