@@ -59,7 +59,7 @@ export async function whoAmI() {
 export async function updatePreferences(patch) {
     return runAction(
         async ({ user }) => {
-            assert(patch && typeof patch === 'object', 'PATCH_INVALID');
+            assert(patch && typeof patch === 'object', 'Dữ liệu cập nhật không hợp lệ.', 'BAD_REQUEST', 400);
 
             await connectDB();
 
@@ -100,7 +100,7 @@ export async function setColor(color) {
             await connectDB();
 
             const c = safeString(color).slice(0, 32);
-            assert(c, 'COLOR_REQUIRED');
+            assert(c, 'Vui lòng chọn màu sắc.', 'BAD_REQUEST', 400);
 
             const doc =
                 (await AppUser.findOne({ externalUserId: user.externalUserId })) ||
@@ -220,7 +220,7 @@ export async function getUserSettings({ userId } = {}) {
             // Only allow users to view their own settings
             assert(
                 String(targetUserId) === String(user.externalUserId),
-                'FORBIDDEN',
+                'Bạn không có quyền xem cài đặt của người dùng khác.',
                 'FORBIDDEN',
                 403
             );
@@ -322,10 +322,10 @@ const EXTERNAL_API_URL = "https://account.s4h.edu.vn/api/useruid";
 export async function updateUserUid(externalUserId, newUid) {
   // --- 1. Validate đầu vào ---
   if (!externalUserId) {
-    return { success: false, error: "External User ID is required." };
+    return { success: false, error: "Thiếu thông tin người dùng (External User ID)." };
   }
   if (!newUid || typeof newUid !== "string") {
-    return { success: false, error: "New UID is required and must be a string." };
+    return { success: false, error: "UID mới là bắt buộc và phải là chuỗi ký tự." };
   }
 
   try {
@@ -340,7 +340,7 @@ export async function updateUserUid(externalUserId, newUid) {
 
     if (!updatedLocalUser) {
       // Không tìm thấy user nội bộ để cập nhật
-      return { success: false, error: `Local AppUser not found for externalId: ${externalUserId}` };
+      return { success: false, error: `Không tìm thấy người dùng trong hệ thống với ID: ${externalUserId}` };
     }
 
     // --- 3. Gọi API bên ngoài để đồng bộ ---
@@ -363,7 +363,7 @@ export async function updateUserUid(externalUserId, newUid) {
       const errorData = await apiResponse.json().catch(() => ({}));
       return {
         success: false,
-        error: `Failed to sync with external API: ${apiResponse.statusText}`,
+        error: `Đồng bộ với hệ thống bên ngoài thất bại: ${apiResponse.statusText}`,
         details: errorData,
         localUser: updatedLocalUser, // Trả về user local đã được cập nhật
       };
@@ -390,9 +390,9 @@ export async function updateUserUid(externalUserId, newUid) {
     
     // Xử lý lỗi nếu UID đã tồn tại (do 'unique: true' trên model)
     if (error.code === 11000) {
-      return { success: false, error: "This UID is already in use locally." };
+      return { success: false, error: "UID này đã được sử dụng trong hệ thống." };
     }
     
-    return { success: false, error: error.message || "An unknown server error occurred." };
+    return { success: false, error: error.message || "Đã xảy ra lỗi máy chủ không xác định." };
   }
 }

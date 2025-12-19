@@ -29,12 +29,12 @@ export async function approveTaskCreation(taskId, { approve, note, initialPoints
         const uid = user.externalUserId;
 
         const task = await Task.findById(taskId);
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
-        assert(task.status === TASK_STATUS.PENDING_APPROVAL, 'Task không ở trạng thái chờ duyệt', 'BAD_REQUEST', 400);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(task.status === TASK_STATUS.PENDING_APPROVAL, 'Công việc không ở trạng thái chờ duyệt.', 'BAD_REQUEST', 400);
 
         const project = await Project.findById(task.project);
-        assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-        assert(canManageProject(project, user), 'Bạn không có quyền duyệt task', 'FORBIDDEN', 403);
+        assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(canManageProject(project, user), 'Bạn không có quyền duyệt công việc này.', 'FORBIDDEN', 403);
 
         if (approve) {
             task.approval.status = APPROVAL_STATUS.APPROVED;
@@ -119,9 +119,9 @@ export async function confirmAssignment(taskId, { accept, note }) {
         const uid = user.externalUserId;
 
         const task = await Task.findById(taskId);
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
-        assert(task.assignee === uid, 'Bạn không phải là người được assign', 'FORBIDDEN', 403);
-        assert(task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, 'Task không ở trạng thái chờ xác nhận', 'BAD_REQUEST', 400);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(task.assignee === uid, 'Bạn không phải là người được giao công việc này.', 'FORBIDDEN', 403);
+        assert(task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, 'Công việc không ở trạng thái chờ xác nhận.', 'BAD_REQUEST', 400);
 
         if (accept) {
             task.assigneeConfirm.confirmedBy = uid;
@@ -175,8 +175,8 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
 
         const task = await Task.findById(taskId);
 
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
-        assert(task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW, 'Task không ở trạng thái chờ duyệt hoàn thành', 'BAD_REQUEST', 400);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW, 'Công việc không ở trạng thái chờ duyệt hoàn thành.', 'BAD_REQUEST', 400);
 
         // Kiểm tra và cảnh báo nếu task có subtasks chưa hoàn thành
         const pendingSubtasks = await Task.countDocuments({
@@ -191,12 +191,12 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
         }
 
         const project = await Project.findById(task.project);
-        assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-        assert(canManageProject(project, user), 'Bạn không có quyền duyệt hoàn thành task', 'FORBIDDEN', 403);
+        assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(canManageProject(project, user), 'Bạn không có quyền duyệt hoàn thành công việc này.', 'FORBIDDEN', 403);
 
         if (approve) {
             const points = Number(finalPoints) || 0;
-            assert(points >= 0, 'Điểm phải là số không âm', 'BAD_REQUEST', 400);
+            assert(points >= 0, 'Điểm số phải là số không âm.', 'BAD_REQUEST', 400);
             
             // Nếu là subtask, validate không vượt quá parent
             if (task.parentTask) {
@@ -204,7 +204,7 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
                 if (parentTask) {
                     assert(
                         points <= parentTask.initialPoints, 
-                        `Điểm subtask (${points}) không được vượt quá điểm parent task (${parentTask.initialPoints})`,
+                        `Điểm công việc con (${points}) không được vượt quá điểm công việc cha (${parentTask.initialPoints}).`,
                         'BAD_REQUEST',
                         400
                     );
@@ -222,7 +222,7 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
                 const totalSubtaskPoints = subtasks.reduce((sum, st) => sum + (st.finalPoints || 0), 0);
                 assert(
                     totalSubtaskPoints <= points,
-                    `Tổng điểm của các subtasks (${totalSubtaskPoints}) không được vượt quá điểm task này (${points})`,
+                    `Tổng điểm của các công việc con (${totalSubtaskPoints}) không được vượt quá điểm công việc này (${points}).`,
                     'BAD_REQUEST',
                     400
                 );

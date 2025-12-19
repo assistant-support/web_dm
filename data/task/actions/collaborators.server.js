@@ -33,7 +33,7 @@ export async function inviteCollaborator(taskId, { userId, role = 'contributor' 
         const uid = user.externalUserId;
         
         const task = await Task.findById(taskId);
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task, 'Không tìm thấy công việc', 'NOT_FOUND', 404);
         
         // Check permission: chỉ assignee hoặc manager mới mời được
         let canInvite = false;
@@ -127,7 +127,7 @@ export async function removeCollaboratorFromTask(taskId, userId) {
         const uid = user.externalUserId;
         
         const task = await Task.findById(taskId);
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task, 'Không tìm thấy công việc', 'NOT_FOUND', 404);
         
         // Check permission
         let canRemove = false;
@@ -172,7 +172,7 @@ export async function listTaskCollaborators(taskId) {
         const uid = user.externalUserId;
 
         const task = await Task.findById(taskId).lean();
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task, 'Không tìm thấy công việc', 'NOT_FOUND', 404);
         
         const userId = String(uid);
         const watchers = Array.isArray(task.watchers) ? task.watchers.map(String) : [];

@@ -93,6 +93,12 @@ export default function KanbanCard({ task }) {
                     <h4 className="text-sm font-medium text-gray-900 line-clamp-2">
                         {task.title}
                     </h4>
+                    {task.parentTask && (
+                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <span className="rotate-90 inline-block">↳</span>
+                            <span className="truncate">{task.parentTaskTitle || 'Task cha'}</span>
+                        </div>
+                    )}
                 </div>
             </div>
 

@@ -26,8 +26,8 @@ export async function getActivities(payload) {
 
             // Tối ưu: Dùng getById từ repo (có React.cache)
             const team = await getById(teamId, { lean: true });
-            assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
-            assert(await isTeamMember(team, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm', 'NOT_FOUND', 404);
+            assert(await isTeamMember(team, uid), 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
 
             const activities = await ActivityLog.find({ team: teamId })
                 .sort({ createdAt: -1 })

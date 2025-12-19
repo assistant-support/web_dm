@@ -17,7 +17,7 @@ import Project from '@/model/project.model.js';
 import { canViewProject } from '@/lib/permissions.js';
 
 /** Zod validate cho ym & ids */
-const ymSchema = z.string().regex(/^\d{4}-\d{2}$/, 'ym phải có dạng YYYY-MM');
+const ymSchema = z.string().regex(/^\d{4}-\d{2}$/, 'Định dạng tháng phải là YYYY-MM.');
 const idSchema = z.string().min(1);
 
 /** Action: Báo cáo tháng theo user (self-only) */
@@ -33,7 +33,7 @@ export async function userMonthly(payload) {
             const isAdmin = user.role === 'admin';
             assert(
                 isAdmin || String(target) === String(uid),
-                'Bạn chỉ xem được báo cáo của chính bạn',
+                'Bạn chỉ có quyền xem báo cáo của chính mình.',
                 'FORBIDDEN',
                 403
             );
@@ -58,9 +58,9 @@ export async function projectSummary(payload) {
                 .object({ projectId: idSchema, ym: ymSchema })
                 .parse(payload || {});
             const project = await Project.findById(projectId).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
             // dùng await để an toàn nếu helpers async
-            assert(await canViewProject(project, user), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem báo cáo của dự án này.', 'FORBIDDEN', 403);
 
             const data = await projectSummaryAgg(projectId, ym);
 
@@ -94,7 +94,7 @@ export async function getUserReportData(payload) {
             const isAdmin = user.role === 'admin';
             assert(
                 isAdmin || String(targetUser) === String(uid),
-                'Bạn chỉ xem được báo cáo của chính bạn',
+                'Bạn chỉ có quyền xem báo cáo của chính mình.',
                 'FORBIDDEN',
                 403
             );

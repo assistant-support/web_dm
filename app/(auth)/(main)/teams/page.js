@@ -78,7 +78,7 @@ export default async function TeamsPage({ searchParams }) {
 
     return (
         <div className="space-y-6 w-full flex flex-col">
-            <div className="sticky top-0 bg-white z-10 p-4 rounded-md border border-gray-200">
+            <div className="sticky top-0 bg-white p-4 rounded-md border border-gray-200">
                 <div className="max-w-full px-0">
                     <div className="flex items-center justify-between gap-3">
                         <div>

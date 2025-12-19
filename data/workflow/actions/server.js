@@ -45,10 +45,10 @@ export async function create(payload) {
             const data = validate(workflowCreateSchema, payload);
 
             const project = await Project.findById(data.projectId).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
             assert(
                 await canManageProject(project, user),
-                'Bạn không có quyền quản lý workflow của project này',
+                'Bạn không có quyền quản lý quy trình làm việc của dự án này.',
                 'FORBIDDEN',
                 403
             );
@@ -85,12 +85,12 @@ export async function update(payload) {
             const { workflowId, patch } = validate(workflowUpdateSchema, payload);
 
             const wfDoc = await Workflow.findById(workflowId).lean();
-            assert(wfDoc, 'Workflow không tồn tại', 'NOT_FOUND', 404);
+            assert(wfDoc, 'Quy trình làm việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
                 await canManageProject(project, user),
-                'Bạn không có quyền quản lý workflow của project này',
+                'Bạn không có quyền quản lý quy trình làm việc của dự án này.',
                 'FORBIDDEN',
                 403
             );
@@ -120,12 +120,12 @@ export async function attachTask(payload) {
             const { workflowId, nodeKey, taskId } = validate(attachTaskSchema, payload);
 
             const wfDoc = await Workflow.findById(workflowId).lean();
-            assert(wfDoc, 'Workflow không tồn tại', 'NOT_FOUND', 404);
+            assert(wfDoc, 'Quy trình làm việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
                 await canManageProject(project, user),
-                'Bạn không có quyền quản lý workflow của project này',
+                'Bạn không có quyền quản lý quy trình làm việc của dự án này.',
                 'FORBIDDEN',
                 403
             );
@@ -155,12 +155,12 @@ export async function activate(payload) {
             const { workflowId } = validate(activateSchema, payload);
 
             const wfDoc = await Workflow.findById(workflowId).lean();
-            assert(wfDoc, 'Workflow không tồn tại', 'NOT_FOUND', 404);
+            assert(wfDoc, 'Quy trình làm việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
                 await canManageProject(project, user),
-                'Bạn không có quyền quản lý workflow của project này',
+                'Bạn không có quyền quản lý quy trình làm việc của dự án này.',
                 'FORBIDDEN',
                 403
             );
@@ -190,12 +190,12 @@ export async function deactivate(payload) {
             const { workflowId } = validate(deactivateSchema, payload);
 
             const wfDoc = await Workflow.findById(workflowId).lean();
-            assert(wfDoc, 'Workflow không tồn tại', 'NOT_FOUND', 404);
+            assert(wfDoc, 'Quy trình làm việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(wfDoc.project).lean();
             assert(
                 await canManageProject(project, user),
-                'Bạn không có quyền quản lý workflow của project này',
+                'Bạn không có quyền quản lý quy trình làm việc của dự án này.',
                 'FORBIDDEN',
                 403
             );
@@ -225,10 +225,10 @@ export async function getByProjectAction(payload) {
             const { projectId } = validate(getByProjectSchema, payload);
 
             const project = await Project.findById(projectId).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
             assert(
                 await canViewProject(project, user),
-                'Bạn không có quyền xem workflow của project này',
+                'Bạn không có quyền xem quy trình làm việc của dự án này.',
                 'FORBIDDEN',
                 403
             );
@@ -260,16 +260,16 @@ export async function createTaskWorkflow(parentTaskId, { name, nodes, edges }) {
                 select: '_id name members',
             })
             .lean();
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
         
         const project = task.project;
-        assert(project, 'Dự án của task không tồn tại', 'NOT_FOUND', 404);
+        assert(project, 'Dự án của công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
         
         // Kiểm tra quyền: Phải là Project Manager hoặc người tạo task
         const canCreate = canManageProject(project, user) || String(task.createdBy) === String(uid);
         assert(
             canCreate,
-            'Chỉ quản lý dự án hoặc người tạo task mới có quyền tạo workflow',
+            'Chỉ quản lý dự án hoặc người tạo công việc mới có quyền tạo quy trình làm việc.',
             'FORBIDDEN',
             403
         );
@@ -331,7 +331,7 @@ export async function getTaskWorkflow(taskId) {
     return runAction(async () => {
         const Task = (await import('@/model/task.model.js')).default;
         const task = await Task.findById(taskId).lean();
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
         
         if (!task.workflowId) return null;
         
@@ -374,14 +374,14 @@ export async function updateNodeStatus(workflowId, nodeKey, status) {
         const Task = (await import('@/model/task.model.js')).default;
         
         const workflow = await Workflow.findById(workflowId);
-        assert(workflow, 'Workflow không tồn tại', 'NOT_FOUND', 404);
+        assert(workflow, 'Quy trình làm việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
         
         if (workflow.parentTask) {
             const task = await Task.findById(workflow.parentTask);
             // Allow assignee OR admin
             const isAssignee = task?.assignee === uid;
             const isAdmin = user.role === 'admin';
-            assert(isAssignee || isAdmin, 'Bạn không có quyền cập nhật workflow', 'FORBIDDEN', 403);
+            assert(isAssignee || isAdmin, 'Bạn không có quyền cập nhật quy trình làm việc này.', 'FORBIDDEN', 403);
         }
         
         const updated = await updateWorkflowNodeStatus(workflowId, nodeKey, status);

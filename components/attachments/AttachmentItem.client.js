@@ -118,7 +118,7 @@ export default function AttachmentItem({ attachment, canDelete, onDeleted, viewM
         setIsDeleting(true);
         try {
             const result = await deleteAttachment({ attachmentId: attachment.id });
-            if (result?._removed) {
+            if (result?.ok) {
                 onDeleted?.(attachment.id);
             } else {
                 alert('Không thể xóa tệp');

@@ -1,16 +1,30 @@
 // components/layout/NotificationBell.client.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
+import Link from 'next/link';
 import { Bell, Check, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import Dropdown from '@/components/ui/dropdown';
+import Dropdown, { DropdownContext } from '@/components/ui/dropdown';
 import {
     getMyNotifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
 } from '@/data/noti/actions/list';
+
+function ViewAllLink() {
+    const { setIsOpen } = useContext(DropdownContext);
+    return (
+        <Link 
+            href="/notifications"
+            className="text-sm text-blue-600 hover:text-blue-700 hover:underline block w-full"
+            onClick={() => setIsOpen(false)}
+        >
+            Xem tất cả thông báo
+        </Link>
+    );
+}
 
 /**
  * NotificationBell - Notification dropdown with real-time updates
@@ -209,9 +223,7 @@ export default function NotificationBell({ currentUser }) {
                 {/* Footer */}
                 {notifications.length > 0 && (
                     <div className="px-4 py-2 border-t border-gray-200 text-center">
-                        <button className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
-                            Xem tất cả thông báo
-                        </button>
+                        <ViewAllLink />
                     </div>
                 )}
             </Dropdown.Content>

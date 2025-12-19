@@ -11,10 +11,11 @@ import Notification from '@/model/notification.model.js';
  * Get notifications for current user
  * @param {Object} options - Query options
  * @param {number} options.limit - Maximum number of notifications to return (default: 20)
+ * @param {number} options.skip - Number of notifications to skip (default: 0)
  * @param {boolean} options.unreadOnly - If true, only return unread notifications (default: false)
  * @returns {Promise<{notifications: Array, unreadCount: number}>}
  */
-export async function getMyNotifications({ limit = 20, unreadOnly = false } = {}) {
+export async function getMyNotifications({ limit = 20, skip = 0, unreadOnly = false } = {}) {
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
@@ -28,6 +29,7 @@ export async function getMyNotifications({ limit = 20, unreadOnly = false } = {}
         const notifications = await Notification
             .find(query)
             .sort({ createdAt: -1 })
+            .skip(skip)
             .limit(limit)
             .lean();
 
@@ -90,7 +92,7 @@ export async function markNotificationAsRead(notificationId) {
             return {
                 ok: false,
                 code: 'NOT_FOUND',
-                message: 'Notification not found or access denied',
+                message: 'Không tìm thấy thông báo hoặc bạn không có quyền truy cập',
             };
         }
 

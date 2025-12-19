@@ -126,8 +126,9 @@ export async function removeMember(teamId, userId) {
     }
 
     if (target.role === TEAM_ROLE.MANAGER) {
-        const managerCount = members.filter((m) => m.role === TEAM_ROLE.MANAGER).length;
-        if (managerCount <= 1) {
+        // Fix: Count both MANAGER and OWNER as admins
+        const adminCount = members.filter((m) => m.role === TEAM_ROLE.MANAGER || m.role === TEAM_ROLE.OWNER).length;
+        if (adminCount <= 1) {
             throw new Error('LAST_MANAGER');
         }
     }
@@ -155,8 +156,9 @@ export async function changeMemberRole(teamId, userId, role) {
     }
 
     if (target.role === TEAM_ROLE.MANAGER && role !== TEAM_ROLE.MANAGER) {
-        const managerCount = members.filter((m) => m.role === TEAM_ROLE.MANAGER).length;
-        if (managerCount <= 1) {
+        // Fix: Count both MANAGER and OWNER as admins
+        const adminCount = members.filter((m) => m.role === TEAM_ROLE.MANAGER || m.role === TEAM_ROLE.OWNER).length;
+        if (adminCount <= 1) {
             throw new Error('LAST_MANAGER');
         }
     }

@@ -16,8 +16,8 @@ import * as projectData from '@/data/project.data';
 
 // Zod schema for creating a task
 const CreateTaskSchema = z.object({
-    title: z.string().min(1, 'Title is required.'),
-    projectId: z.string().min(1, 'Project ID is required.'),
+    title: z.string().min(1, 'Tiêu đề là bắt buộc.'),
+    projectId: z.string().min(1, 'ID dự án là bắt buộc.'),
     description: z.string().optional(),
     status: z.string().optional(),
 });
@@ -43,7 +43,7 @@ const UpdateTaskPlanSchema = z.object({
 export async function createTask(formData) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, data: null, error: 'Unauthorized' };
+        return { success: false, data: null, error: 'Bạn chưa đăng nhập.' };
     }
 
     const rawFormData = Object.fromEntries(formData.entries());
@@ -58,7 +58,7 @@ export async function createTask(formData) {
     try {
         const project = await projectData.findProjectById(projectId);
         if (!project || !canViewProject(project, user.id)) {
-            return { success: false, data: null, error: 'Permission denied or project not found.' };
+            return { success: false, data: null, error: 'Bạn không có quyền thực hiện hoặc dự án không tồn tại.' };
         }
 
         const newTask = await taskData.createTask({
@@ -85,7 +85,7 @@ export async function createTask(formData) {
         return { success: true, data: newTask, error: null };
     } catch (error) {
         console.error('Error creating task:', error);
-        return { success: false, data: null, error: 'Failed to create task.' };
+        return { success: false, data: null, error: 'Tạo công việc thất bại.' };
     }
 }
 
@@ -98,16 +98,16 @@ export async function createTask(formData) {
 export async function updateTask(taskId, formData) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, data: null, error: 'Unauthorized' };
+        return { success: false, data: null, error: 'Bạn chưa đăng nhập.' };
     }
 
     const task = await taskData.findTaskById(taskId);
     if (!task) {
-        return { success: false, data: null, error: 'Task not found.' };
+        return { success: false, data: null, error: 'Công việc không tồn tại hoặc đã bị xóa.' };
     }
 
     if (!canEditTask(task, user.id)) {
-        return { success: false, data: null, error: 'Permission denied.' };
+        return { success: false, data: null, error: 'Bạn không có quyền thực hiện thao tác này.' };
     }
     
     const updateData = Object.fromEntries(formData.entries());
@@ -131,7 +131,7 @@ export async function updateTask(taskId, formData) {
         return { success: true, data: updatedTask, error: null };
     } catch (error) {
         console.error(`Error updating task ${taskId}:`, error);
-        return { success: false, data: null, error: 'Failed to update task.' };
+        return { success: false, data: null, error: 'Cập nhật công việc thất bại.' };
     }
 }
 
@@ -143,17 +143,17 @@ export async function updateTask(taskId, formData) {
 export async function deleteTask(taskId) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: 'Bạn chưa đăng nhập.' };
     }
 
     const task = await taskData.findTaskById(taskId);
     if (!task) {
-        return { success: false, error: 'Task not found.' };
+        return { success: false, error: 'Công việc không tồn tại hoặc đã bị xóa.' };
     }
 
     // Typically, only project managers or the task creator can delete.
     if (!canEditTask(task, user.id)) {
-        return { success: false, error: 'Permission denied.' };
+        return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
     }
 
     try {
@@ -174,7 +174,7 @@ export async function deleteTask(taskId) {
         return { success: true, error: null };
     } catch (error) {
         console.error(`Error deleting task ${taskId}:`, error);
-        return { success: false, error: 'Failed to delete task.' };
+        return { success: false, error: 'Xóa công việc thất bại.' };
     }
 }
 
@@ -189,22 +189,22 @@ export async function deleteTask(taskId) {
 export async function updateTaskStatus(taskId, { status, order }) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: 'Bạn chưa đăng nhập.' };
     }
 
     const validation = UpdateTaskStatusSchema.safeParse({ status, order });
     if (!validation.success) {
-        return { success: false, error: 'Invalid status or order.' };
+        return { success: false, error: 'Trạng thái hoặc thứ tự không hợp lệ.' };
     }
 
     const task = await taskData.findTaskById(taskId);
     if (!task) {
-        return { success: false, error: 'Task not found.' };
+        return { success: false, error: 'Công việc không tồn tại hoặc đã bị xóa.' };
     }
 
     // Use canEditTask or a more specific permission for moving tasks
     if (!canEditTask(task, user.id)) {
-        return { success: false, error: 'Permission denied to move task.' };
+        return { success: false, error: 'Bạn không có quyền di chuyển công việc này.' };
     }
 
     try {
@@ -228,7 +228,7 @@ export async function updateTaskStatus(taskId, { status, order }) {
         return { success: true, error: null };
     } catch (error) {
         console.error(`Error updating task status for ${taskId}:`, error);
-        return { success: false, error: 'Failed to update task status.' };
+        return { success: false, error: 'Cập nhật trạng thái công việc thất bại.' };
     }
 }
 
@@ -242,21 +242,21 @@ export async function updateTaskStatus(taskId, { status, order }) {
 export async function updateTaskPlan(taskId, plannedStartAt, plannedDueAt) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: 'Bạn chưa đăng nhập.' };
     }
 
     const validation = UpdateTaskPlanSchema.safeParse({ plannedStartAt, plannedDueAt });
     if (!validation.success) {
-        return { success: false, error: 'Invalid date format.' };
+        return { success: false, error: 'Định dạng ngày tháng không hợp lệ.' };
     }
 
     const task = await taskData.findTaskById(taskId);
     if (!task) {
-        return { success: false, error: 'Task not found.' };
+        return { success: false, error: 'Công việc không tồn tại hoặc đã bị xóa.' };
     }
 
     if (!canEditTask(task, user.id)) {
-        return { success: false, error: 'Permission denied.' };
+        return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
     }
 
     try {
@@ -279,6 +279,6 @@ export async function updateTaskPlan(taskId, plannedStartAt, plannedDueAt) {
         return { success: true, error: null };
     } catch (error) {
         console.error(`Error updating task plan for ${taskId}:`, error);
-        return { success: false, error: 'Failed to update task plan.' };
+        return { success: false, error: 'Cập nhật kế hoạch công việc thất bại.' };
     }
 }

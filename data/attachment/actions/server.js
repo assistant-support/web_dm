@@ -78,8 +78,8 @@ export async function createAttachment(formData) {
             let projectId = formData.get('projectId');
             const scope = formData.get('scope');
 
-            assert(file, 'Thiếu file', 'VALIDATION', 400);
-            assert(scope, 'Thiếu scope', 'VALIDATION', 400);
+            assert(file, 'Vui lòng chọn tệp tin.', 'VALIDATION', 400);
+            assert(scope, 'Thiếu thông tin phạm vi (scope).', 'VALIDATION', 400);
 
             // Convert file to buffer
             const buffer = Buffer.from(await file.arrayBuffer());
@@ -87,24 +87,24 @@ export async function createAttachment(formData) {
             // Validate task if scope is task
             let task = null;
             if (scope === 'task') {
-                assert(taskId, 'Thiếu taskId', 'VALIDATION', 400);
+                assert(taskId, 'Thiếu thông tin công việc (taskId).', 'VALIDATION', 400);
                 task = await Task.findById(taskId).lean();
-                assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+                assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
                 // Get projectId from task if not provided
                 projectId = projectId || String(task.project);
             } else {
-                assert(projectId, 'Thiếu projectId', 'VALIDATION', 400);
+                assert(projectId, 'Thiếu thông tin dự án (projectId).', 'VALIDATION', 400);
             }
 
             // Validate project
             const project = await Project.findById(projectId).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             // Verify task belongs to project if scope is task
             if (scope === 'task') {
                 assert(
                     String(task.project) === String(project._id),
-                    'Task không thuộc project',
+                    'Công việc không thuộc dự án này.',
                     'BAD_REQUEST',
                     400
                 );
@@ -118,7 +118,7 @@ export async function createAttachment(formData) {
                 assert(
                     (await canManageProject(project, user)) ||
                     (allowMembers && (await canViewProject(project, user))),
-                    'Bạn không có quyền upload vào project',
+                    'Bạn không có quyền tải tệp lên dự án này.',
                     'FORBIDDEN',
                     403
                 );
@@ -126,7 +126,7 @@ export async function createAttachment(formData) {
                 const taskForPerm = task ? { ...task, project } : null;
                 assert(
                     await canEditTask(taskForPerm, user),
-                    'Bạn không có quyền upload vào task',
+                    'Bạn không có quyền tải tệp lên công việc này.',
                     'FORBIDDEN',
                     403
                 );
@@ -222,14 +222,14 @@ export async function upload(payload) {
             const uid = user.externalUserId;
 
             const project = await Project.findById(input.projectId).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const task = input.taskId ? await Task.findById(input.taskId).lean() : null;
             if (input.scope === 'task') {
-                assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+                assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
                 assert(
                     String(task.project) === String(project._id),
-                    'Task không thuộc project',
+                    'Công việc không thuộc dự án này.',
                     'BAD_REQUEST',
                     400
                 );
@@ -243,7 +243,7 @@ export async function upload(payload) {
                 assert(
                     (await canManageProject(project, user)) ||
                     (allowMembers && (await canViewProject(project, user))),
-                    'Bạn không có quyền upload vào project',
+                    'Bạn không có quyền tải tệp lên dự án này.',
                     'FORBIDDEN',
                     403
                 );
@@ -252,7 +252,7 @@ export async function upload(payload) {
                 const taskForPerm = task ? { ...task, project } : null;
                 assert(
                     await canEditTask(taskForPerm, user),
-                    'Bạn không có quyền upload vào task',
+                    'Bạn không có quyền tải tệp lên công việc này.',
                     'FORBIDDEN',
                     403
                 );
@@ -325,12 +325,12 @@ export async function listProjectAttachments(projectId) {
     await connectDB();
     return runAction(
         async ({ user }) => {
-            assert(projectId, 'Thiếu projectId');
+            assert(projectId, 'Thiếu thông tin dự án (projectId).');
             const uid = user.externalUserId;
 
             const project = await Project.findById(projectId).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-            assert(await canViewProject(project, user), 'Bạn không có quyền xem project này', 'FORBIDDEN', 403);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem dự án này.', 'FORBIDDEN', 403);
 
             const items = await listByProject(projectId);
             // Serialize để tránh lỗi MongoDB ObjectId
@@ -344,15 +344,15 @@ export async function listTaskAttachments(taskId) {
     await connectDB();
     return runAction(
         async ({ user }) => {
-            assert(taskId, 'Thiếu taskId');
+            assert(taskId, 'Thiếu thông tin công việc (taskId).');
             const uid = user.externalUserId;
 
             const task = await Task.findById(taskId).lean();
-            assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+            assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(task.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-            assert(await canViewProject(project, user), 'Bạn không có quyền xem task này', 'FORBIDDEN', 403);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem công việc này.', 'FORBIDDEN', 403);
 
             const items = await listByTask(taskId);
             // Serialize để tránh lỗi MongoDB ObjectId
@@ -370,14 +370,14 @@ export async function rename(payload) {
             const uid = user.externalUserId;
 
             const att = await Attachment.findById(input.attachmentId).lean();
-            assert(att, 'Attachment không tồn tại', 'NOT_FOUND', 404);
+            assert(att, 'Tệp đính kèm không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(att.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const isOwner = String(att.author) === String(uid);
             const isMgr = await canManageProject(project, user);
-            assert(isOwner || isMgr, 'Không có quyền đổi tên', 'FORBIDDEN', 403);
+            assert(isOwner || isMgr, 'Bạn không có quyền đổi tên tệp này.', 'FORBIDDEN', 403);
 
             if (att.driveFileId) await renameDriveFile({ driveFileId: att.driveFileId, name: input.name });
             const updated = await renameAttachment(input.attachmentId, input.name, { byUserId: uid });
@@ -416,15 +416,15 @@ export async function move(payload) {
             const uid = user.externalUserId;
 
             const att = await Attachment.findById(input.attachmentId).lean();
-            assert(att, 'Attachment không tồn tại', 'NOT_FOUND', 404);
+            assert(att, 'Tệp đính kèm không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(att.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             // Cùng project
             assert(
                 String(input.to.projectId) === String(att.project),
-                'Không hỗ trợ cross-project',
+                'Không hỗ trợ di chuyển tệp giữa các dự án khác nhau.',
                 'BAD_REQUEST',
                 400
             );
@@ -434,7 +434,7 @@ export async function move(payload) {
             if (toTask) {
                 assert(
                     String(toTask.project) === String(project._id),
-                    'Task đích không thuộc project',
+                    'Công việc đích không thuộc dự án này.',
                     'BAD_REQUEST',
                     400
                 );
@@ -455,7 +455,7 @@ export async function move(payload) {
                 ? await canEditTask({ ...toTask, project }, user)
                 : await canViewProject(project, user);
 
-            assert(isMgr || (canEditSource && canEditDest), 'Không có quyền move', 'FORBIDDEN', 403);
+            assert(isMgr || (canEditSource && canEditDest), 'Bạn không có quyền di chuyển tệp này.', 'FORBIDDEN', 403);
 
             const parentId =
                 input.to.scope === 'project'
@@ -515,14 +515,14 @@ export async function remove(payload) {
             const uid = user.externalUserId;
 
             const att = await Attachment.findById(input.attachmentId).lean();
-            assert(att, 'Attachment không tồn tại', 'NOT_FOUND', 404);
+            assert(att, 'Tệp đính kèm không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(att.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const isOwner = String(att.author) === String(uid);
             const isMgr = await canManageProject(project, user);
-            assert(isOwner || isMgr, 'Không có quyền xóa', 'FORBIDDEN', 403);
+            assert(isOwner || isMgr, 'Bạn không có quyền xóa tệp này.', 'FORBIDDEN', 403);
 
             const hard = String(process.env.ATTACHMENTS_DELETE || '').toLowerCase() === 'hard';
             if (hard && att.driveFileId) {

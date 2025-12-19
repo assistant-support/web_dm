@@ -23,12 +23,12 @@ export async function uploadFileToTaskAction(formData) {
         const task = await Task.findById(taskId).select('docs fileIds attachmentsCount').lean();
 
         if (!task) {
-            return { success: false, error: 'Không tìm thấy Task với ID đã cho.' };
+            return { success: false, error: 'Không tìm thấy công việc với ID đã cho.' };
         }
 
         const parentId = task.docs?.driveFolderId;
         if (!parentId) {
-            return { success: false, error: 'Task này chưa được liên kết với thư mục Drive. Vui lòng tạo folder Drive cho task trước.' };
+            return { success: false, error: 'Công việc này chưa được liên kết với thư mục Drive. Vui lòng tạo thư mục Drive cho công việc trước.' };
         }
 
         const arrayBuffer = await file.arrayBuffer();
@@ -42,7 +42,7 @@ export async function uploadFileToTaskAction(formData) {
         });
 
         if (!driveFile || !driveFile.id) {
-            throw new Error('Upload file lên Drive thất bại, không nhận được ID file.');
+            throw new Error('Tải tệp lên Drive thất bại, không nhận được ID tệp.');
         }
 
         const updateResult = await Task.updateOne(
@@ -55,7 +55,7 @@ export async function uploadFileToTaskAction(formData) {
 
         if (updateResult.modifiedCount === 0) {
             console.warn(`[Drive Action] File ${driveFile.id} đã upload lên Drive nhưng không thể cập nhật Task ${taskId}.`);
-            return { success: false, error: 'Upload file thành công nhưng cập nhật Task thất bại.' };
+            return { success: false, error: 'Tải tệp thành công nhưng cập nhật công việc thất bại.' };
         }
 
         return {

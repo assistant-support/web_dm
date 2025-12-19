@@ -429,6 +429,7 @@ export default function TaskDetail({
                                                         {sub.status === TASK_STATUS.COMPLETED && <CheckCheck className="h-4 w-4 text-green-600 flex-shrink-0 ml-1" />}
                                                     </div>
                                                     <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+                                                        <TaskPointsBadge task={sub} size="xs" />
                                                         <span className="text-xs text-gray-500 hidden sm:inline">{fmt(sub.plannedDueAt)}</span>
                                                         {subAssignee ? (<Avatar userId={subAssignee.id} name={subAssignee.name} src={driveImage(subAssignee.avatarUrl)} size="xs" tooltip={subAssignee.name} />)
                                                             : (<div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center" title="Chưa gán"><UserCheck className="h-3 w-3 text-gray-500" /></div>)}

@@ -30,7 +30,7 @@ export async function listByProject(projectId, filters = {}) {
             const project = await Project.findById(projectId)
                 .select({ members: 1, team: 1 })
                 .lean();
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const isProjectMember = (project.members || []).some(
                 (m) => String(m.userId) === String(uid)
@@ -46,7 +46,7 @@ export async function listByProject(projectId, filters = {}) {
             }
 
             const isAdmin = user.role === 'admin';
-            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(isMember || isAdmin, 'Bạn không có quyền xem danh sách công việc của dự án này.', 'FORBIDDEN', 403);
             const query = {
                 project: new mongoose.Types.ObjectId(projectId),
                 scope: TASK_SCOPE.PROJECT,
@@ -151,14 +151,25 @@ export async function listMyTasks(filters = {}) {
         const uid = user.externalUserId;
 
         // Build query - tasks created by user OR assigned to user
+        // [FIX] Include subtasks assigned to user
         const query = {
             scope: TASK_SCOPE.PROJECT,
             deletedAt: null,
-            parentTask: null, // Only root tasks
             $or: [
-                { createdBy: uid },
-                { assignee: uid },
-            ],
+                // 1. Root tasks related to user
+                {
+                    parentTask: null,
+                    $or: [
+                        { createdBy: uid },
+                        { assignee: uid },
+                    ]
+                },
+                // 2. Subtasks assigned to user
+                {
+                    parentTask: { $ne: null },
+                    assignee: uid
+                }
+            ]
         };
 
         if (filters.status) {
@@ -189,6 +200,15 @@ export async function listMyTasks(filters = {}) {
             {
                 $lookup: {
                     from: 'tasks',
+                    localField: 'parentTask',
+                    foreignField: '_id',
+                    pipeline: [{ $project: { title: 1 } }],
+                    as: 'parentTaskInfo'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'tasks',
                     let: { taskId: '$_id' },
                     pipeline: [
                         {
@@ -210,10 +230,11 @@ export async function listMyTasks(filters = {}) {
                 $addFields: {
                     projectName: { $arrayElemAt: ['$projectInfo.name', 0] },
                     projectMembers: { $arrayElemAt: ['$projectInfo.members', 0] },
+                    parentTaskTitle: { $arrayElemAt: ['$parentTaskInfo.title', 0] },
                     subtaskCount: { $size: '$subtasks' }
                 }
             },
-            { $project: { projectInfo: 0 } },
+            { $project: { projectInfo: 0, parentTaskInfo: 0 } },
             { $sort: { createdAt: -1 } },
             { $limit: filters.limit || 200 }
         ]);
@@ -224,6 +245,8 @@ export async function listMyTasks(filters = {}) {
             plainTask.subtasks = (task.subtasks || []).map(asPlainTask);
             // Include project members for permission checks
             plainTask.projectMembers = task.projectMembers || [];
+            // Include parent task title
+            plainTask.parentTaskTitle = task.parentTaskTitle || null;
             return plainTask;
         });
     }, { requireAuth: true });
@@ -336,6 +359,30 @@ export async function getTaskDetail(taskId) {
                 }
             },
 
+            // 8.5 Check if user is assignee of any subtask (Fix permission issue)
+            {
+                $lookup: {
+                    from: 'tasks',
+                    let: { taskId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$parentTask', '$$taskId'] },
+                                        { $eq: ['$assignee', uid] },
+                                        { $eq: ['$deletedAt', null] }
+                                    ]
+                                }
+                            }
+                        },
+                        { $limit: 1 },
+                        { $project: { _id: 1 } }
+                    ],
+                    as: 'subtaskAssigneeCheck'
+                }
+            },
+
             // 9. Xử lý dữ liệu (Unwind các mảng lookup)
             {
                 $addFields: {
@@ -352,22 +399,25 @@ export async function getTaskDetail(taskId) {
                             { $arrayElemAt: ['$subtaskCountArray.count', 0] },
                             0
                         ]
-                    }
+                    },
+                    
+                    // Check subtask assignee
+                    isSubtaskAssignee: { $gt: [{ $size: '$subtaskAssigneeCheck' }, 0] }
                 }
             },
 
             // 10. Dọn dẹp
-            { $project: { subtaskCountArray: 0 } }
+            { $project: { subtaskCountArray: 0, subtaskAssigneeCheck: 0 } }
         ]);
         // --- Kết thúc Aggregation Pipeline ---
 
         const task = tasks[0];
-        assert(task, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
         // --- Cập nhật Kiểm tra quyền truy cập ---
         // Giờ đây 'task.project' và 'task.team' đã là object
         if (task.scope === TASK_SCOPE.PROJECT) {
-            assert(task.project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(task.project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             // Do we have a team? team may be null (project can be 'free').
             // Permission to view: admin OR creator OR assignee OR project member OR team member.
@@ -386,10 +436,11 @@ export async function getTaskDetail(taskId) {
 
             const isProjectMember = (task.project?.members || []).some((m) => String(m.userId) === String(uid));
             const isTeamMember = (task.team?.members || []).some((m) => String(m.userId) === String(uid));
+            const isSubtaskAssignee = task.isSubtaskAssignee;
 
             assert(
-                isAdmin || isCreator || isAssignee || isProjectMember || isTeamMember,
-                'FORBIDDEN',
+                isAdmin || isCreator || isAssignee || isProjectMember || isTeamMember || isSubtaskAssignee,
+                'Bạn không có quyền xem chi tiết công việc này.',
                 'FORBIDDEN',
                 403
             );
@@ -430,7 +481,7 @@ export async function createTask(projectId, payload) {
 
         // Verify project and team membership
         const project = await Project.findById(projectId); // Don't use lean, we need to save
-        assert(project, 'PROJECT_NOT_FOUND', 'Dự án không tồn tại.', 404);
+        assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
         const projectMembers = project.members || [];
         const isProjectMember = projectMembers.some((m) => String(m.userId) === String(uid));
@@ -438,7 +489,7 @@ export async function createTask(projectId, payload) {
         let team = null;
         if (project.team) {
             team = await Team.findById(project.team).lean();
-            assert(team, 'TEAM_NOT_FOUND', 'Nhóm không tồn tại.', 404);
+            assert(team, 'Nhóm không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
         }
 
         let isMember = isProjectMember;
@@ -447,7 +498,7 @@ export async function createTask(projectId, payload) {
         }
 
         const isAdmin = user.role === 'admin';
-        assert(isMember || isAdmin, 'FORBIDDEN', 'Bạn không có quyền tạo công việc trong dự án này.', 403);
+        assert(isMember || isAdmin, 'Bạn không có quyền tạo công việc trong dự án này.', 'FORBIDDEN', 403);
 
         // **Kiểm tra quyền tạo ROOT TASK - chỉ Project Manager mới được tạo**
         assert(
@@ -683,20 +734,20 @@ export async function updateTask(taskId, payload) {
         const uid = user.externalUserId;
 
         const task = await Task.findById(taskId);
-        assert(task, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
         // Load project if applicable and determine permission
         let project = null;
         if (task.scope === TASK_SCOPE.PROJECT) {
             project = await Project.findById(task.project);
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
         }
 
         const hasManagePermission = project ? canManageProject(project, user) : false;
         const isAssigneeUser = String(task.assignee) === String(uid);
 
         // If not project manager nor assignee, forbid
-        assert(hasManagePermission || isAssigneeUser, 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(hasManagePermission || isAssigneeUser, 'Bạn không có quyền cập nhật công việc này.', 'FORBIDDEN', 403);
 
         // If current user is assignee (not manager), restrict editable fields to safe list
         if (!hasManagePermission && isAssigneeUser) {
@@ -799,10 +850,10 @@ export async function deleteTask(taskId) {
         // Verify permission
         if (task.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(task.project);
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const hasManagePermission = canManageProject(project, user);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(hasManagePermission, 'Bạn không có quyền xóa công việc này.', 'FORBIDDEN', 403);
         }
 
         task.deletedAt = new Date();
@@ -835,17 +886,17 @@ export async function updateTaskStatus(taskId, status) {
         const uid = user.externalUserId;
 
         const task = await Task.findById(taskId);
-        assert(task, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
         // Anyone in project can update status
         if (task.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(task.project).lean();
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const team = await Team.findById(project.team).lean();
             const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
             const isAdmin = user.role === 'admin';
-            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(isMember || isAdmin, 'Bạn không có quyền cập nhật trạng thái công việc này.', 'FORBIDDEN', 403);
         }
 
         const oldStatus = task.status;

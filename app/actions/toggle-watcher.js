@@ -29,7 +29,7 @@ export async function toggleWatcherAction(taskId, watching) {
         const uid = String(user.externalUserId);
 
         const task = await Task.findById(taskId);
-        assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+        assert(task, 'Không tìm thấy công việc', 'NOT_FOUND', 404);
 
         const watcherSet = new Set(
             Array.isArray(task.watchers) ? task.watchers.map(String) : []
@@ -71,7 +71,7 @@ export async function toggleWatcherAction(taskId, watching) {
             }
         }
 
-        assert(canToggle, 'Bạn không có quyền cập nhật trạng thái theo dõi của task này', 'FORBIDDEN', 403);
+        assert(canToggle, 'Bạn không có quyền cập nhật trạng thái theo dõi của công việc này', 'FORBIDDEN', 403);
 
         if (watching) {
             watcherSet.add(uid);

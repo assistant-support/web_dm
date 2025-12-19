@@ -24,8 +24,8 @@ export async function getMembersStats(payload) {
                 })
                 .parse(payload || {});
             const team = await getById(teamId, { lean: true });
-            assert(team, 'Team không tồn tại', 'NOT_FOUND', 404);
-            assert(await isTeamMember(team, uid), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm', 'NOT_FOUND', 404);
+            assert(await isTeamMember(team, uid), 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
 
             const userIds = team.members.map(m => m.userId);
             const stats = await getBatchMemberStats(teamId, userIds, ym);

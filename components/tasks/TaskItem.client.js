@@ -493,12 +493,12 @@ export default function TaskItem({
                                     )}
 
                                     <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                                        {task.projectName && !task.parentTask && (
+                                        {task.projectName && (
                                             <span className="truncate max-w-[150px]">📁 {task.projectName}</span>
                                         )}
                                         {task.parentTask && (
                                             <Link href={`/tasks/${task.parentTask}`} onClick={(e) => e.stopPropagation()} className="text-blue-500 hover:underline flex items-center">
-                                                <span className="rotate-90 inline-block mr-1 text-gray-400">↳</span> Task cha
+                                                <span className="rotate-90 inline-block mr-1 text-gray-400">↳</span> {task.parentTaskTitle || 'Task cha'}
                                             </Link>
                                         )}
                                     </div>

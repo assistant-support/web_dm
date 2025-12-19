@@ -103,7 +103,7 @@ export async function sendTest(payload = {}) {
     return runAction(
         async ({ user }) => {
             const uid = user.externalUserId;
-            assert(uid, 'UNAUTHORIZED', 'UNAUTHORIZED', 401);
+            assert(uid, 'Bạn chưa đăng nhập', 'UNAUTHORIZED', 401);
             const eventName = payload?.eventName || 'task.reminder';
 
             await notifyEvent(eventName, {

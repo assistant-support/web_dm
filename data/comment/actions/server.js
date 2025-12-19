@@ -59,13 +59,13 @@ export async function create(payload) {
             const uid = user.externalUserId;
 
             const task = await Task.findById(input.taskId).lean();
-            assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+            assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(task.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             // Quyền: project member
-            assert(await canViewProject(project, user), 'Bạn không có quyền trong project này', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền bình luận trong dự án này.', 'FORBIDDEN', 403);
 
             // Parse mentions & loại bỏ self
             const mentionsRaw = extractMentions(input.body);
@@ -123,12 +123,12 @@ export async function listByTaskAction(payload) {
             const input = validate(commentListByTaskSchema, payload);
             const uid = user.externalUserId;
             const task = await Task.findById(input.taskId).lean();
-            assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+            assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(task.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
-            assert(await canViewProject(project, user), 'Bạn không có quyền xem', 'FORBIDDEN', 403);
+            assert(await canViewProject(project, user), 'Bạn không có quyền xem bình luận của dự án này.', 'FORBIDDEN', 403);
 
             const items = await listByTask(input.taskId, {
                 limit: input.limit ?? 30,
@@ -171,17 +171,17 @@ export async function remove(payload) {
             const uid = user.externalUserId;
 
             const comment = await Comment.findById(input.commentId).lean();
-            assert(comment, 'Comment không tồn tại', 'NOT_FOUND', 404);
+            assert(comment, 'Bình luận không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const task = await Task.findById(comment.task).lean();
-            assert(task, 'Task không tồn tại', 'NOT_FOUND', 404);
+            assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const project = await Project.findById(task.project).lean();
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
             const isAuthor = String(comment.author) === String(uid);
             const isMgr = await canManageProject(project, user);
-            assert(isAuthor || isMgr, 'Không có quyền xoá', 'FORBIDDEN', 403);
+            assert(isAuthor || isMgr, 'Bạn không có quyền xóa bình luận này.', 'FORBIDDEN', 403);
 
             const removedPlain = await deleteComment(input.commentId);
 

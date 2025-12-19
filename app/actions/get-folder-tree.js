@@ -86,8 +86,8 @@ export async function getFolderTreeAction(projectId) {
                 .select(DISPLAY_FIELDS)
                 .lean();
 
-            assert(project, 'Project không tồn tại', 'NOT_FOUND', 404);
-            assert(await canViewProject(project, uid), 'Bạn không có quyền xem project này', 'FORBIDDEN', 403);
+            assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+            assert(await canViewProject(project, uid), 'Bạn không có quyền xem dự án này.', 'FORBIDDEN', 403);
 
             const tasks = await Task.find({
                 project: new mongoose.Types.ObjectId(project._id),

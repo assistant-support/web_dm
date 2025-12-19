@@ -16,7 +16,7 @@ import * as userData from '@/data/user.data'; // Cần import user data
 import { PROJECT_ROLE } from '@/model/common/enums';
 
 const CreateProjectSchema = z.object({
-    name: z.string().min(3, "Project name must be at least 3 characters."),
+    name: z.string().min(3, "Tên dự án phải có ít nhất 3 ký tự."),
     team: z.string().optional(),
     description: z.string().optional(),
 });
@@ -27,7 +27,7 @@ const MemberActionSchema = z.object({
 });
 
 const InviteMemberSchema = MemberActionSchema.extend({
-    email: z.string().email('Invalid email address.'),
+    email: z.string().email('Địa chỉ email không hợp lệ.'),
     role: z.nativeEnum(PROJECT_ROLE).default(PROJECT_ROLE.MEMBER),
 });
 
@@ -40,7 +40,7 @@ const InviteMemberSchema = MemberActionSchema.extend({
 export async function createProject(formData) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, data: null, error: 'Unauthorized' };
+        return { success: false, data: null, error: 'Bạn chưa đăng nhập.' };
     }
 
     const validation = CreateProjectSchema.safeParse(formData);
@@ -74,7 +74,7 @@ export async function createProject(formData) {
         return { success: true, data: newProject, error: null };
     } catch (error) {
         console.error('Error creating project:', error);
-        return { success: false, data: null, error: 'Failed to create project.' };
+        return { success: false, data: null, error: 'Tạo dự án thất bại.' };
     }
 }
 
@@ -87,16 +87,16 @@ export async function createProject(formData) {
 export async function updateProject(projectId, updateData) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, data: null, error: 'Unauthorized' };
+        return { success: false, data: null, error: 'Bạn chưa đăng nhập.' };
     }
 
     const project = await projectData.findProjectById(projectId);
     if (!project) {
-        return { success: false, data: null, error: 'Project not found.' };
+        return { success: false, data: null, error: 'Dự án không tồn tại hoặc đã bị xóa.' };
     }
 
     if (!canManageProject(project, user.id)) {
-        return { success: false, data: null, error: 'Permission denied.' };
+        return { success: false, data: null, error: 'Bạn không có quyền thực hiện thao tác này.' };
     }
 
     try {
@@ -116,7 +116,7 @@ export async function updateProject(projectId, updateData) {
         return { success: true, data: updatedProject, error: null };
     } catch (error) {
         console.error(`Error updating project ${projectId}:`, error);
-        return { success: false, data: null, error: 'Failed to update project.' };
+        return { success: false, data: null, error: 'Cập nhật dự án thất bại.' };
     }
 }
 
@@ -128,18 +128,18 @@ export async function updateProject(projectId, updateData) {
 export async function deleteProject(projectId) {
     const user = await getRequestUser();
     if (!user) {
-        return { success: false, error: 'Unauthorized' };
+        return { success: false, error: 'Bạn chưa đăng nhập.' };
     }
 
     const project = await projectData.findProjectById(projectId);
     if (!project) {
-        return { success: false, error: 'Project not found.' };
+        return { success: false, error: 'Dự án không tồn tại hoặc đã bị xóa.' };
     }
 
     // Only the project owner can delete it
     const userRole = getProjectRole(project, user.id);
     if (userRole !== 'owner') {
-        return { success: false, error: 'Permission denied. Only the owner can delete the project.' };
+        return { success: false, error: 'Bạn không có quyền xóa dự án này. Chỉ chủ sở hữu mới được phép xóa.' };
     }
 
     try {
@@ -158,7 +158,7 @@ export async function deleteProject(projectId) {
         return { success: true, error: null };
     } catch (error) {
         console.error(`Error deleting project ${projectId}:`, error);
-        return { success: false, error: 'Failed to delete project.' };
+        return { success: false, error: 'Xóa dự án thất bại.' };
     }
 }
 
@@ -169,27 +169,27 @@ export async function deleteProject(projectId) {
  */
 export async function inviteMemberToProject(formData) {
     const user = await getRequestUser();
-    if (!user) return { success: false, error: 'Unauthorized' };
+    if (!user) return { success: false, error: 'Bạn chưa đăng nhập.' };
 
     const validation = InviteMemberSchema.safeParse(Object.fromEntries(formData));
     if (!validation.success) {
-        return { success: false, error: 'Invalid input.' };
+        return { success: false, error: 'Dữ liệu đầu vào không hợp lệ.' };
     }
     
     const { projectId, email, role } = validation.data;
 
     const project = await projectData.findProjectById(projectId);
     if (!project || !canManageProject(project, user.id)) {
-        return { success: false, error: 'Permission denied or project not found.' };
+        return { success: false, error: 'Bạn không có quyền thực hiện hoặc dự án không tồn tại.' };
     }
 
     const memberToInvite = await userData.findUserByEmail(email);
     if (!memberToInvite) {
-        return { success: false, error: `User with email "${email}" not found.` };
+        return { success: false, error: `Không tìm thấy người dùng với email "${email}".` };
     }
 
     if (project.members.some(m => m.userId === memberToInvite.id)) {
-        return { success: false, error: 'User is already a member of this project.' };
+        return { success: false, error: 'Người dùng này đã là thành viên của dự án.' };
     }
 
     try {
@@ -205,7 +205,7 @@ export async function inviteMemberToProject(formData) {
         revalidateTag(`project-detail-${projectId}`);
         return { success: true, error: null };
     } catch (error) {
-        return { success: false, error: 'Failed to invite member.' };
+        return { success: false, error: 'Mời thành viên thất bại.' };
     }
 }
 
@@ -217,15 +217,15 @@ export async function inviteMemberToProject(formData) {
  */
 export async function removeMemberFromProject(projectId, userIdToRemove) {
     const user = await getRequestUser();
-    if (!user) return { success: false, error: 'Unauthorized' };
+    if (!user) return { success: false, error: 'Bạn chưa đăng nhập.' };
 
     if (user.id === userIdToRemove) {
-        return { success: false, error: "You cannot remove yourself." };
+        return { success: false, error: "Bạn không thể tự xóa chính mình khỏi dự án." };
     }
 
     const project = await projectData.findProjectById(projectId);
     if (!project || !canManageProject(project, user.id)) {
-        return { success: false, error: 'Permission denied or project not found.' };
+        return { success: false, error: 'Bạn không có quyền thực hiện hoặc dự án không tồn tại.' };
     }
 
     try {
@@ -241,6 +241,6 @@ export async function removeMemberFromProject(projectId, userIdToRemove) {
         revalidateTag(`project-detail-${projectId}`);
         return { success: true, error: null };
     } catch (error) {
-        return { success: false, error: 'Failed to remove member.' };
+        return { success: false, error: 'Xóa thành viên thất bại.' };
     }
 }

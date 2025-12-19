@@ -34,12 +34,12 @@ export async function listSubtasks(parentTaskId) {
 
         // Verify parent task access
         const parentTask = await Task.findById(parentTaskId).lean();
-        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(parentTask, 'Không tìm thấy công việc cha', 'NOT_FOUND', 404);
 
         // Verify project access
         if (parentTask.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(parentTask.project).lean();
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Không tìm thấy dự án', 'NOT_FOUND', 404);
             // Permission check would go here
         }
 
@@ -55,7 +55,7 @@ export async function getSubtaskStatsAction(parentTaskId) {
     await connectDB();
     return runAction(async ({ user }) => {
         const parentTask = await Task.findById(parentTaskId).lean();
-        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(parentTask, 'Không tìm thấy công việc cha', 'NOT_FOUND', 404);
 
         const stats = await getSubtaskStats(parentTaskId);
         return stats;
@@ -73,11 +73,11 @@ export async function createSubtask(parentTaskId, payload) {
 
         // Get parent task
         const parentTask = await Task.findById(parentTaskId);
-        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(parentTask, 'Không tìm thấy công việc cha', 'NOT_FOUND', 404);
 
         // Get project for permission check
         const project = await Project.findById(parentTask.project).lean();
-        assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(project, 'Không tìm thấy dự án', 'NOT_FOUND', 404);
 
         // Validate subtask creation
         const validation = validateSubtask(parentTask, payload);
@@ -196,16 +196,16 @@ export async function updateSubtask(subtaskId, payload) {
         const uid = user.externalUserId;
 
         const subtask = await Task.findById(subtaskId);
-        assert(subtask, 'SUBTASK_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(subtask.parentTask, 'TASK_IS_NOT_SUBTASK', 'VALIDATION_ERROR', 400);
+        assert(subtask, 'Không tìm thấy công việc con', 'NOT_FOUND', 404);
+        assert(subtask.parentTask, 'Công việc này không phải là công việc con', 'VALIDATION_ERROR', 400);
 
         // Verify permission
         if (subtask.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(subtask.project);
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Không tìm thấy dự án', 'NOT_FOUND', 404);
 
             const hasManagePermission = await canManageProject(project, user);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(hasManagePermission, 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
         }
 
         const oldStatus = subtask.status;
@@ -255,16 +255,16 @@ export async function deleteSubtask(subtaskId) {
         const uid = user.externalUserId;
 
         const subtask = await Task.findById(subtaskId);
-        assert(subtask, 'SUBTASK_NOT_FOUND', 'NOT_FOUND', 404);
-        assert(subtask.parentTask, 'TASK_IS_NOT_SUBTASK', 'VALIDATION_ERROR', 400);
+        assert(subtask, 'Không tìm thấy công việc con', 'NOT_FOUND', 404);
+        assert(subtask.parentTask, 'Công việc này không phải là công việc con', 'VALIDATION_ERROR', 400);
 
         // Verify permission
         if (subtask.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(subtask.project);
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Không tìm thấy dự án', 'NOT_FOUND', 404);
 
             const hasManagePermission = await canManageProject(project, user);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(hasManagePermission, 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
         }
 
         const parentTaskId = subtask.parentTask;
@@ -302,7 +302,7 @@ export async function getTaskWithSubtasks(taskId) {
     await connectDB();
     return runAction(async ({ user }) => {
         const tree = await getTaskTree(taskId);
-        assert(tree, 'TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(tree, 'Không tìm thấy công việc', 'NOT_FOUND', 404);
 
         // Convert to plain objects
         const plainTree = {
@@ -323,15 +323,15 @@ export async function reorderSubtasks(parentTaskId, subtaskIds) {
         const uid = user.externalUserId;
 
         const parentTask = await Task.findById(parentTaskId);
-        assert(parentTask, 'PARENT_TASK_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(parentTask, 'Không tìm thấy công việc cha', 'NOT_FOUND', 404);
 
         // Verify permission
         if (parentTask.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(parentTask.project);
-            assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(project, 'Không tìm thấy dự án', 'NOT_FOUND', 404);
 
             const hasManagePermission = await canManageProject(project, user);
-            assert(hasManagePermission, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(hasManagePermission, 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
         }
 
         // Update listOrder for each subtask

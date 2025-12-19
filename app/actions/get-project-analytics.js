@@ -24,15 +24,15 @@ async function _getProjectAnalytics(projectId, userId) {
 
     return runAction(async ({ user }) => {
         const requesterId = userId || user.externalUserId;
-        assert(requesterId, 'UNAUTHENTICATED', 'FORBIDDEN', 403);
+        assert(requesterId, 'Bạn chưa đăng nhập.', 'FORBIDDEN', 403);
 
-        assert(mongoose.Types.ObjectId.isValid(projectId), 'INVALID_PROJECT_ID', 'BAD_REQUEST', 400);
+        assert(mongoose.Types.ObjectId.isValid(projectId), 'ID dự án không hợp lệ.', 'BAD_REQUEST', 400);
 
         const project = await Project.findById(projectId).lean();
-        assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
+        assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
         const canView = await canViewProject(requesterId, project);
-        assert(canView, 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(canView, 'Bạn không có quyền xem thống kê của dự án này.', 'FORBIDDEN', 403);
 
         const projectObjectId = new mongoose.Types.ObjectId(projectId);
 

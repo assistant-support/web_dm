@@ -111,14 +111,14 @@ export async function getByIdAction(teamId) {
             await connectDB();
             const id = validate(teamIdSchema, teamId);
             const team = await getById(id, { lean: true });
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
+            assert(team, 'Không tìm thấy nhóm', 'NOT_FOUND', 404);
 
             // Check member
             const isMember = (team.members || []).some(
                 (m) => String(m.userId) === String(user.externalUserId)
             );
             const isAdmin = user.role === 'admin';
-            assert(isMember || isAdmin, 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(isMember || isAdmin, 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
 
             return asPlainTeam(team);
         },
@@ -134,7 +134,7 @@ export async function create(payload) {
             await connectDB();
             const data = validate(teamCreateSchema, payload);
             // Only allow app users with role 'admin' to create teams
-            assert(user && user.role === 'admin', 'Chỉ admin mới được tạo team', 'FORBIDDEN', 403);
+            assert(user && user.role === 'admin', 'Chỉ quản trị viên mới được tạo nhóm', 'FORBIDDEN', 403);
 
             const doc = await createTeam(data, user.externalUserId);
 
@@ -160,8 +160,8 @@ export async function update(teamId, patch) {
             await connectDB();
             const id = validate(teamIdSchema, teamId);
             const team = await getById(id, { lean: false });
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm', 'NOT_FOUND', 404);
+            assert(isTeamManager(team, user.externalUserId), 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
 
             const data = validate(teamUpdateSchema, patch);
             const updated = await updateTeam(id, data);
@@ -188,8 +188,8 @@ export async function archive(teamId) {
             await connectDB();
             const id = validate(teamIdSchema, teamId);
             const team = await getById(id, { lean: false });
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm', 'NOT_FOUND', 404);
+            assert(isTeamManager(team, user.externalUserId), 'Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN', 403);
 
             // 1. Archive Team
             const updated = await archiveTeam(id);
@@ -232,8 +232,8 @@ export async function addMemberAction(teamId, payload) {
             const data = await validateAsync(memberAddSchema, payload);
 
             const team = await getById(id, { lean: false });
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm hoặc đã bị xóa', 'NOT_FOUND', 404);
+            assert(isTeamManager(team, user.externalUserId), 'Bạn không có quyền thêm thành viên. Chỉ quản lý nhóm mới được phép.', 'FORBIDDEN', 403);
 
             const updated = await addMember(id, data);
 
@@ -270,8 +270,22 @@ export async function removeMemberAction(teamId, payload) {
             const data = validate(memberRemoveSchema, payload);
 
             const team = await getById(id, { lean: false });
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm hoặc đã bị xóa', 'NOT_FOUND', 404);
+            assert(isTeamManager(team, user.externalUserId), 'Bạn không có quyền xóa thành viên. Chỉ quản lý nhóm mới được phép.', 'FORBIDDEN', 403);
+
+            const currentUserMember = team.members.find(m => String(m.userId) === String(user.externalUserId));
+            const isManager = currentUserMember && currentUserMember.role === TEAM_ROLE.MANAGER;
+
+            // Security check: Cannot remove Owner
+            const targetMember = team.members.find(m => String(m.userId) === String(data.userId));
+            if (targetMember && targetMember.role === TEAM_ROLE.OWNER) {
+                throw new Error('Không thể xóa Chủ sở hữu khỏi nhóm.');
+            }
+
+            // [FIX] Manager cannot remove other Managers
+            if (isManager && targetMember && targetMember.role === TEAM_ROLE.MANAGER) {
+                throw new Error('Quản lý không thể xóa một Quản lý khác. Chỉ Chủ sở hữu mới có quyền này.');
+            }
 
             const updated = await removeMember(id, data.userId);
 
@@ -313,8 +327,27 @@ export async function changeRole(teamId, payload) {
             const data = validate(memberChangeRoleSchema, payload);
 
             const team = await getById(id, { lean: false });
-            assert(team, 'TEAM_NOT_FOUND', 'NOT_FOUND', 404);
-            assert(isTeamManager(team, user.externalUserId), 'FORBIDDEN', 'FORBIDDEN', 403);
+            assert(team, 'Không tìm thấy nhóm hoặc đã bị xóa', 'NOT_FOUND', 404);
+            assert(isTeamManager(team, user.externalUserId), 'Bạn không có quyền thay đổi vai trò thành viên. Chỉ quản lý nhóm mới được phép.', 'FORBIDDEN', 403);
+
+            const currentUserMember = team.members.find(m => String(m.userId) === String(user.externalUserId));
+            const isManager = currentUserMember && currentUserMember.role === TEAM_ROLE.MANAGER;
+
+            // Security check: Cannot change Owner role
+            const targetMember = team.members.find(m => String(m.userId) === String(data.userId));
+            if (targetMember && targetMember.role === TEAM_ROLE.OWNER) {
+                throw new Error('Không thể thay đổi vai trò của Chủ sở hữu.');
+            }
+
+            // [FIX] Manager cannot change Manager role
+            if (isManager && targetMember && targetMember.role === TEAM_ROLE.MANAGER) {
+                throw new Error('Quản lý không thể thay đổi vai trò của một Quản lý khác. Chỉ Chủ sở hữu mới có quyền này.');
+            }
+
+            // [FIX] Manager cannot promote to Manager or Owner
+            if (isManager && (data.role === TEAM_ROLE.MANAGER || data.role === TEAM_ROLE.OWNER)) {
+                throw new Error('Quản lý không thể thăng cấp thành viên lên Quản lý hoặc Chủ sở hữu. Chỉ Chủ sở hữu mới có quyền này.');
+            }
 
             const updated = await changeMemberRole(id, data.userId, data.role);
 

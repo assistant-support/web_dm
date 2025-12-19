@@ -14,7 +14,7 @@ import * as taskData from '@/data/task.data';
 import { canViewTask } from '@/lib/permissions'; // Assuming canView implies canComment
 
 const AddCommentSchema = z.object({
-    content: z.string().min(1, 'Comment cannot be empty.'),
+    content: z.string().min(1, 'Nội dung bình luận không được để trống.'),
     targetId: z.string(),
     targetType: z.enum(['task', 'project']),
 });
@@ -26,11 +26,11 @@ const AddCommentSchema = z.object({
  */
 export async function addComment(formData) {
     const user = await getRequestUser();
-    if (!user) return { success: false, error: 'Unauthorized' };
+    if (!user) return { success: false, error: 'Bạn chưa đăng nhập.' };
 
     const validation = AddCommentSchema.safeParse(Object.fromEntries(formData));
     if (!validation.success) {
-        return { success: false, error: 'Invalid comment data.' };
+        return { success: false, error: 'Dữ liệu bình luận không hợp lệ.' };
     }
 
     const { content, targetId, targetType } = validation.data;
@@ -40,7 +40,7 @@ export async function addComment(formData) {
         if (targetType === 'task') {
             const task = await taskData.findTaskById(targetId);
             if (!task || !canViewTask(task, user)) {
-                return { success: false, error: 'Permission denied.' };
+                return { success: false, error: 'Bạn không có quyền bình luận.' };
             }
         } // Add similar check for 'project' if needed
 
@@ -55,7 +55,7 @@ export async function addComment(formData) {
 
         return { success: true, error: null };
     } catch (error) {
-        return { success: false, error: 'Failed to add comment.' };
+        return { success: false, error: 'Thêm bình luận thất bại.' };
     }
 }
 
@@ -66,11 +66,11 @@ export async function addComment(formData) {
  */
 export async function deleteComment(commentId) {
     const user = await getRequestUser();
-    if (!user) return { success: false, error: 'Unauthorized' };
+    if (!user) return { success: false, error: 'Bạn chưa đăng nhập.' };
 
     try {
         const comment = await commentData.findCommentById(commentId);
-        if (!comment) return { success: false, error: 'Comment not found.' };
+        if (!comment) return { success: false, error: 'Bình luận không tồn tại hoặc đã bị xóa.' };
 
         // Permission Check: Author HOẶC PM/Owner của project
         const isAuthor = comment.author.toString() === user.id;
@@ -84,15 +84,15 @@ export async function deleteComment(commentId) {
                     const { canManageProject } = await import('@/lib/permissions.js');
                     const canDelete = await canManageProject(task.project, user);
                     if (!canDelete) {
-                        return { success: false, error: 'Permission denied.' };
+                        return { success: false, error: 'Bạn không có quyền xóa bình luận này.' };
                     }
                 } else {
                     // Task không có project hoặc không tìm thấy
-                    return { success: false, error: 'Permission denied.' };
+                    return { success: false, error: 'Bạn không có quyền xóa bình luận này.' };
                 }
             } else {
                 // Comment trên project - cần implement logic tương tự
-                return { success: false, error: 'Permission denied.' };
+                return { success: false, error: 'Bạn không có quyền xóa bình luận này.' };
             }
         }
 
@@ -102,6 +102,6 @@ export async function deleteComment(commentId) {
 
         return { success: true, error: null };
     } catch (error) {
-        return { success: false, error: 'Failed to delete comment.' };
+        return { success: false, error: 'Xóa bình luận thất bại.' };
     }
 }

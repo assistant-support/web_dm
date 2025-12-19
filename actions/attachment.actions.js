@@ -20,13 +20,13 @@ import { getOauthClientForUser } from '@/lib/oauth-client'; // Assumes this help
  */
 export async function ensureTaskDriveFolder(taskId) {
     const user = await getRequestUser();
-    if (!user) return { success: false, error: 'Unauthorized', folderId: null };
+    if (!user) return { success: false, error: 'Bạn chưa đăng nhập.', folderId: null };
 
     const task = await taskData.findTaskById(taskId);
-    if (!task) return { success: false, error: 'Task not found', folderId: null };
+    if (!task) return { success: false, error: 'Công việc không tồn tại hoặc đã bị xóa.', folderId: null };
 
     if (!canEditTask(task, user)) {
-        return { success: false, error: 'Permission denied', folderId: null };
+        return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.', folderId: null };
     }
 
     // Check if folder already exists
@@ -64,7 +64,7 @@ export async function ensureTaskDriveFolder(taskId) {
 
     } catch (error) {
         console.error('Google Drive folder creation failed:', error);
-        return { success: false, error: 'Could not create Google Drive folder.', folderId: null };
+        return { success: false, error: 'Không thể tạo thư mục Google Drive.', folderId: null };
     }
 }
 
@@ -76,7 +76,7 @@ export async function ensureTaskDriveFolder(taskId) {
  */
 export async function attachFileToTask(formData) {
     const user = await getRequestUser();
-    if (!user) return { success: false, error: 'Unauthorized' };
+    if (!user) return { success: false, error: 'Bạn chưa đăng nhập.' };
 
     const taskId = formData.get('taskId');
     const fileData = {
@@ -87,12 +87,12 @@ export async function attachFileToTask(formData) {
     };
 
     if (!taskId || !fileData.name || !fileData.url) {
-        return { success: false, error: 'Invalid file data.' };
+        return { success: false, error: 'Dữ liệu tệp không hợp lệ.' };
     }
 
     const task = await taskData.findTaskById(taskId);
     if (!task || !canEditTask(task, user)) {
-        return { success: false, error: 'Permission denied.' };
+        return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
     }
 
     try {
@@ -108,6 +108,6 @@ export async function attachFileToTask(formData) {
 
         return { success: true, error: null };
     } catch (error) {
-        return { success: false, error: 'Failed to attach file.' };
+        return { success: false, error: 'Đính kèm tệp thất bại.' };
     }
 }
