@@ -6,6 +6,7 @@
 
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert } from '@/lib/action-utils.js';
+import { safeSerialize } from '@/lib/serialize.js';
 import ActivityLog from '@/model/activityLog.model.js';
 // Tối ưu: Import hàm repo
 import { getDetail as getProjectDetailRepo } from '@/data/project/processors/repo.js';
@@ -91,11 +92,11 @@ export async function getActivities({ projectId, limit = 20, skip = 0 }) {
 
             const total = await ActivityLog.countDocuments({ project: projectId });
 
-            return JSON.parse(JSON.stringify({
+            return safeSerialize({
                 items: activities,
                 total,
                 hasMore: skip + activities.length < total,
-            }));
+            });
         },
         { requireAuth: true }
     );

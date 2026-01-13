@@ -2,3 +2,4 @@
 // NextAuth sẽ tự động xử lý mọi thứ ở đây.
 import { handlers } from "@/auth";
 export const { GET, POST } = handlers;
+export const runtime = "nodejs";

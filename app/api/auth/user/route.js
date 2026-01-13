@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { getCurrentUserWithSync } from '@/lib/oauth-client';
-
+export const runtime = "nodejs";
 export async function GET(request) {
     try {
         // Lấy session từ NextAuth

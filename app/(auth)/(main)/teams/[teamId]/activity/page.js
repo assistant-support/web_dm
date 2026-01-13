@@ -6,6 +6,7 @@ import { Suspense } from 'react';
 import { getCachedTeamById } from '@/data/team/actions/cached.js';
 import { getActivities } from '@/data/team/actions/activities.js';
 import { getUsersDisplayInfo } from '@/lib/user-display';
+import { safeSerialize } from '@/lib/serialize.js';
 import TeamActivityLog from '@/components/team/TeamActivityLog.client.js';
 
 const ITEMS_PER_PAGE = 10;
@@ -58,6 +59,9 @@ export default async function TeamActivityPage({ params }) {
         console.error("Failed to load initial activities:", initialActivityResult.message);
     }
 
+    // Serialize MongoDB objects to plain objects
+    const serializedActivities = safeSerialize(initialActivities);
+
     return (
         <Suspense fallback={
             <div className="bg-white rounded-lg border border-gray-200 p-8">
@@ -73,7 +77,7 @@ export default async function TeamActivityPage({ params }) {
         }>
             <TeamActivityLog
                 teamId={teamId}
-                initialActivities={JSON.parse(JSON.stringify(initialActivities))}
+                initialActivities={serializedActivities}
                 initialTotal={initialTotal}
                 initialHasMore={initialHasMore}
                 initialUsersMap={initialUsersMap}

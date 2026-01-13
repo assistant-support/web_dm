@@ -13,6 +13,12 @@ const nextConfig = {
                 hostname: 's240-ava-talk.zadn.vn',
                 port: '',
                 pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: 'placehold.co',
+                port: '',
+                pathname: '/**',
             }
         ],
     },

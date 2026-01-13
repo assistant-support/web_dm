@@ -29,14 +29,13 @@ async function setupClient() {
         await mongoose.connect(MYACCOUNT_DB_URI);
         console.log('✅ Kết nối thành công!\n');
 
-        // Client credentials từ .env.local của web 3001
+        // Client credentials từ .env.local của web 3000
         const clientData = {
             clientId: '3a6b045635f860741031d35903a6b876',
             clientSecret: '7a0e2c88c48647ed48dcf9016a46d5e65b3ecccbeb584d5bd2d323f79a4b3237',
             name: 'ClickUp-like Web Client',
             redirectUris: [
                 'http://localhost:3001/api/auth/callback/my-provider',
-                'http://localhost:3001/auth/callback',
             ],
             allowedScopes: ['openid', 'profile', 'email'],
             grantTypes: ['authorization_code', 'refresh_token'],
@@ -76,13 +75,13 @@ async function setupClient() {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('\n📋 Thông tin kết nối:');
         console.log('   Authorization Server: http://localhost:3000');
-        console.log('   Client Application:   http://localhost:3001');
+        console.log('   Client Application:   http://localhost:3000');
         console.log('   Client ID:           ', clientData.clientId);
         console.log('   Redirect URI:        ', clientData.redirectUris[0]);
         console.log('\n🚀 Bước tiếp theo:');
         console.log('   1. Khởi động web MyAccount:  cd ../web_myaccount && npm run dev');
         console.log('   2. Khởi động web ClickUp:    cd ../web_dm && npm run dev');
-        console.log('   3. Truy cập: http://localhost:3001');
+        console.log('   3. Truy cập: http://localhost:3000');
         console.log('   4. Đăng nhập sẽ chuyển sang http://localhost:3000\n');
 
         await mongoose.disconnect();

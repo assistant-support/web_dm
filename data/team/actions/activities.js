@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { connectDB } from '@/lib/db.js';
 import { runAction, assert } from '@/lib/action-utils.js';
+import { safeSerialize } from '@/lib/serialize.js';
 import ActivityLog from '@/model/activityLog.model.js';
 import { getById } from '@/data/team/processors/repo.js'; // SỬ DỤNG REPO
 import { isTeamMember } from '@/lib/permissions.js';
@@ -37,11 +38,11 @@ export async function getActivities(payload) {
 
             const total = await ActivityLog.countDocuments({ team: teamId });
 
-            return JSON.parse(JSON.stringify({
+            return safeSerialize({
                 items: activities,
                 total,
                 hasMore: skip + activities.length < total
-            }));
+            });
         },
         { requireAuth: true }
     );
