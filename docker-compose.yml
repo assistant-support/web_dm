@@ -1,0 +1,9 @@
+services:
+  webdm:
+    image: webdm:latest
+    container_name: webdm
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    restart: always
