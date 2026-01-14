@@ -1,9 +1,22 @@
+version: '3.8'
+
 services:
-  webdm:
-    image: webdm:latest
-    container_name: webdm
-    env_file:
-      - .env.production
+  web_dm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: web_dm
     ports:
       - "3000:3000"
-    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      # Thêm các biến môi trường cần thiết cho web_dm
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-https://dm.s4h.edu.vn}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      # Thêm các biến môi trường khác nếu cần
+    restart: unless-stopped
+

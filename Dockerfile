@@ -38,7 +38,7 @@ ENV NODE_ENV=production
 # Cấu hình biến môi trường cho Mongoose và các biến khác
 ENV MONGODB_URI="mongodb+srv://vamnaone:mUvy5dTT1HQYM7Fu@marketing.fyanx.mongodb.net/marketing"
 ENV JWT_SECRET="AIR_7f1c8a4c6bb0d4571d9848bcbb60596bff79555a7cb563"
-ENV URL="https://dm.s4h.edu.vn/"
+ENV URL="http://localhost:3000/"
 ENV API="https://todo.tr1nh.net"
 ENV AREA='["hkg1", "sin1"]'
 ENV OPENAI_KEY="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"
