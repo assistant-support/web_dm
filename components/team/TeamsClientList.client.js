@@ -7,7 +7,7 @@ import TeamCard from './TeamCard.js';
 import TeamListItem from './TeamListItem.js';
 import ViewModeToggle from './ViewModeToggle.client.js';
 
-export default function TeamsClientList({ teams = [], currentUserId, initialView = 'card', serverRootId = 'teams-server-root', controlsRootId = 'teams-client-controls-root' }) {
+export default function TeamsClientList({ teams = [], currentUserId, currentUser, initialView = 'card', serverRootId = 'teams-server-root', controlsRootId = 'teams-client-controls-root' }) {
     const [viewMode, setViewMode] = useState(initialView || 'card');
     const [mounted, setMounted] = useState(false);
 
@@ -30,7 +30,7 @@ export default function TeamsClientList({ teams = [], currentUserId, initialView
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                     <div className="divide-y divide-gray-200">
                         {teams.map(team => (
-                            <TeamListItem key={team._id} team={team} currentUserId={currentUserId} />
+                            <TeamListItem key={team._id} team={team} currentUserId={currentUserId} currentUser={currentUser} />
                         ))}
                     </div>
                 </div>
@@ -40,7 +40,7 @@ export default function TeamsClientList({ teams = [], currentUserId, initialView
         return (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ">
                 {teams.map(team => (
-                    <TeamCard key={team._id || team.id} team={team} currentUserId={currentUserId} />
+                    <TeamCard key={team._id || team.id} team={team} currentUserId={currentUserId} currentUser={currentUser} />
                 ))}
             </div>
         );

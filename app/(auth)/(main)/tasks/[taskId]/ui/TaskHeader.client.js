@@ -8,7 +8,8 @@ import {
     PauseCircle, PlayCircle, XCircle, CalendarDays, BarChart3, CornerUpLeft, MessageSquare, Paperclip,
     Edit, CheckCheck, Undo2, GitMerge, ListTree, FolderClock, Play, Flag,
     MoreVertical,
-    Trash2
+    Trash2,
+    RotateCcw // [NEW] Icon cho khôi phục
 } from 'lucide-react';
 import clsx from 'clsx';
 import { format, formatDistanceToNowStrict } from 'date-fns';
@@ -142,7 +143,8 @@ export default function TaskHeader({
     workTypes, // Dùng cho dialog
     platforms, // Dùng cho dialog
     subtasksCount = 0,
-    maxPoints = null // [NEW] Giới hạn điểm cho subtask
+    maxPoints = null, // [NEW] Giới hạn điểm cho subtask
+    isAdmin = false // [NEW] Admin có đầy đủ quyền
 }) {
     const router = useRouter();
     const { run } = useAsyncNotifier();
@@ -160,16 +162,18 @@ export default function TaskHeader({
 
     // Biến tính toán logic (Giữ nguyên)
     const isProjectManager = canManage;
+    const isCancelled = task.status === TASK_STATUS.CANCELLED; // [NEW] Check nếu task đã hủy
     const isWaitingConfirm = task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
     const isPendingApproval = task.status === TASK_STATUS.PENDING_APPROVAL;
     const isPendingCompletionReview = task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW;
-    const canStartOrHold = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
-    const canMarkDone = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
+    const canStartOrHold = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status) && !isCancelled;
+    const canMarkDone = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status) && !isCancelled;
     const canCancel = ![TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED].includes(task.status);
     const canDelete = [TASK_STATUS.DRAFT, TASK_STATUS.REJECTED, TASK_STATUS.CANCELLED].includes(task.status);
 
     // --- Action Handlers (Giữ nguyên) ---
     const handleConfirmAssignment = async (accept) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         let note = '';
         if (!accept) { note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):'); if (note === null) return; }
         await run(() => confirmAssignment(task._id, { accept, note }), {
@@ -178,6 +182,7 @@ export default function TaskHeader({
         });
     };
     const handleApproveCreation = async (approve) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         let note = '';
         if (!approve) { note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):'); if (note === null) return; }
         await run(() => approveTaskCreation(task._id, { approve, note, initialPoints: task.initialPoints || 0 }), {
@@ -186,6 +191,7 @@ export default function TaskHeader({
         });
     };
     const handleApproveCompletion = async (approve) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         if (approve) {
             setShowApproveDialog(true);
             return;
@@ -205,6 +211,7 @@ export default function TaskHeader({
     };
 
     const onApproveConfirm = async ({ finalPoints, note }) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         await run(() => approveTaskCompletion(task._id, { approve: true, note, finalPoints }), {
             loadingMessage: 'Đang duyệt hoàn thành...',
             successMessage: 'Task đã hoàn thành!', onSuccess: router.refresh
@@ -212,6 +219,7 @@ export default function TaskHeader({
     };
 
     const handleDelete = () => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy (hoặc có thể cho phép xóa task đã hủy)
         if (!confirm('Bạn có chắc muốn XÓA vĩnh viễn nhiệm vụ này? Hành động này không thể hoàn tác.')) return;
         run(async () => { const result = await deleteTask(task._id); if (!result.ok) throw new Error(result.message); return result; }, {
             loadingMessage: 'Đang xóa nhiệm vụ...', successMessage: 'Đã xóa nhiệm vụ!',
@@ -219,6 +227,7 @@ export default function TaskHeader({
         });
     };
     const toggleStartOnHold = async (e) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         e?.stopPropagation();
         let targetStatus = TASK_STATUS.IN_PROGRESS;
         let loadingMsg = 'Đang tiếp tục công việc...';
@@ -236,6 +245,7 @@ export default function TaskHeader({
         });
     };
     const handleMarkDoneClick = async (e) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         e?.stopPropagation();
         await run(() => updateTaskStatus(task._id, TASK_STATUS.COMPLETED_AWAIT_REVIEW), {
             loadingMessage: 'Đang gửi duyệt hoàn thành...',
@@ -244,11 +254,22 @@ export default function TaskHeader({
         });
     };
     const handleCancelClick = async (e) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         e?.stopPropagation();
         if (!confirm('Bạn có chắc muốn HỦY nhiệm vụ này?')) return;
         await run(() => updateTaskStatus(task._id, TASK_STATUS.CANCELLED), {
             loadingMessage: 'Đang hủy nhiệm vụ...',
             successMessage: 'Đã hủy nhiệm vụ thành công.',
+            onSuccess: router.refresh
+        });
+    };
+    // [NEW] Handler khôi phục task đã hủy
+    const handleRestoreClick = async (e) => {
+        e?.stopPropagation();
+        if (!confirm('Bạn có chắc muốn KHÔI PHỤC nhiệm vụ này? Task sẽ được chuyển về trạng thái "Đang làm".')) return;
+        await run(() => updateTaskStatus(task._id, TASK_STATUS.IN_PROGRESS), {
+            loadingMessage: 'Đang khôi phục nhiệm vụ...',
+            successMessage: 'Đã khôi phục nhiệm vụ thành công.',
             onSuccess: router.refresh
         });
     };
@@ -265,9 +286,18 @@ export default function TaskHeader({
             run(() => Promise.reject({ message: 'Không tìm thấy thông tin người nhận.' }), { notify: 'error' });
         }
     };
-    const handleNotifyAssignee = (e) => openNotifyDialog(e, task.assignee, 'assignee');
-    const handleNotifyManagerApproval = (e) => openNotifyDialog(e, task.createdBy, 'manager_approval');
-    const handleNotifyManagerCompletion = (e) => openNotifyDialog(e, task.createdBy, 'manager_completion');
+    const handleNotifyAssignee = (e) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
+        openNotifyDialog(e, task.assignee, 'assignee');
+    };
+    const handleNotifyManagerApproval = (e) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
+        openNotifyDialog(e, task.createdBy, 'manager_approval');
+    };
+    const handleNotifyManagerCompletion = (e) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
+        openNotifyDialog(e, task.createdBy, 'manager_completion');
+    };
 
 
     return (
@@ -285,7 +315,11 @@ export default function TaskHeader({
 
                     {/* Bên phải: Các nút hành động (Giữ nguyên) */}
                     <div className="flex items-center justify-end gap-2 flex-shrink-0">
-                        {isWaitingConfirm && (
+                        {/* [NEW] Vô hiệu hóa tất cả nút khi task đã hủy */}
+                        {isCancelled && (
+                            <div className="text-xs text-gray-500 italic">Task đã hủy - Chỉ xem</div>
+                        )}
+                        {!isCancelled && isWaitingConfirm && (
                             <>
                                 {isAssignee ? (
                                     <>
@@ -295,14 +329,14 @@ export default function TaskHeader({
                                 ) : (
                                     <div className="flex items-center justify-end gap-2 w-full">
                                         <div className="flex items-center gap-1 text-xs text-blue-600" title="Chờ xác nhận"><Clock size={14} /><span className="hidden xl:inline">Chờ xác nhận</span></div>
-                                        {(isCreator || isProjectManager) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyAssignee} variant="info" tooltip="Nhắc nhở người thực hiện" className={notifyActionBtnClass} />)}
+                                        {(isAdmin || isCreator || isProjectManager) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyAssignee} variant="info" tooltip="Nhắc nhở người thực hiện" className={notifyActionBtnClass} />)}
                                     </div>
                                 )}
                             </>
                         )}
-                        {isPendingApproval && (
+                        {!isCancelled && isPendingApproval && (
                             <>
-                                {isProjectManager ? (
+                                {(isAdmin || isProjectManager) ? (
                                     <>
                                         <ActionButton icon={Check} label="Duyệt" onClick={(e) => { e.stopPropagation(); handleApproveCreation(true); }} variant="success" tooltip="Duyệt tạo task" className={mainActionBtnClass} />
                                         <ActionButton icon={X} label="Từ chối" onClick={(e) => { e.stopPropagation(); handleApproveCreation(false); }} variant="danger" tooltip="Từ chối tạo task" className={mainActionBtnClass} />
@@ -315,9 +349,9 @@ export default function TaskHeader({
                                 )}
                             </>
                         )}
-                        {isPendingCompletionReview && (
+                        {!isCancelled && isPendingCompletionReview && (
                             <>
-                                {isProjectManager ? (
+                                {(isAdmin || isProjectManager) ? (
                                     <>
                                         <ActionButton icon={Check} label="Duyệt HT" onClick={(e) => { e.stopPropagation(); handleApproveCompletion(true); }} variant="success" tooltip="Duyệt hoàn thành" className={mainActionBtnClass} />
                                         <ActionButton icon={X} label="Làm lại" onClick={(e) => { e.stopPropagation(); handleApproveCompletion(false); }} variant="danger" tooltip="Yêu cầu làm lại" className={mainActionBtnClass} />
@@ -341,7 +375,7 @@ export default function TaskHeader({
                             ><span className="hidden sm:inline ml-1.5 whitespace-nowrap">Quay lại</span>
                             </Button>
                         )}
-                        {canEditTask && (
+                        {!isCancelled && canEditTask && (
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -352,7 +386,7 @@ export default function TaskHeader({
                             ><span className="hidden sm:inline ml-1.5 whitespace-nowrap">Cập nhật</span>
                             </Button>
                         )}
-                        {!isWaitingConfirm && !isPendingApproval && !isPendingCompletionReview && (
+                        {!isCancelled && !isWaitingConfirm && !isPendingApproval && !isPendingCompletionReview && (
                             <Dropdown>
                                 <Dropdown.Trigger>
                                     <Button variant="outline" size="sm" onClick={(e) => e.stopPropagation()} icon={MoreVertical} className="!px-2 sm:!px-3">
@@ -361,20 +395,57 @@ export default function TaskHeader({
                                 </Dropdown.Trigger>
                                 <Dropdown.Content position="bottom-right" width="w-56" className="z-10">
                                     <div className="p-1">
-                                        {canStartOrHold && isAssignee && (
-                                            <DropdownItem icon={task.status === TASK_STATUS.IN_PROGRESS ? PauseCircle : PlayCircle} label={task.status === TASK_STATUS.IN_PROGRESS ? 'Tạm dừng' : 'Tiếp tục'} onClick={toggleStartOnHold} />
+                                        {/* Cho phép Admin/Quản lý thao tác start/hold/done giống trong danh sách Công việc */}
+                                        {canStartOrHold && (isAdmin || isProjectManager || isAssignee) && (
+                                            <DropdownItem
+                                                icon={task.status === TASK_STATUS.IN_PROGRESS ? PauseCircle : PlayCircle}
+                                                label={task.status === TASK_STATUS.IN_PROGRESS ? 'Tạm dừng' : 'Tiếp tục'}
+                                                onClick={toggleStartOnHold}
+                                            />
                                         )}
-                                        {canMarkDone && isAssignee && (
-                                            <DropdownItem icon={CheckCircle2} label="Đánh dấu Hoàn thành" onClick={handleMarkDoneClick} className="text-green-600 hover:!bg-green-50" />
+                                        {canMarkDone && (isAdmin || isProjectManager || isAssignee) && (
+                                            <DropdownItem
+                                                icon={CheckCircle2}
+                                                label="Đánh dấu Hoàn thành"
+                                                onClick={handleMarkDoneClick}
+                                                className="text-green-600 hover:!bg-green-50"
+                                            />
                                         )}
-                                        {((canStartOrHold || canMarkDone) && isAssignee) && ((canCancel || canDelete) && (isProjectManager || isCreator)) && (
+                                        {((canStartOrHold || canMarkDone) && (isAdmin || isProjectManager || isAssignee)) && ((canCancel || canDelete) && (isAdmin || isProjectManager || isCreator)) && (
                                             <div className="border-t border-gray-200 my-1"></div>
                                         )}
-                                        {canCancel && (isProjectManager || isCreator) && (
+                                        {canCancel && (isAdmin || isProjectManager || isCreator) && (
                                             <DropdownItem icon={XCircle} label="Hủy bỏ" onClick={handleCancelClick} className="text-red-600 hover:!bg-red-50" />
                                         )}
-                                        {canDelete && (isProjectManager || isCreator) && (
+                                        {canDelete && (isAdmin || isProjectManager || isCreator) && (
                                             <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
+                                        )}
+                                    </div>
+                                </Dropdown.Content>
+                            </Dropdown>
+                        )}
+                        {/* [NEW] Dropdown menu cho task đã hủy - chỉ hiển thị nút Khôi phục và Xóa */}
+                        {isCancelled && (
+                            <Dropdown>
+                                <Dropdown.Trigger>
+                                    <Button variant="outline" size="sm" onClick={(e) => e.stopPropagation()} icon={MoreVertical} className="!px-2 sm:!px-3">
+                                        <span className="hidden sm:inline ml-1.5">Thao tác</span>
+                                    </Button>
+                                </Dropdown.Trigger>
+                                <Dropdown.Content position="bottom-right" width="w-56" className="z-10">
+                                    <div className="p-1">
+                                        {/* [NEW] Nút Khôi phục - bất kỳ ai cũng có quyền */}
+                                        <DropdownItem 
+                                            icon={RotateCcw} 
+                                            label="Khôi phục" 
+                                            onClick={handleRestoreClick} 
+                                            className="text-blue-600 hover:!bg-blue-50" 
+                                        />
+                                        {canDelete && (isAdmin || isProjectManager || isCreator) && (
+                                            <>
+                                                <div className="border-t border-gray-200 my-1"></div>
+                                                <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
+                                            </>
                                         )}
                                     </div>
                                 </Dropdown.Content>

@@ -40,7 +40,7 @@ export default function TeamProjectsPageClient({ team, initialProjects }) {
                         title={team?.isActive ? 'Tạo dự án mới' : 'Team đã lưu trữ — không thể tạo dự án'}
                     >
                         <Plus className="h-4 w-4" />
-                        Tạo dự án mới
+                        Tạo dự án mới cho team này
                     </button>
                 </div>
 

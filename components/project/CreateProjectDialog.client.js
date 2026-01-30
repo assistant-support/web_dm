@@ -23,15 +23,51 @@ const formatDateForInput = (date) => {
     return `${year}-${month}-${day}`;
 };
 
+// Helper to get today's date in 'YYYY-MM-DD' format
+const getTodayString = () => {
+    return formatDateForInput(new Date());
+};
+
 // Schema validation
 const projectSchema = z.object({
     name: z.string().trim().min(1, 'Tên dự án là bắt buộc'),
     description: z.string().optional(),
     team: z.string().optional(),
     priority: z.string().optional(),
-    startDate: z.string().optional(),
-    dueDate: z.string().optional(),
+    startDate: z.string().optional().refine((val) => {
+        if (!val) return true; // Optional field
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(val);
+        selectedDate.setHours(0, 0, 0, 0);
+        return selectedDate >= today;
+    }, {
+        message: 'Ngày bắt đầu không được là thời điểm quá khứ'
+    }),
+    dueDate: z.string().optional().refine((val) => {
+        if (!val) return true; // Optional field
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(val);
+        selectedDate.setHours(0, 0, 0, 0);
+        return selectedDate >= today;
+    }, {
+        message: 'Ngày kết thúc không được là thời điểm quá khứ'
+    }),
     tags: z.string().optional(),
+}).refine((data) => {
+    // Validate dueDate >= startDate if both are provided
+    if (data.startDate && data.dueDate) {
+        const start = new Date(data.startDate);
+        const due = new Date(data.dueDate);
+        start.setHours(0, 0, 0, 0);
+        due.setHours(0, 0, 0, 0);
+        return due >= start;
+    }
+    return true;
+}, {
+    message: 'Ngày kết thúc phải sau hoặc bằng ngày bắt đầu',
+    path: ['dueDate']
 });
 
 const PRIORITIES_OPTIONS = [
@@ -155,7 +191,7 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
             <DialogComponent
                 open={open}
                 onOpenChange={onClose}
-                title="Tạo dự án mới"
+                title="Tạo dự án mới nha"
                 description="Tạo một dự án để quản lý công việc"
                 size="lg"
             >
@@ -193,6 +229,7 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
                         <Input
                             label="Ngày bắt đầu"
                             type="date"
+                            min={getTodayString()}
                             error={form.formState.errors.startDate?.message}
                             {...form.register('startDate')}
                         />
@@ -200,6 +237,7 @@ export default function CreateProjectDialog({ open, onClose, onSuccess, defaultT
                         <Input
                             label="Ngày kết thúc"
                             type="date"
+                            min={getTodayString()}
                             error={form.formState.errors.dueDate?.message}
                             {...form.register('dueDate')}
                         />

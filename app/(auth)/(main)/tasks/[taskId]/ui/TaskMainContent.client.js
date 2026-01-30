@@ -16,6 +16,7 @@ import SubtaskList from './SubtaskList.client.js';
 import WorkflowViewer from '@/components/tasks/WorkflowViewer.client.js';
 import AttachmentList from '@/components/attachments/AttachmentList.client.js';
 import Button from '@/components/ui/button/index.js';
+import { TASK_STATUS } from '@/model/common/enums';
 
 
 /**
@@ -36,6 +37,7 @@ export default function TaskMainContent({
     platforms,
     workflow,
     comments: initialComments,
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
     remainingPoints = null // [NEW]
 }) {
     const [newComment, setNewComment] = useState('');
@@ -43,6 +45,7 @@ export default function TaskMainContent({
 
     // Xử lý thêm bình luận
     const handleAddComment = async () => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         if (newComment.trim()) {
             try {
                 await createCommentAction({
@@ -57,29 +60,31 @@ export default function TaskMainContent({
         }
     };
 
+    // [NEW] Check nếu task đã hủy
+    const isCancelled = task?.status === TASK_STATUS.CANCELLED;
     // Quyền quản lý attachments
-    const canManageAttachments = isAssignee || isCreator;
+    const canManageAttachments = (isAssignee || isCreator) && !isCancelled; // [NEW] Vô hiệu hóa khi đã hủy
     // Determine project active if available on task
     const projectActive = (() => {
         if (!task) return true;
         if (task.project && typeof task.project === 'object' && 'isActive' in task.project) return task.project.isActive;
         if ('projectIsActive' in task) return task.projectIsActive;
         return true;
-    })();
+    })() && !isCancelled; // [NEW] Vô hiệu hóa khi đã hủy
     
 
     return (
         <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
 
             {/* --- Phần Workflow --- */}
-            {!task.parentTask && (
+            {(!task.parentTask || isAdmin) && (
                 <div className="bg-white border border-gray-200 rounded-md">
                     <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                         <h3 className="text-base font-semibold text-gray-800 flex items-center gap-2">
                             <Workflow size={18} className="text-blue-600" />
                             Quy trình (Workflow)
                         </h3>
-                        {(isAssignee || canManageAttachments) && (
+                        {!isCancelled && (isAdmin || isAssignee || canManageAttachments) && (
                             <Button>
                                 <Link
                                     variant="outline"
@@ -112,6 +117,7 @@ export default function TaskMainContent({
                     workTypes={workTypes}
                     platforms={platforms}
                     isAssignee={isAssignee}
+                    isAdmin={isAdmin} // [NEW] Truyền quyền admin
                     remainingPoints={remainingPoints} // [NEW]
                 />
             )}
@@ -150,7 +156,7 @@ export default function TaskMainContent({
                             </li>
                         ))}
                     </ul>
-                    {canManage && (
+                    {!isCancelled && (
                         <div className="mt-4 flex items-center gap-2">
                             <input
                                 type="text"
@@ -158,10 +164,12 @@ export default function TaskMainContent({
                                 onChange={(e) => setNewComment(e.target.value)}
                                 placeholder="Thêm bình luận..."
                                 className="flex-1 border border-gray-300 rounded-md p-2 text-sm"
+                                disabled={isCancelled}
                             />
                             <button
                                 onClick={handleAddComment}
-                                className="bg-[var(--brand-600)] text-white px-4 py-2 rounded-md text-sm hover:bg-[var(--brand-700)] transition-colors"
+                                disabled={isCancelled}
+                                className="bg-[var(--brand-600)] text-white px-4 py-2 rounded-md text-sm hover:bg-[var(--brand-700)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Gửi
                             </button>

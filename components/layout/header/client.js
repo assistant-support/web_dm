@@ -23,7 +23,7 @@ const UidSetupDialog = dynamic(() => import('@/components/uid/UidSetupDialog.cli
 
 const apps = [
     { name: 'Digital Marketing', href: '#', icon: 'https://lh3.googleusercontent.com/d/1PNcTJhUTzndZaHAe4s19sbjZyV6S80d0' },
-    { name: 'Checkin', href: 'https://checkin.s4h.edu.vn', icon: 'https://lh3.googleusercontent.com/d/1_fJwUYjDMT939e7v0JqExeHluwl58FnW' },
+    { name: 'Checkin', href: 'https://checkin.s4h.edu.vn', icon: 'https://www.dropbox.com/scl/fi/6bq5r8kdrqekzu9see31g/logo.png?rlkey=2sjwwrjdmd311n13gy9od9i54&st=0t0g92qs&dl=1' },
 ];
 
 export function AppSwitcher() {

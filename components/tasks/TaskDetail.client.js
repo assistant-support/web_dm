@@ -43,6 +43,7 @@ import TaskPointsBadge from './TaskPointsBadge.client';
 // Dialogs
 import CreateSubtaskDialog from './CreateSubtaskDialog.client';
 import EditTaskDialog from './EditTaskDialog.client';
+import { PromptDialog } from '@/components/ui/dialog';
 
 // Enums and Helpers
 import { TASK_STATUS } from '@/model/common/enums';
@@ -146,6 +147,19 @@ export default function TaskDetail({
     const [task, setTask] = useState(initialTask);
     const [showCreateSubtask, setShowCreateSubtask] = useState(false);
     const [showEditTask, setShowEditTask] = useState(false);
+    
+    // Prompt Dialog state - chỉ để hiển thị popup, không lưu giá trị
+    const [promptDialog, setPromptDialog] = useState({
+        open: false,
+        title: '',
+        label: '',
+        placeholder: '',
+        defaultValue: '',
+        type: 'text',
+        required: false,
+        onConfirm: null,
+        onCancel: null,
+    });
 
     useEffect(() => { setTask(initialTask); }, [initialTask]);
 
@@ -153,8 +167,9 @@ export default function TaskDetail({
     const currentUserId = currentUser.externalUserId;
     const isAssignee = getUserId(task.assignee) === currentUserId;
     const isCreator = getUserId(task.createdBy) === currentUserId;
-    const canEditTask = canManage || isCreator;
-    const canManagePanels = canManage;
+    const isCancelled = task.status === TASK_STATUS.CANCELLED; // [NEW] Check nếu task đã hủy
+    const canEditTask = (canManage || isCreator) && !isCancelled; // [NEW] Vô hiệu hóa edit khi đã hủy
+    const canManagePanels = canManage && !isCancelled; // [NEW] Vô hiệu hóa manage khi đã hủy
     const statusInfo = useMemo(() => getStatusInfo(task.status), [task.status]);
     const priorityInfo = useMemo(() => getPriorityInfo(task.priority), [task.priority]);
     const assigneeId = getUserId(task.assignee);
@@ -195,35 +210,137 @@ export default function TaskDetail({
 
     // --- Action Handlers ---
     const handleConfirmAssignment = async (accept) => {
-        let note = '';
-        if (!accept) { note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):'); if (note === null) return; }
-        await run(() => confirmAssignment(task._id, { accept, note }), {
-            loadingMessage: accept ? 'Đang xác nhận...' : 'Đang từ chối...',
-            successMessage: accept ? 'Đã bắt đầu nhận việc!' : 'Đã từ chối nhận việc.', onSuccess: router.refresh
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
+        if (!accept) {
+            setPromptDialog({
+                open: true,
+                title: 'Từ chối nhận việc',
+                label: 'Lý do từ chối',
+                placeholder: 'Nhập lý do từ chối (không bắt buộc)',
+                defaultValue: '',
+                type: 'textarea',
+                required: false,
+                onConfirm: (note) => {
+                    run(() => confirmAssignment(task._id, { accept: false, note }), {
+                        loadingMessage: 'Đang từ chối...',
+                        successMessage: 'Đã từ chối nhận việc.',
+                        onSuccess: router.refresh
+                    });
+                },
+                onCancel: () => {
+                    // Cancel = return, không làm gì
+                }
+            });
+            return;
+        }
+        await run(() => confirmAssignment(task._id, { accept: true, note: '' }), {
+            loadingMessage: 'Đang xác nhận...',
+            successMessage: 'Đã bắt đầu nhận việc!',
+            onSuccess: router.refresh
         });
     };
     const handleApproveCreation = async (approve) => {
-        let note = '';
-        if (!approve) { note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):'); if (note === null) return; }
-        await run(() => approveTaskCreation(task._id, { approve, note, initialPoints: task.initialPoints || 0 }), {
-            loadingMessage: approve ? 'Đang duyệt task...' : 'Đang từ chối task...',
-            successMessage: approve ? 'Task đã được duyệt!' : 'Đã từ chối task.', onSuccess: router.refresh
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
+        if (!approve) {
+            setPromptDialog({
+                open: true,
+                title: 'Từ chối tạo task',
+                label: 'Lý do từ chối',
+                placeholder: 'Nhập lý do từ chối (không bắt buộc)',
+                defaultValue: '',
+                type: 'textarea',
+                required: false,
+                onConfirm: (note) => {
+                    run(() => approveTaskCreation(task._id, { approve: false, note, initialPoints: task.initialPoints || 0 }), {
+                        loadingMessage: 'Đang từ chối task...',
+                        successMessage: 'Đã từ chối task.',
+                        onSuccess: router.refresh
+                    });
+                },
+                onCancel: () => {
+                    // Cancel = return, không làm gì
+                }
+            });
+            return;
+        }
+        await run(() => approveTaskCreation(task._id, { approve: true, note: '', initialPoints: task.initialPoints || 0 }), {
+            loadingMessage: 'Đang duyệt task...',
+            successMessage: 'Task đã được duyệt!',
+            onSuccess: router.refresh
         });
     };
     const handleApproveCompletion = async (approve) => {
-        let note = ''; let finalPoints = task.initialPoints || 0;
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         if (approve) {
-            const pointsInput = prompt('Duyệt hoàn thành. Nhập điểm cuối cùng:', finalPoints); if (pointsInput === null) return;
-            finalPoints = Number(pointsInput) || 0; note = prompt('Nhập ghi chú (không bắt buộc):'); if (note === null) return;
-        } else {
-            note = prompt('Vui lòng nhập lý do yêu cầu làm lại:'); if (note === null || note.trim() === "") return alert('Vui lòng nhập lý do.');
+            // Bước 1: Nhập điểm (giá trị mặc định = task.initialPoints)
+            const finalPoints = task.initialPoints || 0;
+            setPromptDialog({
+                open: true,
+                title: 'Duyệt hoàn thành',
+                label: 'Điểm cuối cùng',
+                placeholder: 'Nhập điểm cuối cùng',
+                defaultValue: String(finalPoints),
+                type: 'number',
+                required: true,
+                min: 0,
+                onConfirm: (pointsInput) => {
+                    const pointsValue = Number(pointsInput) || 0;
+                    // Đợi dialog đóng xong, sau đó mở dialog bước 2
+                    setTimeout(() => {
+                        setPromptDialog({
+                            open: true,
+                            title: 'Duyệt hoàn thành',
+                            label: 'Ghi chú',
+                            placeholder: 'Nhập ghi chú (không bắt buộc)',
+                            defaultValue: '',
+                            type: 'textarea',
+                            required: false,
+                            onConfirm: (note) => {
+                                run(() => approveTaskCompletion(task._id, { approve: true, note, finalPoints: pointsValue }), {
+                                    loadingMessage: 'Đang duyệt hoàn thành...',
+                                    successMessage: 'Task đã hoàn thành!',
+                                    onSuccess: router.refresh
+                                });
+                            },
+                            onCancel: () => {
+                                // Cancel ở bước 2 = return, không làm gì (mất điểm đã nhập)
+                            }
+                        });
+                    }, 100);
+                },
+                onCancel: () => {
+                    // Cancel ở bước 1 = return, không làm gì
+                }
+            });
+            return;
         }
-        await run(() => approveTaskCompletion(task._id, { approve, note, finalPoints }), {
-            loadingMessage: approve ? 'Đang duyệt hoàn thành...' : 'Đang gửi yêu cầu làm lại...',
-            successMessage: approve ? 'Task đã hoàn thành!' : 'Đã gửi yêu cầu làm lại.', onSuccess: router.refresh
+        // Từ chối - yêu cầu làm lại
+        setPromptDialog({
+            open: true,
+            title: 'Yêu cầu làm lại',
+            label: 'Lý do yêu cầu làm lại',
+            placeholder: 'Nhập lý do yêu cầu làm lại',
+            defaultValue: '',
+            type: 'textarea',
+            required: true,
+            onConfirm: (note) => {
+                if (!note || note.trim() === '') {
+                    alert('Vui lòng nhập lý do.');
+                    return;
+                }
+                run(() => approveTaskCompletion(task._id, { approve: false, note, finalPoints: task.initialPoints || 0 }), {
+                    loadingMessage: 'Đang gửi yêu cầu làm lại...',
+                    successMessage: 'Đã gửi yêu cầu làm lại.',
+                    onSuccess: router.refresh
+                });
+            },
+            onCancel: () => {
+                // Cancel = return, không làm gì
+            }
         });
     };
     const handleUpdateStatus = (newStatus) => {
+        if (isCancelled) return; // [NEW] Chặn thao tác nếu task đã hủy
         let loadingMsg = 'Đang cập nhật trạng thái...'; let successMsg = 'Đã cập nhật trạng thái!';
         if (newStatus === TASK_STATUS.COMPLETED_AWAIT_REVIEW) { loadingMsg = 'Đang gửi duyệt hoàn thành...'; successMsg = 'Đã gửi duyệt!'; }
         else if (newStatus === TASK_STATUS.ON_HOLD) { loadingMsg = 'Đang tạm dừng...'; successMsg = 'Đã tạm dừng công việc.'; }
@@ -267,27 +384,31 @@ export default function TaskDetail({
                     </div>
                     {/* Main Actions */}
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* [NEW] Hiển thị thông báo khi task đã hủy */}
+                        {isCancelled && (
+                            <div className="text-xs text-gray-500 italic">Task đã hủy - Chỉ xem</div>
+                        )}
                         {/* Conditional Action Buttons */}
-                        {task.status === TASK_STATUS.PENDING_APPROVAL && canManage && (
+                        {!isCancelled && task.status === TASK_STATUS.PENDING_APPROVAL && canManage && (
                             <>
                                 <Button size="sm" variant="success" icon={Check} onClick={() => handleApproveCreation(true)}>Duyệt</Button>
                                 <Button size="sm" variant="danger_outline" icon={X} onClick={() => handleApproveCreation(false)}>Từ chối</Button>
                             </>
                         )}
-                        {task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && isAssignee && (
+                        {!isCancelled && task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && isAssignee && (
                             <>
                                 <Button size="sm" variant="success" icon={PlayCircle} onClick={() => handleConfirmAssignment(true)}>Bắt đầu</Button>
                                 <Button size="sm" variant="danger_outline" icon={X} onClick={() => handleConfirmAssignment(false)}>Từ chối</Button>
                             </>
                         )}
-                        {task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW && canManage && (
+                        {!isCancelled && task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW && canManage && (
                             <>
                                 <Button size="sm" variant="success" icon={CheckCheck} onClick={() => handleApproveCompletion(true)}>Duyệt HT</Button>
                                 <Button size="sm" variant="danger_outline" icon={Undo2} onClick={() => handleApproveCompletion(false)}>Làm lại</Button>
                             </>
                         )}
                         {/* Edit Button */}
-                        {canEditTask && (
+                        {!isCancelled && canEditTask && (
                             <Button variant="outline" size="sm" icon={Edit} onClick={() => projectActive && setShowEditTask(true)} disabled={!projectActive} title={!projectActive ? 'Dự án đã lưu trữ — không thể chỉnh sửa task' : undefined}>
                                 Sửa
                             </Button>
@@ -410,7 +531,7 @@ export default function TaskDetail({
                                 <div className="p-5">
                                     <div className="flex items-center justify-between mb-4">
                                         <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2"><GitMerge className="h-5 w-5 text-gray-500" /> Nhiệm vụ con ({subtasks.length})</h2>
-                                        {(canManage || isAssignee) && (
+                                        {!isCancelled && (canManage || isAssignee) && (
                                             <Button size="xs" variant="outline" icon={PlusCircle} onClick={() => projectActive && setShowCreateSubtask(true)} disabled={!projectActive} title={!projectActive ? 'Dự án đã lưu trữ — không thể thêm việc con' : undefined}>
                                                 Thêm việc con
                                             </Button>
@@ -447,14 +568,14 @@ export default function TaskDetail({
                         <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                             <div className="p-5">
                                 <h2 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2"><Paperclip className="h-5 w-5 text-gray-500" /> Tệp đính kèm</h2>
-                                <AttachmentList taskId={task._id} projectId={task.project} scope="task" currentUser={currentUser} canManage={canManage || isCreator || isAssignee} initialCount={task.attachmentsCount || 0} isActive={projectActive} />
+                                <AttachmentList taskId={task._id} projectId={task.project} scope="task" currentUser={currentUser} canManage={!isCancelled && (canManage || isCreator || isAssignee)} initialCount={task.attachmentsCount || 0} isActive={projectActive && !isCancelled} />
                             </div>
                         </div>
 
                         {/* Comments */}
                         <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                             <div className="p-5 border-b border-gray-100"> <h2 className="text-base font-semibold text-gray-800 flex items-center gap-2"><MessageSquare className="h-5 w-5 text-gray-500" /> Thảo luận</h2> </div>
-                                <div className="p-5"> <CommentList taskId={task._id} currentUser={currentUser} canManage={canManage} initialCount={task.commentsCount || 0} isActive={projectActive} /> </div>
+                                <div className="p-5"> <CommentList taskId={task._id} currentUser={currentUser} canManage={!isCancelled && canManage} initialCount={task.commentsCount || 0} isActive={projectActive && !isCancelled} /> </div>
                         </div>
                     </div>
                 </div>
@@ -466,11 +587,17 @@ export default function TaskDetail({
                         <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                             <div className="p-4 border-b border-gray-100"><h3 className="text-sm font-semibold text-gray-700">Hành động</h3></div>
                             <div className="p-4">
-                                {task.status === TASK_STATUS.PENDING_APPROVAL && canManage && (<div className="space-y-2"> <Button variant="success" className="w-full justify-center" icon={Check} onClick={() => handleApproveCreation(true)}>Duyệt tạo Task</Button> <Button variant="danger" className="w-full justify-center" icon={X} onClick={() => handleApproveCreation(false)}>Từ chối</Button> </div>)}
-                                {task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && isAssignee && (<div className="space-y-2"> <Button variant="success" className="w-full justify-center" icon={PlayCircle} onClick={() => handleConfirmAssignment(true)}>Bắt đầu làm</Button> <Button variant="danger" className="w-full justify-center" icon={X} onClick={() => handleConfirmAssignment(false)}>Từ chối nhận</Button> </div>)}
-                                {task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW && canManage && (<div className="space-y-2"> <Button variant="success" className="w-full justify-center" icon={CheckCheck} onClick={() => handleApproveCompletion(true)}>Duyệt hoàn thành</Button> <Button variant="danger" className="w-full justify-center" icon={Undo2} onClick={() => handleApproveCompletion(false)}>Yêu cầu làm lại</Button> </div>)}
-                                {[TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status) && isAssignee && (<div className="space-y-2"> <Button variant="primary" className="w-full justify-center" icon={CheckCircle2} onClick={() => handleUpdateStatus(TASK_STATUS.COMPLETED_AWAIT_REVIEW)}>Gửi duyệt Hoàn thành</Button> {task.status === TASK_STATUS.IN_PROGRESS ? (<Button variant="secondary" className="w-full justify-center" icon={PauseCircle} onClick={() => handleUpdateStatus(TASK_STATUS.ON_HOLD)}>Tạm dừng</Button>) : (<Button variant="secondary" className="w-full justify-center" icon={PlayCircle} onClick={() => handleUpdateStatus(TASK_STATUS.IN_PROGRESS)}>Tiếp tục làm</Button>)} </div>)}
-                                {!((task.status === TASK_STATUS.PENDING_APPROVAL && canManage) || (task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && isAssignee) || (task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW && canManage) || ([TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status) && isAssignee)) && (<p className="text-sm text-gray-500 italic text-center py-2">Không có hành động nào.</p>)}
+                                {isCancelled ? (
+                                    <p className="text-sm text-gray-500 italic text-center py-2">Task đã hủy - Chỉ xem</p>
+                                ) : (
+                                    <>
+                                        {task.status === TASK_STATUS.PENDING_APPROVAL && canManage && (<div className="space-y-2"> <Button variant="success" className="w-full justify-center" icon={Check} onClick={() => handleApproveCreation(true)}>Duyệt tạo Task</Button> <Button variant="danger" className="w-full justify-center" icon={X} onClick={() => handleApproveCreation(false)}>Từ chối</Button> </div>)}
+                                        {task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && isAssignee && (<div className="space-y-2"> <Button variant="success" className="w-full justify-center" icon={PlayCircle} onClick={() => handleConfirmAssignment(true)}>Bắt đầu làm</Button> <Button variant="danger" className="w-full justify-center" icon={X} onClick={() => handleConfirmAssignment(false)}>Từ chối nhận</Button> </div>)}
+                                        {task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW && canManage && (<div className="space-y-2"> <Button variant="success" className="w-full justify-center" icon={CheckCheck} onClick={() => handleApproveCompletion(true)}>Duyệt hoàn thành</Button> <Button variant="danger" className="w-full justify-center" icon={Undo2} onClick={() => handleApproveCompletion(false)}>Yêu cầu làm lại</Button> </div>)}
+                                        {[TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status) && isAssignee && (<div className="space-y-2"> <Button variant="primary" className="w-full justify-center" icon={CheckCircle2} onClick={() => handleUpdateStatus(TASK_STATUS.COMPLETED_AWAIT_REVIEW)}>Gửi duyệt Hoàn thành</Button> {task.status === TASK_STATUS.IN_PROGRESS ? (<Button variant="secondary" className="w-full justify-center" icon={PauseCircle} onClick={() => handleUpdateStatus(TASK_STATUS.ON_HOLD)}>Tạm dừng</Button>) : (<Button variant="secondary" className="w-full justify-center" icon={PlayCircle} onClick={() => handleUpdateStatus(TASK_STATUS.IN_PROGRESS)}>Tiếp tục làm</Button>)} </div>)}
+                                        {!((task.status === TASK_STATUS.PENDING_APPROVAL && canManage) || (task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM && isAssignee) || (task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW && canManage) || ([TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status) && isAssignee)) && (<p className="text-sm text-gray-500 italic text-center py-2">Không có hành động nào.</p>)}
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -496,7 +623,7 @@ export default function TaskDetail({
                         <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                             <div className="p-4 border-b border-gray-100"><h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Users2 className="h-4 w-4 text-gray-500" /> Người tham gia</h3></div>
                             <div className="p-4">
-                                <CollaboratorsPanel task={task} users={users} projectMembers={projectMembers} currentUserId={currentUserId} canManage={canManagePanels} onUpdate={handlePanelUpdate} inviteAction={inviteCollaborator} removeAction={removeCollaboratorFromTask} />
+                                <CollaboratorsPanel task={task} users={users} projectMembers={projectMembers} currentUserId={currentUserId} canManage={canManagePanels && !isCancelled} onUpdate={handlePanelUpdate} inviteAction={inviteCollaborator} removeAction={removeCollaboratorFromTask} />
                             </div>
                         </div>
 
@@ -505,7 +632,7 @@ export default function TaskDetail({
                             <div className="bg-white border border-gray-100 rounded-lg shadow-sm">
                                 <div className="p-4 border-b border-gray-100"><h3 className="text-sm font-semibold text-gray-700">Phân phối điểm</h3></div>
                                 <div className="p-4">
-                                    <PointDistributionPanel task={task} canManage={canManagePanels} onUpdate={handlePanelUpdate} distributeAction={distributePointsToSubtasks} subtasks={subtasks} allUsersWithDetails={allUsersWithDetails} />
+                                    <PointDistributionPanel task={task} canManage={canManagePanels && !isCancelled} onUpdate={handlePanelUpdate} distributeAction={distributePointsToSubtasks} subtasks={subtasks} allUsersWithDetails={allUsersWithDetails} />
                                 </div>
                             </div>
                         )}
@@ -545,6 +672,20 @@ export default function TaskDetail({
                     currentUserId={currentUserId}
                 />
             )}
+            <PromptDialog
+                open={promptDialog.open}
+                onOpenChange={(open) => setPromptDialog({ ...promptDialog, open })}
+                title={promptDialog.title}
+                label={promptDialog.label}
+                placeholder={promptDialog.placeholder}
+                defaultValue={promptDialog.defaultValue}
+                type={promptDialog.type}
+                required={promptDialog.required}
+                min={promptDialog.min}
+                max={promptDialog.max}
+                onConfirm={promptDialog.onConfirm}
+                onCancel={promptDialog.onCancel}
+            />
         </div>
     );
 }

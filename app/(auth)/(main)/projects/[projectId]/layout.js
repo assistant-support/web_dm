@@ -37,7 +37,8 @@ export default async function ProjectDetailLayout({ children, params }) {
     const project = result.data; // Giả sử action đã serialize
 
     // Sử dụng helper `canManageProject` (vì project đã lean)
-    const userIsManager = canManageProject(project, user.externalUserId);
+    const userIsManager = canManageProject(project, user);
+    const isAdmin = user.role === 'admin';
 
     return (
         <div className='w-full flex flex-col gap-3'> {/* Tăng gap */}
@@ -45,6 +46,7 @@ export default async function ProjectDetailLayout({ children, params }) {
             <ProjectTabs
                 projectId={projectId}
                 isOwnerOrManager={userIsManager}
+                isAdmin={isAdmin}
             />
             <div className="flex-1 min-h-0 overflow-hidden">
                 {children}

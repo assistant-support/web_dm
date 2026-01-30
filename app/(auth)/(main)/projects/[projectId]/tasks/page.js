@@ -34,12 +34,15 @@ export default async function ProjectTasksPage({ params }) {
         notFound();
     }
 
-    // Check if user can manage (owner or manager)
+    const isAdmin = user.role === 'admin'; // [NEW] Kiểm tra quyền admin
+
+    // Check if user can manage (owner hoặc manager trong dự án, hoặc admin hệ thống)
     const userMember = project.members?.find(m => m.userId === user.externalUserId);
-    const canManage = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
+    const canManage = isAdmin || (userMember && (userMember.role === 'owner' || userMember.role === 'manager'));
     
-    // Check if user can create root tasks (only project managers)
-    const canCreate = canCreateTask(project, user.externalUserId);
+    // Check if user can create root tasks
+    // Admin luôn có quyền tạo task, kể cả khi không phải member/manager
+    const canCreate = isAdmin || canCreateTask(project, user.externalUserId);
 
     // Build list of user IDs to fetch display info for.
     // Use the union of project members and team members (deduplicated) so dropdowns see all relevant users.
@@ -109,6 +112,7 @@ export default async function ProjectTasksPage({ params }) {
                     allUsersWithDetails={allUsersWithDetails}
                     currentUserId={user.externalUserId}
                     canManage={canManage}
+                    isAdmin={isAdmin} // [NEW] Truyền quyền admin
                 />
             </div>
         </div>

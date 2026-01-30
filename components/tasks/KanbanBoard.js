@@ -1,7 +1,7 @@
 // components/tasks/KanbanBoard.js
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
     DndContext,
     DragOverlay,
@@ -9,6 +9,7 @@ import {
     useSensor,
     useSensors,
     closestCorners,
+    rectIntersection, // [FIX] Dùng rectIntersection để nhận diện tốt hơn
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import KanbanColumn from './KanbanColumn';
@@ -21,7 +22,7 @@ import { updateTask, updateKanbanOrder } from '@/data/task/actions/server';
 const COLUMNS = [
     {
         id: 'todo',
-        title: 'Cần làm',
+        title: 'Đã gửi Task',
         statuses: ['draft', 'pending_approval', 'waiting_confirm'],
     },
     {
@@ -31,7 +32,7 @@ const COLUMNS = [
     },
     {
         id: 'review',
-        title: 'Chờ review',
+        title: 'Chờ duyệt',
         statuses: ['completed_await_review'],
     },
     {
@@ -80,16 +81,47 @@ export default function KanbanBoard({
     canManage = false,
     currentUserId = '',
     users = [],
-    projectMembers = []
+    projectMembers = [],
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
+    canManageKanban = false // [NEW] Quyền thao tác kanban (admin, manager, owner)
 }) {
     const [tasks, setTasks] = useState(initialTasks);
     const [activeTask, setActiveTask] = useState(null);
+    const [overColumnId, setOverColumnId] = useState(null); // [NEW] Track column đang được drag over để highlight
+    const pendingOrderUpdate = useRef(null); // [FIX] Lưu pending order update để tránh gọi trong render
+    const dragOverInfo = useRef(null); // [FIX] Lưu thông tin drag over cuối cùng để update khi drag end
+    
+    // [NEW] State để track số lượng task hiển thị cho mỗi cột (mặc định 5)
+    const [visibleTasksCount, setVisibleTasksCount] = useState(() => {
+        const initial = {};
+        COLUMNS.forEach(col => {
+            initial[col.id] = 5; // Mặc định hiển thị 5 task đầu tiên
+        });
+        return initial;
+    });
 
+    // [NEW] Sync tasks khi initialTasks (filteredTasks) thay đổi
+    useEffect(() => {
+        setTasks(initialTasks);
+        // Reset visibleTasksCount khi filters thay đổi để bắt đầu lại từ đầu
+        setVisibleTasksCount(() => {
+            const initial = {};
+            COLUMNS.forEach(col => {
+                initial[col.id] = 5;
+            });
+            return initial;
+        });
+    }, [initialTasks]);
+
+    // [NEW] Chỉ enable drag nếu có quyền thao tác kanban
+    const canDrag = isAdmin || canManageKanban;
+    
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
                 distance: 8, // 8px movement required to start drag
             },
+            disabled: !canDrag, // [NEW] Disable sensors nếu không có quyền
         })
     );
 
@@ -112,11 +144,17 @@ export default function KanbanBoard({
         const { active } = event;
         const task = tasks.find((t) => t._id === active.id);
         setActiveTask(task);
+        dragOverInfo.current = null; // Reset khi bắt đầu drag mới
+        pendingOrderUpdate.current = null; // Reset pending order update
     };
 
     const handleDragOver = (event) => {
         const { active, over } = event;
-        if (!over) return;
+        if (!over) {
+            setOverColumnId(null);
+            dragOverInfo.current = null;
+            return;
+        }
 
         const activeId = active.id;
         const overId = over.id;
@@ -131,81 +169,55 @@ export default function KanbanBoard({
         const isOverColumn = overData?.type === 'column';
         const isOverTask = overData?.type === 'task';
 
+        // [NEW] Update overColumnId để highlight column
+        let targetColumnId = null;
         if (isOverColumn) {
-            // Moving to a different column
-            const newColumnId = overId;
-            const oldColumnId = getColumnIdFromStatus(activeTask.status);
-
-            if (newColumnId !== oldColumnId) {
-                const newStatus = getDefaultStatusForColumn(newColumnId);
-
-                setTasks((prevTasks) => {
-                    return prevTasks.map((task) => {
-                        if (task._id === activeId) {
-                            return { ...task, status: newStatus };
-                        }
-                        return task;
-                    });
-                });
-
-                // Update on server (silent - no loading indicator)
-                updateTask(activeId, { status: newStatus }).catch((err) => {
-                    console.error('Failed to update task status:', err);
-                    // Revert on error
-                    setTasks((prevTasks) => {
-                        return prevTasks.map((task) => {
-                            if (task._id === activeId) {
-                                return { ...task, status: activeTask.status };
-                            }
-                            return task;
-                        });
-                    });
-                });
-            }
+            targetColumnId = overId;
+            setOverColumnId(overId);
+            // [FIX] Lưu thông tin để update khi drag end
+            dragOverInfo.current = {
+                activeId,
+                activeTask,
+                targetColumnId: overId,
+                targetStatus: getDefaultStatusForColumn(overId),
+                isOverColumn: true
+            };
         } else if (isOverTask) {
-            // Reordering within column or moving to another column
+            const overTask = overData.task;
+            targetColumnId = getColumnIdFromStatus(overTask.status);
+            setOverColumnId(targetColumnId);
+            // [FIX] Lưu thông tin để update khi drag end
+            dragOverInfo.current = {
+                activeId,
+                activeTask,
+                targetColumnId,
+                targetStatus: overTask.status,
+                overTaskId: overId,
+                isOverColumn: false
+            };
+        }
+
+        // [FIX] Chỉ preview visual (reorder trong cùng column), không update status
+        // Status sẽ chỉ được update khi drag end
+        if (isOverTask && !isOverColumn) {
             const overTask = overData.task;
             const activeColumnId = getColumnIdFromStatus(activeTask.status);
-            const overColumnId = getColumnIdFromStatus(overTask.status);
+            const overColumnIdFromTask = getColumnIdFromStatus(overTask.status);
 
-            if (activeColumnId !== overColumnId) {
-                // Moving to different column
-                const newStatus = overTask.status;
-
-                setTasks((prevTasks) => {
-                    return prevTasks.map((task) => {
-                        if (task._id === activeId) {
-                            return { ...task, status: newStatus };
-                        }
-                        return task;
-                    });
-                });
-
-                // Update on server (silent - no loading indicator)
-                updateTask(activeId, { status: newStatus }).catch((err) => {
-                    console.error('Failed to update task status:', err);
-                    // Revert on error
-                    setTasks((prevTasks) => {
-                        return prevTasks.map((task) => {
-                            if (task._id === activeId) {
-                                return { ...task, status: activeTask.status };
-                            }
-                            return task;
-                        });
-                    });
-                });
-            } else {
-                // Reordering within same column
+            // Chỉ preview reorder trong cùng column
+            if (activeColumnId === overColumnIdFromTask) {
                 setTasks((prevTasks) => {
                     const oldIndex = prevTasks.findIndex((t) => t._id === activeId);
                     const newIndex = prevTasks.findIndex((t) => t._id === overId);
+                    
+                    // Chỉ update nếu index thực sự thay đổi
+                    if (oldIndex === newIndex) {
+                        return prevTasks;
+                    }
+                    
                     const newTasks = arrayMove(prevTasks, oldIndex, newIndex);
-
-                    // Update kanbanOrder on server
-                    const taskIds = newTasks.map(t => t._id);
-                    updateKanbanOrder(taskIds).catch((err) => {
-                        console.error('Failed to update kanban order:', err);
-                    });
+                    // Lưu taskIds để update sau khi drag end
+                    pendingOrderUpdate.current = newTasks.map(t => t._id);
 
                     return newTasks;
                 });
@@ -213,31 +225,146 @@ export default function KanbanBoard({
         }
     };
 
-    const handleDragEnd = () => {
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+        
         setActiveTask(null);
+        setOverColumnId(null); // [NEW] Reset highlight khi drag end
+        
+        if (!over || !active) {
+            // Không có target, reset và return
+            dragOverInfo.current = null;
+            pendingOrderUpdate.current = null;
+            return;
+        }
+
+        const activeId = active.id;
+        const activeTask = tasks.find((t) => t._id === activeId);
+        if (!activeTask) {
+            dragOverInfo.current = null;
+            return;
+        }
+
+        const overData = over.data.current;
+        const isOverColumn = overData?.type === 'column';
+        const isOverTask = overData?.type === 'task';
+
+        let targetColumnId = null;
+        let targetStatus = null;
+
+        // [FIX] Xác định target column và status từ over event
+        if (isOverColumn) {
+            // Kéo vào column trực tiếp
+            targetColumnId = over.id;
+            targetStatus = getDefaultStatusForColumn(targetColumnId);
+        } else if (isOverTask) {
+            // Kéo vào task - lấy column từ task đó
+            const overTask = overData.task;
+            targetColumnId = getColumnIdFromStatus(overTask.status);
+            targetStatus = overTask.status;
+        }
+
+        const oldColumnId = getColumnIdFromStatus(activeTask.status);
+
+        // [FIX] Chỉ update status nếu thay đổi column
+        if (targetColumnId && targetColumnId !== oldColumnId && targetStatus) {
+            // Update status trong state
+            setTasks((prevTasks) => {
+                return prevTasks.map((task) => {
+                    if (task._id === activeId) {
+                        return { ...task, status: targetStatus };
+                    }
+                    return task;
+                });
+            });
+
+            // Update on server
+            updateTask(activeId, { status: targetStatus }).catch((err) => {
+                console.error('Failed to update task status:', err);
+                // Revert on error
+                setTasks((prevTasks) => {
+                    return prevTasks.map((task) => {
+                        if (task._id === activeId) {
+                            return { ...task, status: activeTask.status };
+                        }
+                        return task;
+                    });
+                });
+            });
+        } else if (targetColumnId === oldColumnId && isOverTask) {
+            // [FIX] Reordering trong cùng column - chỉ update order, không update status
+            // Logic này đã được xử lý trong handleDragOver và pendingOrderUpdate
+        }
+        
+        // [FIX] Update kanban order sau khi drag end, không trong quá trình render
+        if (pendingOrderUpdate.current) {
+            const taskIds = pendingOrderUpdate.current;
+            pendingOrderUpdate.current = null;
+            
+            // Sử dụng setTimeout để đảm bảo không gọi trong render phase
+            setTimeout(() => {
+                updateKanbanOrder(taskIds).catch((err) => {
+                    console.error('Failed to update kanban order:', err);
+                });
+            }, 0);
+        }
+        
+        // Reset drag over info
+        dragOverInfo.current = null;
+    };
+
+    // [NEW] Hàm để load thêm 5 task cho một cột
+    const handleLoadMore = (columnId) => {
+        setVisibleTasksCount(prev => ({
+            ...prev,
+            [columnId]: (prev[columnId] || 5) + 5
+        }));
+    };
+
+    // [NEW] Hàm để thu gọn về 5 task đầu tiên
+    const handleCollapse = (columnId) => {
+        setVisibleTasksCount(prev => ({
+            ...prev,
+            [columnId]: 5
+        }));
     };
 
     return (
         <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={rectIntersection} // [FIX] Dùng rectIntersection để nhận diện tốt hơn khi kéo vào column
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
         >
             <div className="flex gap-4 overflow-x-auto pb-4">
-                {COLUMNS.map((column) => (
-                    <KanbanColumn
-                        key={column.id}
-                        column={column}
-                        tasks={tasksByColumn[column.id] || []}
-                        projectId={projectId}
-                        canManage={canManage}
-                        currentUserId={currentUserId}
-                        users={users}
-                        projectMembers={projectMembers}
-                    />
-                ))}
+                {COLUMNS.map((column) => {
+                    const allTasksInColumn = tasksByColumn[column.id] || [];
+                    const visibleCount = visibleTasksCount[column.id] || 5;
+                    const visibleTasks = allTasksInColumn.slice(0, visibleCount);
+                    const hasMore = allTasksInColumn.length > visibleCount;
+                    
+                    return (
+                        <KanbanColumn
+                            key={column.id}
+                            column={column}
+                            tasks={visibleTasks}
+                            allTasksCount={allTasksInColumn.length} // [NEW] Tổng số task trong cột
+                            visibleCount={visibleCount} // [NEW] Số lượng task đang hiển thị
+                            projectId={projectId}
+                            canManage={canManage}
+                            currentUserId={currentUserId}
+                            users={users}
+                            projectMembers={projectMembers}
+                            isAdmin={isAdmin} // [NEW] Truyền quyền admin
+                            isOver={overColumnId === column.id} // [NEW] Highlight khi drag over
+                            canDrag={canDrag} // [NEW] Truyền quyền drag
+                            hasMore={hasMore} // [NEW] Còn task để load thêm
+                            onLoadMore={() => handleLoadMore(column.id)} // [NEW] Hàm load thêm
+                            onCollapse={() => handleCollapse(column.id)} // [NEW] Hàm thu gọn
+                        />
+                    );
+                })}
             </div>
 
             {/* Drag overlay */}

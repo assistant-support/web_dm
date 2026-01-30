@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Users, Clock, Settings, FileText } from 'lucide-react';
 
-export default function ProjectTabs({ projectId, isOwnerOrManager }) {
+export default function ProjectTabs({ projectId, isOwnerOrManager, isAdmin = false }) {
     const pathname = usePathname();
 
     const tabs = [
@@ -16,8 +16,8 @@ export default function ProjectTabs({ projectId, isOwnerOrManager }) {
         { id: 'files', label: 'Files', href: `/projects/${projectId}/files`, icon: FileText },
     ];
 
-    // Only show settings tab to owner/manager
-    if (isOwnerOrManager) {
+    // Only show settings tab to owner/manager hoặc admin hệ thống
+    if (isOwnerOrManager || isAdmin) {
         tabs.push({ 
             id: 'settings', 
             label: 'Cài đặt', 

@@ -7,18 +7,23 @@ import { Users, Calendar } from 'lucide-react';
 import Card from '@/components/ui/card/index.js';
 import Badge from '@/components/ui/badge/index.js';
 import { format } from 'date-fns';
+import { isTeamManager } from '@/lib/permissions.js';
 
 /**
  * TeamCard Server Component
  * @param {Object} props
  * @param {Object} props.team - Team data
  * @param {string} props.currentUserId - ID của user hiện tại
+ * @param {Object} props.currentUser - User object (để check admin role)
  * @param {boolean} props.prefetch - Enable prefetch on hover (default: true)
  */
-export default function TeamCard({ team, currentUserId, prefetch = true }) {
-    // Tìm role của current user
+export default function TeamCard({ team, currentUserId, currentUser, prefetch = true }) {
+    // Tìm role của current user - Admin luôn hiển thị là Manager
+    const isManager = isTeamManager(team, currentUser || currentUserId);
     const currentMember = team.members?.find(m => String(m.userId) === String(currentUserId));
-    const role = currentMember?.role || 'member';
+    const role = isManager && !currentMember 
+        ? 'manager' // Admin không có trong members nhưng có quyền quản lý
+        : (currentMember?.role || 'member');
     const memberCount = team.members?.length || 0;
 
     const roleLabel = {

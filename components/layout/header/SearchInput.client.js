@@ -6,12 +6,15 @@ import { Search, Loader2, Briefcase, Folder, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { useDebounce } from '@/hooks/debounce.hook';
-import { searchGlobal } from '@/actions/search.actions';
 import Link from 'next/link';
 
 export default function SearchInput() {
     const [searchQuery, setSearchQuery] = useState('');
-    const [results, setResults] = useState([]);
+    const [results, setResults] = useState({
+        projects: { items: [], hasMore: false },
+        tasks: { items: [], hasMore: false },
+        teams: { items: [], hasMore: false }
+    });
     const [isLoading, setIsLoading] = useState(false);
     const [showResults, setShowResults] = useState(false);
     const containerRef = useRef(null);
@@ -22,15 +25,22 @@ export default function SearchInput() {
     useEffect(() => {
         const fetchResults = async () => {
             if (debouncedQuery.trim().length === 0) {
-                setResults([]);
+                setResults({
+                    projects: { items: [], hasMore: false },
+                    tasks: { items: [], hasMore: false },
+                    teams: { items: [], hasMore: false }
+                });
                 return;
             }
 
             setIsLoading(true);
             try {
-                const data = await searchGlobal(debouncedQuery);
-                setResults(data);
-                setShowResults(true);
+                const response = await fetch(`/api/search/preview?q=${encodeURIComponent(debouncedQuery)}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setResults(data);
+                    setShowResults(true);
+                }
             } catch (error) {
                 console.error('Search error:', error);
             } finally {
@@ -63,14 +73,18 @@ export default function SearchInput() {
         }
     };
 
-    const getIcon = (type) => {
-        switch (type) {
-            case 'team': return <Users className="w-4 h-4 text-blue-500" />;
-            case 'project': return <Folder className="w-4 h-4 text-orange-500" />;
-            case 'task': return <Briefcase className="w-4 h-4 text-green-500" />;
-            default: return <Search className="w-4 h-4 text-gray-500" />;
+    const handleViewAll = (type) => {
+        if (searchQuery.trim()) {
+            setShowResults(false);
+            const q = searchQuery.trim();
+            setSearchQuery('');
+            router.push(`/search/${type}?q=${encodeURIComponent(q)}`);
         }
     };
+
+    const hasAnyResults = results.projects.items.length > 0 || 
+                         results.tasks.items.length > 0 || 
+                         results.teams.items.length > 0;
 
     return (
         <div ref={containerRef} className="relative w-full">
@@ -109,42 +123,133 @@ export default function SearchInput() {
 
             {/* Results Dropdown */}
             {showResults && (searchQuery.trim().length > 0) && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-[420px] overflow-y-auto z-50">
-                    {results.length > 0 ? (
-                        <div className="py-1">
-                            {results.map((result) => (
-                                <div
-                                    key={`${result.type}-${result.id}`}
-                                    onClick={() => {
-                                        setShowResults(false);
-                                        setSearchQuery('');
-                                        router.push(result.url);
-                                    }}
-                                    className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
-                                >
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center">
-                                        {getIcon(result.type)}
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-[500px] overflow-y-auto z-50">
+                    {hasAnyResults ? (
+                        <div className="py-2">
+                            {/* Projects Section */}
+                            {results.projects.items.length > 0 && (
+                                <div className="mb-2">
+                                    <div className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                                        <Folder className="w-4 h-4 text-orange-500" />
+                                        Dự án
                                     </div>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="text-sm font-medium text-gray-900 truncate">
-                                            {result.title}
+                                    {results.projects.items.map((project) => (
+                                        <div
+                                            key={`project-${project.id}`}
+                                            onClick={() => {
+                                                setShowResults(false);
+                                                setSearchQuery('');
+                                                router.push(`/projects/${project.id}`);
+                                            }}
+                                            className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        >
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-50 border border-orange-100 flex items-center justify-center">
+                                                <Folder className="w-4 h-4 text-orange-500" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-sm font-medium text-gray-900 truncate">
+                                                    {project.name}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="text-xs text-gray-500 truncate">
-                                            {result.subtitle}
+                                    ))}
+                                    {results.projects.hasMore && (
+                                        <div className="px-4 py-1">
+                                            <button
+                                                onClick={() => handleViewAll('projects')}
+                                                className="text-xs text-blue-600 hover:underline w-full text-left"
+                                            >
+                                                Xem tất cả dự án →
+                                            </button>
                                         </div>
-                                    </div>
-                                    <div className="text-xs text-gray-400">{result.type}</div>
+                                    )}
                                 </div>
-                            ))}
+                            )}
 
-                            <div className="border-t border-gray-100 mt-2 pt-2 px-4 pb-1">
-                                <button 
-                                    onClick={handleSearch}
-                                    className="text-xs text-blue-600 hover:underline w-full text-center"
-                                >
-                                    Xem tất cả kết quả cho &quot;{searchQuery}&quot;
-                                </button>
-                            </div>
+                            {/* Tasks Section */}
+                            {results.tasks.items.length > 0 && (
+                                <div className="mb-2">
+                                    <div className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                                        <Briefcase className="w-4 h-4 text-green-500" />
+                                        Nhiệm vụ
+                                    </div>
+                                    {results.tasks.items.map((task) => (
+                                        <div
+                                            key={`task-${task.id}`}
+                                            onClick={() => {
+                                                setShowResults(false);
+                                                setSearchQuery('');
+                                                router.push(`/tasks/${task.id}`);
+                                            }}
+                                            className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        >
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-50 border border-green-100 flex items-center justify-center">
+                                                <Briefcase className="w-4 h-4 text-green-500" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-sm font-medium text-gray-900 truncate">
+                                                    {task.title}
+                                                </div>
+                                                {task.projectName && (
+                                                    <div className="text-xs text-gray-500 truncate">
+                                                        {task.projectName}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {results.tasks.hasMore && (
+                                        <div className="px-4 py-1">
+                                            <button
+                                                onClick={() => handleViewAll('tasks')}
+                                                className="text-xs text-blue-600 hover:underline w-full text-left"
+                                            >
+                                                Xem tất cả nhiệm vụ →
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Teams Section */}
+                            {results.teams.items.length > 0 && (
+                                <div className="mb-2">
+                                    <div className="px-4 py-2 text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                                        <Users className="w-4 h-4 text-blue-500" />
+                                        Nhóm
+                                    </div>
+                                    {results.teams.items.map((team) => (
+                                        <div
+                                            key={`team-${team.id}`}
+                                            onClick={() => {
+                                                setShowResults(false);
+                                                setSearchQuery('');
+                                                router.push(`/teams/${team.id}`);
+                                            }}
+                                            className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors cursor-pointer"
+                                        >
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center">
+                                                <Users className="w-4 h-4 text-blue-500" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-sm font-medium text-gray-900 truncate">
+                                                    {team.name}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {results.teams.hasMore && (
+                                        <div className="px-4 py-1">
+                                            <button
+                                                onClick={() => handleViewAll('teams')}
+                                                className="text-xs text-blue-600 hover:underline w-full text-left"
+                                            >
+                                                Xem tất cả nhóm →
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ) : (
                         !isLoading && (

@@ -12,8 +12,8 @@ import * as tags from '@/data/_shared/tags.js';
 import Task from '@/model/task.model.js';
 import Project from '@/model/project.model.js';
 import Team from '@/model/team.model.js';
-import { TASK_STATUS, TASK_SCOPE } from '@/model/common/enums.js';
-import { asPlainTask } from '@/lib/serialize.js';
+import { TASK_STATUS, TASK_SCOPE, APPROVAL_STATUS } from '@/model/common/enums.js';
+import { asPlainTask, toPlainDate } from '@/lib/serialize.js';
 import { revalidatePath } from 'next/cache';
 import { sendZalo } from '@/lib/noti';
 import { notifyTaskAssignment } from '@/lib/noti-helpers.js';
@@ -149,13 +149,19 @@ export async function listMyTasks(filters = {}) {
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
+        const isAdmin = user.role === 'admin'; // [NEW] Kiểm tra quyền admin
 
         // Build query - tasks created by user OR assigned to user
+        // [NEW] Admin thấy tất cả tasks
         // [FIX] Include subtasks assigned to user
         const query = {
             scope: TASK_SCOPE.PROJECT,
             deletedAt: null,
-            $or: [
+        };
+
+        // [NEW] Nếu không phải admin, chỉ lấy tasks của user
+        if (!isAdmin) {
+            query.$or = [
                 // 1. Root tasks related to user
                 {
                     parentTask: null,
@@ -169,8 +175,12 @@ export async function listMyTasks(filters = {}) {
                     parentTask: { $ne: null },
                     assignee: uid
                 }
-            ]
-        };
+            ];
+        } else {
+            // [NEW] Admin thấy tất cả tasks (không cần điều kiện $or)
+            // Có thể thêm filter parentTask nếu muốn chỉ lấy root tasks
+            // Nhưng để admin thấy cả subtasks, không filter parentTask
+        }
 
         if (filters.status) {
             query.status = Array.isArray(filters.status)
@@ -236,15 +246,22 @@ export async function listMyTasks(filters = {}) {
             },
             { $project: { projectInfo: 0, parentTaskInfo: 0 } },
             { $sort: { createdAt: -1 } },
-            { $limit: filters.limit || 200 }
+            { $limit: filters.limit || (isAdmin ? 1000 : 200) } // [NEW] Admin có thể thấy nhiều tasks hơn
         ]);
 
         return tasks.map(task => {
             const plainTask = asPlainTask(task);
             // Include pre-loaded subtasks
             plainTask.subtasks = (task.subtasks || []).map(asPlainTask);
-            // Include project members for permission checks
-            plainTask.projectMembers = task.projectMembers || [];
+            // Include project members for permission checks - serialize ObjectIds
+            plainTask.projectMembers = Array.isArray(task.projectMembers)
+                ? task.projectMembers.map((m) => ({
+                      userId: String(m.userId),
+                      role: m.role,
+                      createdAt: toPlainDate(m.createdAt),
+                      updatedAt: toPlainDate(m.updatedAt),
+                  }))
+                : [];
             // Include parent task title
             plainTask.parentTaskTitle = task.parentTaskTitle || null;
             return plainTask;
@@ -478,6 +495,15 @@ export async function createTask(projectId, payload) {
     return runAction(async ({ user }) => {
         await connectDB(); // Ensure DB is connected within the action scope
         const uid = user.externalUserId; // Creator's ID
+        
+        // [DEBUG] Log thông tin tài khoản và quyền
+        console.log('[CREATE TASK]', {
+            userId: uid,
+            userName: user.name || user.email || 'Unknown',
+            userRole: user.role || 'member',
+            projectId: projectId,
+            taskTitle: payload.title
+        });
 
         // Verify project and team membership
         const project = await Project.findById(projectId); // Don't use lean, we need to save
@@ -725,6 +751,85 @@ export async function createTask(projectId, payload) {
 }
 
 /**
+ * Helper function: Xử lý reassign task REJECTED giống như tạo task mới
+ * Bao gồm: thêm assignee vào project, reset status, gửi notification
+ */
+async function handleReassignRejectedTask(task, newAssignee, actorId) {
+    // 1. Thêm assignee vào project nếu chưa có (giống createTask)
+    if (task.scope === TASK_SCOPE.PROJECT && task.project) {
+        const project = await Project.findById(task.project);
+        if (project) {
+            const assigneeInProject = (project.members || []).some((m) => String(m.userId) === String(newAssignee));
+            
+            if (!assigneeInProject) {
+                project.members = project.members || [];
+                project.members.push({
+                    userId: newAssignee,
+                    role: 'member',
+                    joinedAt: new Date()
+                });
+                await project.save();
+
+                await logActivity({
+                    actor: actorId,
+                    team: project.team,
+                    project: task.project,
+                    type: 'project.member.added',
+                    payload: {
+                        addedUserId: newAssignee,
+                        reason: 'auto_added_on_task_reassignment'
+                    },
+                });
+
+                revalidatePath(`/projects/${String(task.project)}/members`);
+                await revalidateMany([tags.project(String(task.project))]);
+            }
+
+            // Log activity nếu assignee không thuộc team
+            if (project.team) {
+                const team = await Team.findById(project.team).lean();
+                const assigneeInTeam = team && (team.members || []).some(m => String(m.userId) === String(newAssignee));
+                if (!assigneeInTeam) {
+                    await logActivity({
+                        actor: actorId,
+                        team: project.team,
+                        project: task.project,
+                        type: 'task.assignee.outside_team',
+                        payload: {
+                            assigneeId: newAssignee,
+                            note: 'Assignee does not belong to project team; assignment allowed but will not count as team member for team reports.'
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    // 2. Reset status và các trường liên quan
+    task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+    task.assigneeConfirm = {
+        required: true
+    };
+    task.startedAt = null;
+    task.completedAt = null;
+
+    // Reset approval về trạng thái ban đầu (nếu có)
+    if (task.approval && task.approval.required) {
+        task.approval.status = APPROVAL_STATUS.PENDING;
+        task.approval.by = null;
+        task.approval.at = null;
+        task.approval.note = null;
+    }
+
+    // 3. Gửi notification giống như tạo task mới
+    try {
+        await notifyTaskAssignment(task.title, newAssignee, String(task._id));
+    } catch (error) {
+        console.error(`[handleReassignRejectedTask] Failed to send notification:`, error);
+    }
+}
+
+/**
  * Update task
  */
 export async function updateTask(taskId, payload) {
@@ -735,6 +840,11 @@ export async function updateTask(taskId, payload) {
 
         const task = await Task.findById(taskId);
         assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        
+        // [NEW] Chặn mọi thao tác với task đã hủy (trừ khi đang hủy task)
+        if (task.status === TASK_STATUS.CANCELLED && payload.status !== TASK_STATUS.CANCELLED) {
+            assert(false, 'Không thể cập nhật task đã hủy. Task đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
+        }
 
         // Load project if applicable and determine permission
         let project = null;
@@ -790,18 +900,25 @@ export async function updateTask(taskId, payload) {
         // Validate quyền hủy task (cancel)
         if (payload.status === TASK_STATUS.CANCELLED && task.status !== TASK_STATUS.CANCELLED) {
             // Đang chuyển sang CANCELLED - kiểm tra quyền
-                const canCancel = 
-                (project ? canManageProject(project, user) : false) ||
-                String(task.createdBy) === String(uid) ||
-                String(task.assignee) === String(uid);
+            // Chỉ cho phép: creator, admin, project manager (owner/manager) - KHÔNG cho assignee
+            const isAdmin = user.role === 'admin';
+            const isCreator = String(task.createdBy) === String(uid);
+            const hasManagePermission = project ? canManageProject(project, user) : false;
+            
+            const canCancel = isAdmin || isCreator || hasManagePermission;
             
             assert(
                 canCancel,
-                'Bạn không có quyền hủy task này. Chỉ quản lý dự án, người tạo hoặc người được giao task mới có quyền hủy.',
+                'Bạn không có quyền hủy công việc này. Chỉ người tạo, quản lý dự án (owner/manager) hoặc admin mới có quyền hủy.',
                 'FORBIDDEN',
                 403
             );
         }
+
+        // [NEW] Kiểm tra nếu assignee thay đổi
+        const oldAssignee = task.assignee;
+        const newAssignee = payload.assignee;
+        const assigneeChanged = newAssignee !== undefined && (oldAssignee ? String(oldAssignee) !== String(newAssignee) : true);
 
         // Update fields
         Object.keys(payload).forEach(key => {
@@ -809,6 +926,63 @@ export async function updateTask(taskId, payload) {
                 task[key] = payload[key];
             }
         });
+
+        // [NEW] Nếu assignee thay đổi, reset trạng thái và gửi thông báo
+        if (assigneeChanged && newAssignee) {
+            // [NEW] Nếu task đang ở trạng thái REJECTED, xử lý giống như tạo task mới
+            const wasRejected = task.status === TASK_STATUS.REJECTED;
+            
+            if (wasRejected) {
+                // Task REJECTED → Sử dụng hàm helper để xử lý giống như tạo task mới
+                await handleReassignRejectedTask(task, newAssignee, uid);
+            } else {
+                // [THÊM] Logic tự động cho subtask (chỉ khi không phải REJECTED)
+                if (task.parentTask) {
+                    // Lấy parent task để check parent owner
+                    const parentTask = await Task.findById(task.parentTask).lean();
+
+                    // Chỉ tự động IN_PROGRESS khi assignee chính là parent owner
+                    if (parentTask && parentTask.assignee && String(parentTask.assignee) === String(newAssignee)) {
+                        // Parent owner tự giao cho mình → Tự động chuyển IN_PROGRESS
+                        task.status = TASK_STATUS.IN_PROGRESS;
+                        task.startedAt = new Date();
+                        task.assigneeConfirm = {
+                            required: false,
+                            confirmedBy: newAssignee,
+                            confirmedAt: new Date()
+                        };
+                    } else {
+                        // TẤT CẢ trường hợp khác → Reset về WAITING_ASSIGNEE_CONFIRM
+                        task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                        task.assigneeConfirm = {
+                            required: true
+                        };
+                        // Reset các trường liên quan
+                        task.startedAt = null;
+                        task.completedAt = null;
+                    }
+                } else {
+                    // Task chính (không phải subtask) → Reset về WAITING_ASSIGNEE_CONFIRM
+                    task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                    task.assigneeConfirm = {
+                        required: true
+                    };
+                    // Reset các trường liên quan
+                    task.startedAt = null;
+                    task.completedAt = null;
+                }
+            }
+
+            // Gửi thông báo cho assignee mới (chỉ khi không phải REJECTED - vì đã xử lý trong helper)
+            if (!wasRejected) {
+                try {
+                    await notifyTaskAssignment(task.title, newAssignee, String(task._id));
+                } catch (error) {
+                    // Log error nhưng không throw để không làm hỏng toàn bộ action
+                    console.error(`[updateTask] Failed to send notification:`, error);
+                }
+            }
+        }
 
         await task.save();
 
@@ -824,7 +998,8 @@ export async function updateTask(taskId, payload) {
         await revalidateMany([
             tags.project(task.project),
             tags.task(task._id),
-        ]);
+            assigneeChanged && newAssignee && tags.userInbox(newAssignee),
+        ].filter(Boolean));
 
         // Populate project to get name
         const updatedTask = await Task.findById(task._id)
@@ -878,25 +1053,93 @@ export async function deleteTask(taskId) {
 
 /**
  * Update task status
+ * Cho phép: assignee, creator, admin, project manager
  */
 export async function updateTaskStatus(taskId, status) {
     'use server';
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
+        
+        // [DEBUG] Log thông tin tài khoản và quyền
+        console.log('[UPDATE TASK STATUS]', {
+            userId: uid,
+            userName: user.name || user.email || 'Unknown',
+            userRole: user.role || 'member',
+            taskId: taskId,
+            newStatus: status
+        });
 
         const task = await Task.findById(taskId);
         assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        
+        // [NEW] Cho phép khôi phục task đã hủy (chuyển từ CANCELLED sang IN_PROGRESS) - bất kỳ ai cũng có quyền
+        if (task.status === TASK_STATUS.CANCELLED && status === TASK_STATUS.IN_PROGRESS) {
+            // Cho phép khôi phục - không cần kiểm tra quyền
+            task.status = status;
+            if (!task.startedAt) {
+                task.startedAt = new Date();
+            }
+            await task.save();
+            
+            await logActivity({
+                actor: uid,
+                team: task.team,
+                project: task.project,
+                task: task._id,
+                type: 'task.status.changed',
+                payload: { from: TASK_STATUS.CANCELLED, to: status },
+            });
 
-        // Anyone in project can update status
+            await revalidateMany([
+                tags.project(task.project),
+                tags.task(task._id),
+            ]);
+
+            return asPlainTask(task.toObject());
+        }
+        
+        // [NEW] Chặn mọi thao tác khác với task đã hủy (trừ khi đang hủy task hoặc khôi phục)
+        if (task.status === TASK_STATUS.CANCELLED && status !== TASK_STATUS.CANCELLED) {
+            assert(false, 'Không thể thao tác với task đã hủy. Task đã hủy chỉ được phép xem hoặc khôi phục.', 'FORBIDDEN', 403);
+        }
+
+        // Kiểm tra quyền: assignee, creator, admin, project manager
         if (task.scope === TASK_SCOPE.PROJECT) {
             const project = await Project.findById(task.project).lean();
             assert(project, 'Dự án không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
 
-            const team = await Team.findById(project.team).lean();
-            const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
+            // 1. Admin luôn có quyền
             const isAdmin = user.role === 'admin';
-            assert(isMember || isAdmin, 'Bạn không có quyền cập nhật trạng thái công việc này.', 'FORBIDDEN', 403);
+            
+            // 2. Assignee (người được giao) - chỉ cho phép với các status khác CANCELLED
+            const isAssignee = String(task.assignee) === String(uid);
+            
+            // 3. Creator (người tạo)
+            const isCreator = String(task.createdBy) === String(uid);
+            
+            // 4. Project Manager (owner hoặc manager của project)
+            const hasManagePermission = canManageProject(project, user);
+            
+            // Logic đặc biệt cho CANCELLED: chỉ cho phép creator, admin, project manager (owner/manager) - KHÔNG cho assignee
+            if (status === TASK_STATUS.CANCELLED) {
+                const canCancel = isAdmin || isCreator || hasManagePermission;
+                assert(
+                    canCancel,
+                    'Bạn không có quyền hủy công việc này. Chỉ người tạo, quản lý dự án (owner/manager) hoặc admin mới có quyền hủy.',
+                    'FORBIDDEN',
+                    403
+                );
+            } else {
+                // Với các status khác: cho phép assignee, creator, admin, project manager
+                const hasPermission = isAdmin || isAssignee || isCreator || hasManagePermission;
+                assert(
+                    hasPermission,
+                    'Bạn không có quyền cập nhật trạng thái công việc này. Chỉ người được giao, người tạo, quản lý dự án hoặc admin mới có quyền.',
+                    'FORBIDDEN',
+                    403
+                );
+            }
         }
 
         const oldStatus = task.status;
@@ -955,6 +1198,7 @@ export async function assignTask(taskId, assigneeId) {
         }
 
         const oldAssignee = task.assignee;
+        const assigneeChanged = assigneeId && (oldAssignee ? String(oldAssignee) !== String(assigneeId) : true);
 
         // Ensure assignee is a member of the project so they can view parent task/subtasks
         if (task.scope === TASK_SCOPE.PROJECT) {
@@ -1003,9 +1247,63 @@ export async function assignTask(taskId, assigneeId) {
 
         task.assignee = assigneeId;
 
-        // [THÊM] Logic tự động cho subtask
-        if (task.parentTask && assigneeId) {
-            // Lấy parent task để check parent owner
+        // [NEW] Nếu assignee thay đổi, reset trạng thái và gửi thông báo
+        if (assigneeChanged && assigneeId) {
+            // [NEW] Nếu task đang ở trạng thái REJECTED, xử lý giống như tạo task mới
+            const wasRejected = task.status === TASK_STATUS.REJECTED;
+            
+            if (wasRejected) {
+                // Task REJECTED → Sử dụng hàm helper để xử lý giống như tạo task mới
+                await handleReassignRejectedTask(task, assigneeId, uid);
+            } else {
+                // [THÊM] Logic tự động cho subtask (chỉ khi không phải REJECTED)
+                if (task.parentTask) {
+                    // Lấy parent task để check parent owner
+                    const parentTask = await Task.findById(task.parentTask).lean();
+
+                    // Chỉ tự động IN_PROGRESS khi assignee chính là parent owner
+                    if (parentTask && parentTask.assignee && String(parentTask.assignee) === String(assigneeId)) {
+                        // Parent owner tự giao cho mình → Tự động chuyển IN_PROGRESS
+                        task.status = TASK_STATUS.IN_PROGRESS;
+                        task.startedAt = new Date();
+                        task.assigneeConfirm = {
+                            required: false,
+                            confirmedBy: assigneeId,
+                            confirmedAt: new Date()
+                        };
+                    } else {
+                        // TẤT CẢ trường hợp khác → Reset về WAITING_ASSIGNEE_CONFIRM
+                        task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                        task.assigneeConfirm = {
+                            required: true
+                        };
+                        // Reset các trường liên quan
+                        task.startedAt = null;
+                        task.completedAt = null;
+                    }
+                } else {
+                    // Task chính (không phải subtask) → Reset về WAITING_ASSIGNEE_CONFIRM
+                    task.status = TASK_STATUS.WAITING_ASSIGNEE_CONFIRM;
+                    task.assigneeConfirm = {
+                        required: true
+                    };
+                    // Reset các trường liên quan
+                    task.startedAt = null;
+                    task.completedAt = null;
+                }
+            }
+
+            // Gửi thông báo cho assignee mới (chỉ khi không phải REJECTED - vì đã xử lý trong helper)
+            if (!wasRejected) {
+                try {
+                    await notifyTaskAssignment(task.title, assigneeId, String(task._id));
+                } catch (error) {
+                    // Log error nhưng không throw để không làm hỏng toàn bộ action
+                    console.error(`[assignTask] Failed to send notification:`, error);
+                }
+            }
+        } else if (task.parentTask && assigneeId && !assigneeChanged) {
+            // [THÊM] Logic tự động cho subtask (giữ nguyên logic cũ khi assignee không thay đổi)
             const parentTask = await Task.findById(task.parentTask).lean();
 
             // Chỉ tự động IN_PROGRESS khi assignee chính là parent owner
@@ -1041,7 +1339,8 @@ export async function assignTask(taskId, assigneeId) {
         await revalidateMany([
             tags.project(task.project),
             tags.task(task._id),
-            assigneeId && tags.userInbox(assigneeId),
+            assigneeChanged && assigneeId && tags.userInbox(assigneeId),
+            oldAssignee && assigneeChanged && tags.userInbox(String(oldAssignee)),
         ].filter(Boolean));
 
         return asPlainTask(task.toObject());
@@ -1071,9 +1370,11 @@ export async function updateKanbanOrder(taskIds) {
         const project = await Project.findById(projectId).lean();
         assert(project, 'PROJECT_NOT_FOUND', 'NOT_FOUND', 404);
 
+        // [NEW] Admin có quyền update kanban order
+        const isAdmin = user.role === 'admin';
         const team = await Team.findById(project.team).lean();
         const isMember = (team?.members || []).some((m) => String(m.userId) === String(uid));
-        assert(isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
+        assert(isAdmin || isMember, 'FORBIDDEN', 'FORBIDDEN', 403);
 
         // Update kanbanOrder for each task
         const updatePromises = taskIds.map((taskId, index) =>

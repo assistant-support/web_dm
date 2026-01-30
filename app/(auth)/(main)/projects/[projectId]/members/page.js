@@ -6,6 +6,7 @@ import { getProjectDetail } from '@/data/project/actions/list';
 import { getCurrentUser } from '@/lib/request-user';
 import { getUsersDisplayInfo } from '@/lib/user-display';
 import { getBatchProjectMemberStats } from '@/data/project/processors/member-stats';
+import { safeSerialize, toPlainId } from '@/lib/serialize.js';
 
 // Revalidate every 3 seconds for real-time updates
 export const revalidate = 3;
@@ -30,8 +31,10 @@ export default async function ProjectMembersPage({ params }) {
         notFound();
     }
 
+    const isAdmin = user.role === 'admin';
+
     // Get user display info and stats for all members in parallel
-    const memberIds = (project.members || []).map(m => m.userId);
+    const memberIds = (project.members || []).map(m => String(m.userId));
     const [usersMapResult, memberStatsResult] = await Promise.all([
         getUsersDisplayInfo(memberIds),
         getBatchProjectMemberStats(projectId, memberIds, null) // null = current month
@@ -39,12 +42,27 @@ export default async function ProjectMembersPage({ params }) {
 
     const usersMap = {};
     if (usersMapResult) {
-        usersMapResult.forEach((value, key) => { usersMap[key] = value; });
+        usersMapResult.forEach((value, key) => { usersMap[String(key)] = value; });
     }
 
-    // Check if user can manage (owner or manager)
-    const userMember = project.members?.find(m => m.userId === user.externalUserId);
-    const canManage = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
+    // Serialize project data before passing to Client Components
+    // Serialize teamId - convert ObjectId to string
+    const serializedTeamId = project.team ? toPlainId(project.team) : null;
+    
+    // Serialize members - ensure userId is string
+    const serializedMembers = (project.members || []).map(m => ({
+        userId: String(m.userId),
+        role: m.role,
+        createdAt: m.createdAt ? (m.createdAt instanceof Date ? m.createdAt.toISOString() : String(m.createdAt)) : null,
+        updatedAt: m.updatedAt ? (m.updatedAt instanceof Date ? m.updatedAt.toISOString() : String(m.updatedAt)) : null,
+    }));
+
+    // Serialize memberStats - ensure all IDs are strings
+    const serializedMemberStats = safeSerialize(memberStatsResult || {});
+
+    // Check if user can manage (owner hoặc manager trong dự án, hoặc admin hệ thống)
+    const userMember = project.members?.find(m => String(m.userId) === String(user.externalUserId));
+    const canManage = isAdmin || (userMember && (userMember.role === 'owner' || userMember.role === 'manager'));
 
     return (
         <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
@@ -59,14 +77,14 @@ export default async function ProjectMembersPage({ params }) {
 
                 {/* Member List - Server Component with stats */}
                 <MemberList
-                    projectId={projectId}
-                    teamId={project.team}
-                    members={project.members || []}
-                    usersMap={usersMap}
-                    memberStats={memberStatsResult || {}}
+                    projectId={String(projectId)}
+                    teamId={serializedTeamId}
+                    members={serializedMembers}
+                    usersMap={safeSerialize(usersMap)}
+                    memberStats={serializedMemberStats}
                     isManager={canManage}
                     isActive={project.isActive}
-                    currentUserId={user.externalUserId}
+                    currentUserId={String(user.externalUserId)}
                 />
             </div>
         </div>

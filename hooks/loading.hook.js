@@ -50,6 +50,16 @@ export function useAsyncNotifier(options = {}) {
 
     /** Đóng notification */
     const closeNoti = useCallback(() => {
+        // Log ra terminal (server console) khi nhấn nút Đóng popup / đóng noti
+        try {
+            // Trong môi trường browser, log này sẽ xuất hiện ở console của trình duyệt.
+            // Khi chạy Next.js dev, log client cũng thường hiển thị trong terminal phát triển.
+            // Thông điệp theo yêu cầu:
+            console.log(' Tắt nút Đóng popup');
+        } catch {
+            // Bỏ qua nếu môi trường không hỗ trợ console
+        }
+
         setNoti((s) => ({ ...s, open: false }));
     }, []);
 

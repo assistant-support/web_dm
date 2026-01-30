@@ -42,7 +42,7 @@ export async function listMyProjects({ search = '', teamId = null } = {}) {
             const projects = await Project.find(query)
                 .populate('team') // Populate toàn bộ team (bao gồm members)
                 .sort({ updatedAt: -1 })
-                .limit(100) // Giới hạn số lượng trả về
+                .limit(user.role === 'admin' ? 500 : 100) // [NEW] Admin có thể thấy nhiều projects hơn
                 .lean();
 
             // Serialize thủ công để đảm bảo team được xử lý đúng

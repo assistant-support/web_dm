@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Users, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import Badge from '@/components/ui/badge/index.js';
+import { isTeamManager } from '@/lib/permissions.js';
 
 /**
  * TeamListItem Server Component
@@ -14,11 +15,11 @@ import Badge from '@/components/ui/badge/index.js';
  * @param {Object} props
  * @param {Object} props.team - Team data
  * @param {string} props.currentUserId - Current user ID
+ * @param {Object} props.currentUser - User object (để check admin role)
  */
-export default function TeamListItem({ team, currentUserId }) {
-    const isManager = team.members?.some(
-        (m) => String(m.userId) === String(currentUserId) && m.role === 'manager'
-    );
+export default function TeamListItem({ team, currentUserId, currentUser }) {
+    // Sử dụng isTeamManager từ permissions.js - admin luôn có quyền quản lý
+    const isManager = isTeamManager(team, currentUser || currentUserId);
     const memberCount = team.members?.length || 0;
 
     return (

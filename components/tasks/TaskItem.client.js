@@ -7,7 +7,8 @@ import {
     CheckCircle2, Circle, CircleDashed, Clock, UserCheck, ShieldCheck, Send, Check, X, Users,
     PauseCircle, PlayCircle, XCircle, CalendarDays,
     ChevronRight, ChevronDown, BarChart3,
-    MoreVertical, PlusCircle, Edit, Trash2
+    MoreVertical, PlusCircle, Edit, Trash2,
+    RotateCcw // [NEW] Icon cho khôi phục
 } from 'lucide-react';
 import clsx from 'clsx';
 import Button from '@/components/ui/button';
@@ -27,6 +28,7 @@ import {
 } from '@/data/task/actions/approval.server.js';
 import NotifyZaloDialog from '@/components/zalo/NotifyZaloDialog.client';
 import DialogComponent from '@/components/ui/dialog';
+import { PromptDialog } from '@/components/ui/dialog';
 import TaskPointsBadge from './TaskPointsBadge.client';
 
 const fmt = (d) =>
@@ -114,6 +116,7 @@ export default function TaskItem({
     platforms = [],
     currentUserId = '',
     canManage = false,
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
     actions,
     onRefresh,
     disableNavigation = false,
@@ -137,6 +140,19 @@ export default function TaskItem({
     const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
     const [notifyRecipient, setNotifyRecipient] = useState(null);
     const [notifyContext, setNotifyContext] = useState('');
+    
+    // Prompt Dialog state - chỉ để hiển thị popup, không lưu giá trị
+    const [promptDialog, setPromptDialog] = useState({
+        open: false,
+        title: '',
+        label: '',
+        placeholder: '',
+        defaultValue: '',
+        type: 'text',
+        required: false,
+        onConfirm: null,
+        onCancel: null,
+    });
 
     const {
         onAssign,
@@ -159,18 +175,23 @@ export default function TaskItem({
     const isPendingApproval = task.status === TASK_STATUS.PENDING_APPROVAL;
     const isPendingCompletionReview = task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW;
     const isCompleted = task.status === TASK_STATUS.COMPLETED;
-    const isEditable = [TASK_STATUS.DRAFT, TASK_STATUS.PENDING_APPROVAL, TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, TASK_STATUS.REJECTED].includes(task.status);
-    const canStartOrHold = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
-    const canMarkDone = [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
-    const canCancel = ![TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED].includes(task.status);
-    const canDelete = [TASK_STATUS.DRAFT, TASK_STATUS.REJECTED, TASK_STATUS.CANCELLED].includes(task.status);
+    const isCancelled = task.status === TASK_STATUS.CANCELLED; // [NEW] Check nếu task đã hủy
+    const isRejected = task.status === TASK_STATUS.REJECTED; // [NEW] Check nếu task bị từ chối
+    // [NEW] Admin có thể thao tác với mọi task bất kể trạng thái
+    const isEditable = isAdmin || [TASK_STATUS.DRAFT, TASK_STATUS.PENDING_APPROVAL, TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, TASK_STATUS.REJECTED].includes(task.status);
+    const canStartOrHold = isAdmin || [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
+    const canMarkDone = isAdmin || [TASK_STATUS.IN_PROGRESS, TASK_STATUS.ON_HOLD].includes(task.status);
+    const canCancel = isAdmin || ![TASK_STATUS.COMPLETED, TASK_STATUS.CANCELLED].includes(task.status);
+    const canDelete = isAdmin || [TASK_STATUS.DRAFT, TASK_STATUS.REJECTED, TASK_STATUS.CANCELLED].includes(task.status);
+    const canCreateSubtask = isAdmin || !isCancelled; // [NEW] Admin có thể tạo subtask ngay cả khi task đã hủy
 
     const isParentOwner = isSubtask && parentTaskAssignee === currentUserId;
-    const canManageSubtask = isSubtask ? (isProjectManager || isParentOwner) : isProjectManager;
-    const canAssignSubtask = canManageSubtask || (isSubtask && isCreator);
-    const canEditSubtask = canManageSubtask || (isSubtask && (isCreator || isAssignee));
+    // [NEW] Admin có đầy đủ quyền quản lý
+    const canManageSubtask = isAdmin || (isSubtask ? (isProjectManager || isParentOwner) : isProjectManager);
+    const canAssignSubtask = isAdmin || canManageSubtask || (isSubtask && isCreator);
+    const canEditSubtask = isAdmin || canManageSubtask || (isSubtask && (isCreator || isAssignee));
     const isSubtaskAssignee = isSubtask && isAssignee;
-    const canApproveOrReject = isProjectManager || (isSubtask && getUserId(task.createdBy) === currentUserId);
+    const canApproveOrReject = isAdmin || isProjectManager || (isSubtask && getUserId(task.createdBy) === currentUserId);
     const showApprovalButtons = canApproveOrReject && isPendingCompletionReview;
     const showPendingApproval = isSubtaskAssignee && isPendingCompletionReview && !canApproveOrReject;
 
@@ -179,18 +200,42 @@ export default function TaskItem({
             alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
             return;
         }
-        let note = '';
         if (!accept) {
-            note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):');
-            if (note === null) return;
+            setPromptDialog({
+                open: true,
+                title: 'Từ chối nhận việc',
+                label: 'Lý do từ chối',
+                placeholder: 'Nhập lý do từ chối (không bắt buộc)',
+                defaultValue: '',
+                type: 'textarea',
+                required: false,
+                onConfirm: (note) => {
+                    setIsBlocking(true);
+                    run(
+                        () => confirmAssignment(task._id, { accept: false, note }),
+                        {
+                            loadingMessage: 'Đang từ chối nhận việc...',
+                            successMessage: 'Đã từ chối nhận việc.',
+                            onSuccess: () => {
+                                setIsBlocking(false);
+                                onRefresh();
+                            }
+                        }
+                    );
+                },
+                onCancel: () => {
+                    // Cancel = return, không làm gì
+                }
+            });
+            return;
         }
         setIsBlocking(true);
         try {
             await run(
-                () => confirmAssignment(task._id, { accept, note }),
+                () => confirmAssignment(task._id, { accept: true, note: '' }),
                 {
-                    loadingMessage: accept ? 'Đang xác nhận nhận việc...' : 'Đang từ chối nhận việc...',
-                    successMessage: accept ? 'Đã bắt đầu nhận việc!' : 'Đã từ chối nhận việc.',
+                    loadingMessage: 'Đang xác nhận nhận việc...',
+                    successMessage: 'Đã bắt đầu nhận việc!',
                     onSuccess: onRefresh
                 }
             );
@@ -204,19 +249,43 @@ export default function TaskItem({
             alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
             return;
         }
-        let note = '';
         const initialPoints = task.initialPoints || 0;
         if (!approve) {
-            note = prompt('Vui lòng nhập lý do từ chối (không bắt buộc):');
-            if (note === null) return;
+            setPromptDialog({
+                open: true,
+                title: 'Từ chối tạo task',
+                label: 'Lý do từ chối',
+                placeholder: 'Nhập lý do từ chối (không bắt buộc)',
+                defaultValue: '',
+                type: 'textarea',
+                required: false,
+                onConfirm: (note) => {
+                    setIsBlocking(true);
+                    run(
+                        () => approveTaskCreation(task._id, { approve: false, note, initialPoints }),
+                        {
+                            loadingMessage: 'Đang từ chối task...',
+                            successMessage: 'Đã từ chối task.',
+                            onSuccess: () => {
+                                setIsBlocking(false);
+                                onRefresh();
+                            }
+                        }
+                    );
+                },
+                onCancel: () => {
+                    // Cancel = return, không làm gì
+                }
+            });
+            return;
         }
         setIsBlocking(true);
         try {
             await run(
-                () => approveTaskCreation(task._id, { approve, note, initialPoints }),
+                () => approveTaskCreation(task._id, { approve: true, note: '', initialPoints }),
                 {
-                    loadingMessage: approve ? 'Đang duyệt task...' : 'Đang từ chối task...',
-                    successMessage: approve ? 'Task đã được duyệt!' : 'Đã từ chối task.',
+                    loadingMessage: 'Đang duyệt task...',
+                    successMessage: 'Task đã được duyệt!',
                     onSuccess: onRefresh
                 }
             );
@@ -230,31 +299,83 @@ export default function TaskItem({
             alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
             return;
         }
-        let note = '';
-        let finalPoints = task.initialPoints || 0;
         if (approve) {
-            const pointsInput = prompt('Duyệt hoàn thành. Nhập điểm cuối cùng:', finalPoints);
-            if (pointsInput === null) return;
-            finalPoints = Number(pointsInput) || 0;
-            note = prompt('Nhập ghi chú (không bắt buộc):');
-            if (note === null) return;
-        } else {
-            note = prompt('Vui lòng nhập lý do yêu cầu làm lại (không bắt buộc):');
-            if (note === null) return;
-        }
-        setIsBlocking(true);
-        try {
-            await run(
-                () => approveTaskCompletion(task._id, { approve, note, finalPoints }),
-                {
-                    loadingMessage: approve ? 'Đang duyệt hoàn thành...' : 'Đang gửi yêu cầu làm lại...',
-                    successMessage: approve ? 'Task đã hoàn thành!' : 'Đã gửi yêu cầu làm lại.',
-                    onSuccess: onRefresh
+            // Bước 1: Nhập điểm (giá trị mặc định = task.initialPoints)
+            const finalPoints = task.initialPoints || 0;
+            setPromptDialog({
+                open: true,
+                title: 'Duyệt hoàn thành',
+                label: 'Điểm cuối cùng',
+                placeholder: 'Nhập điểm cuối cùng',
+                defaultValue: String(finalPoints),
+                type: 'number',
+                required: true,
+                min: 0,
+                onConfirm: (pointsInput) => {
+                    const pointsValue = Number(pointsInput) || 0;
+                    // Đợi dialog đóng xong, sau đó mở dialog bước 2
+                    setTimeout(() => {
+                        setPromptDialog({
+                            open: true,
+                            title: 'Duyệt hoàn thành',
+                            label: 'Ghi chú',
+                            placeholder: 'Nhập ghi chú (không bắt buộc)',
+                            defaultValue: '',
+                            type: 'textarea',
+                            required: false,
+                            onConfirm: (note) => {
+                                setIsBlocking(true);
+                                run(
+                                    () => approveTaskCompletion(task._id, { approve: true, note, finalPoints: pointsValue }),
+                                    {
+                                        loadingMessage: 'Đang duyệt hoàn thành...',
+                                        successMessage: 'Task đã hoàn thành!',
+                                        onSuccess: () => {
+                                            setIsBlocking(false);
+                                            onRefresh();
+                                        }
+                                    }
+                                );
+                            },
+                            onCancel: () => {
+                                // Cancel ở bước 2 = return, không làm gì (mất điểm đã nhập)
+                            }
+                        });
+                    }, 100);
+                },
+                onCancel: () => {
+                    // Cancel ở bước 1 = return, không làm gì
                 }
-            );
-        } finally {
-            setIsBlocking(false);
+            });
+            return;
         }
+        // Từ chối - yêu cầu làm lại
+        setPromptDialog({
+            open: true,
+            title: 'Yêu cầu làm lại',
+            label: 'Lý do yêu cầu làm lại',
+            placeholder: 'Nhập lý do yêu cầu làm lại (không bắt buộc)',
+            defaultValue: '',
+            type: 'textarea',
+            required: false,
+            onConfirm: (note) => {
+                setIsBlocking(true);
+                run(
+                    () => approveTaskCompletion(task._id, { approve: false, note, finalPoints: task.initialPoints || 0 }),
+                    {
+                        loadingMessage: 'Đang gửi yêu cầu làm lại...',
+                        successMessage: 'Đã gửi yêu cầu làm lại.',
+                        onSuccess: () => {
+                            setIsBlocking(false);
+                            onRefresh();
+                        }
+                    }
+                );
+            },
+            onCancel: () => {
+                // Cancel = return, không làm gì
+            }
+        });
     };
 
     const findUser = (id) => allUsersWithDetails.find(u => u.id === id);
@@ -409,6 +530,27 @@ export default function TaskItem({
             await run(() => onUpdateStatus(task._id, TASK_STATUS.DRAFT), {
                 loadingMessage: 'Đang đặt về nháp...',
                 successMessage: 'Task đã được đặt về nháp.',
+                onSuccess: onRefresh
+            });
+        } finally {
+            setIsBlocking(false);
+        }
+    };
+
+    // [NEW] Handler khôi phục task đã hủy
+    const handleRestoreClick = async (e) => {
+        e.stopPropagation();
+        if (!projectActive) {
+            alert('Dự án đã lưu trữ — thao tác này bị vô hiệu');
+            return;
+        }
+        if (!confirm('Bạn có chắc muốn KHÔI PHỤC nhiệm vụ này? Task sẽ được chuyển về trạng thái "Đang làm".')) return;
+        if (!onUpdateStatus) return;
+        setIsBlocking(true);
+        try {
+            await run(() => onUpdateStatus(task._id, TASK_STATUS.IN_PROGRESS), {
+                loadingMessage: 'Đang khôi phục nhiệm vụ...',
+                successMessage: 'Đã khôi phục nhiệm vụ thành công.',
                 onSuccess: onRefresh
             });
         } finally {
@@ -571,7 +713,7 @@ export default function TaskItem({
                                             ) : (
                                                 <div className="flex items-center gap-2 ml-auto">
                                                     <div className="flex items-center gap-1 text-xs text-blue-600 whitespace-nowrap"><Clock size={14} /><span>Chờ XN</span></div>
-                                                    {(isProjectManager || isCreator || (isSubtask && isParentOwner)) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyAssignee} variant="info" className={notifyActionBtnClass} />)}
+                                                    {(isAdmin || isProjectManager || isCreator || (isSubtask && isParentOwner)) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyAssignee} variant="info" className={notifyActionBtnClass} />)}
                                                 </div>
                                             )}
                                         </>
@@ -581,7 +723,7 @@ export default function TaskItem({
 
                             {!isSubtask && isPendingApproval && (
                                 <>
-                                    {isProjectManager ? (
+                                    {isAdmin || isProjectManager ? (
                                         <div className="flex gap-2 w-full sm:w-auto">
                                             <ActionButton icon={Check} label="Duyệt" onClick={(e) => { e.stopPropagation(); handleApproveCreation(true); }} variant="success" className="flex-1 sm:flex-none" />
                                             <ActionButton icon={X} label="Hủy" onClick={(e) => { e.stopPropagation(); handleApproveCreation(false); }} variant="danger" className="flex-1 sm:flex-none" />
@@ -589,7 +731,7 @@ export default function TaskItem({
                                     ) : (
                                         <div className="flex items-center gap-2 ml-auto">
                                             <div className="flex items-center gap-1 text-xs text-amber-600 whitespace-nowrap"><Clock size={14} /><span>Chờ duyệt</span></div>
-                                            {(isCreator || isAssignee) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyManagerApproval} variant="warning" className={notifyActionBtnClass} />)}
+                                            {(isAdmin || isCreator || isAssignee) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyManagerApproval} variant="warning" className={notifyActionBtnClass} />)}
                                         </div>
                                     )}
                                 </>
@@ -605,11 +747,11 @@ export default function TaskItem({
                             {showPendingApproval && (
                                 <div className="flex items-center gap-2 ml-auto">
                                     <div className="flex items-center gap-1 text-xs text-yellow-600 whitespace-nowrap"><Clock size={14} /><span>Chờ duyệt HT</span></div>
-                                    {(isSubtask ? isSubtaskAssignee : isAssignee) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyManagerCompletion} variant="warning" className={notifyActionBtnClass} />)}
+                                    {(isAdmin || (isSubtask ? isSubtaskAssignee : isAssignee)) && (<ActionButton icon={Send} label="Nhắc" onClick={handleNotifyManagerCompletion} variant="warning" className={notifyActionBtnClass} />)}
                                 </div>
                             )}
 
-                            {isPendingApproval && (isProjectManager || isCreator) && (
+                            {isPendingApproval && (isAdmin || isProjectManager || isCreator) && (
                                 <div className="flex items-center gap-2">
                                     <ActionButton icon={X} label="Về nháp" onClick={handleRevertToDraft} variant="default" className="text-sm" />
                                     <ActionButton icon={Trash2} label="Xóa" onClick={handleDelete} variant="danger" className="text-sm" />
@@ -629,28 +771,77 @@ export default function TaskItem({
                                         </Dropdown.Trigger>
                                         <Dropdown.Content position="bottom-right" width="w-56" className="z-20">
                                             <div className="p-1">
-                                                {!task.parentTask && (isProjectManager || isCreator || isAssignee) && (
-                                                    <DropdownItem icon={PlusCircle} label="Tạo việc con" onClick={handleAddSubtask} />
+                                                {/* [NEW] Trạng thái REJECTED: Chỉ hiển thị Sửa chi tiết, Hủy bỏ, Xóa vĩnh viễn */}
+                                                {isRejected ? (
+                                                    <>
+                                                        {(isAdmin || isProjectManager || canManageSubtask || isCreator) && (
+                                                            <DropdownItem icon={Edit} label="Sửa chi tiết" onClick={handleEdit} />
+                                                        )}
+                                                        {canCancel && (isAdmin || isProjectManager || canManageSubtask || isCreator) && (
+                                                            <>
+                                                                <div className="border-t border-gray-200 my-1"></div>
+                                                                <DropdownItem icon={XCircle} label="Hủy bỏ" onClick={handleCancelClick} className="text-red-600 hover:!bg-red-50" />
+                                                            </>
+                                                        )}
+                                                        {canDelete && (isAdmin || isProjectManager || canManageSubtask || isCreator) && (
+                                                            <>
+                                                                <div className="border-t border-gray-200 my-1"></div>
+                                                                <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : isCancelled ? (
+                                                    /* [NEW] Trạng thái CANCELLED: Chỉ hiển thị Khôi phục, Xóa vĩnh viễn */
+                                                    <>
+                                                        <DropdownItem 
+                                                            icon={RotateCcw} 
+                                                            label="Khôi phục" 
+                                                            onClick={handleRestoreClick} 
+                                                            className="text-blue-600 hover:!bg-blue-50" 
+                                                        />
+                                                        {canDelete && (isAdmin || isProjectManager || canManageSubtask || isCreator) && (
+                                                            <>
+                                                                <div className="border-t border-gray-200 my-1"></div>
+                                                                <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    /* Các trạng thái khác: Hiển thị đầy đủ actions */
+                                                    <>
+                                                        {/* [NEW] Admin có thể tạo việc con bất kể trạng thái task */}
+                                                        {!task.parentTask && canCreateSubtask && (isAdmin || isProjectManager || isCreator || isAssignee) && (
+                                                            <DropdownItem icon={PlusCircle} label="Tạo việc con" onClick={handleAddSubtask} />
+                                                        )}
+                                                        {/* [NEW] Admin có thể sửa task bất kể trạng thái */}
+                                                        {(isAdmin || ((isProjectManager || canEditSubtask) && isEditable)) && (
+                                                            <DropdownItem icon={Edit} label="Sửa chi tiết" onClick={handleEdit} />
+                                                        )}
+                                                        {(isEditable || !task.parentTask || isAdmin) && <div className="border-t border-gray-200 my-1"></div>}
+                                                        {/* [NEW] Admin có thể tạm dừng/tiếp tục bất kể trạng thái */}
+                                                        {canStartOrHold && (isAdmin || isProjectManager || isAssignee) && (
+                                                            <DropdownItem icon={task.status === TASK_STATUS.IN_PROGRESS ? PauseCircle : PlayCircle} label={task.status === TASK_STATUS.IN_PROGRESS ? 'Tạm dừng' : 'Tiếp tục'} onClick={toggleStartOnHold} />
+                                                        )}
+                                                        {/* [NEW] Admin có thể đánh dấu hoàn thành bất kể trạng thái */}
+                                                        {canMarkDone && (isAdmin || isProjectManager || isAssignee) && (
+                                                            <DropdownItem icon={CheckCircle2} label="Đánh dấu Hoàn thành" onClick={handleMarkDoneClick} className="text-green-600 hover:!bg-green-50" />
+                                                        )}
+                                                        {/* Assignment moved to Edit dialog; use Edit to change assignee */}
+                                                        <div className="border-t border-gray-200 my-1 pt-1">
+                                                            {/* [NEW] Admin có thể hủy task bất kể trạng thái */}
+                                                            {canCancel && (isAdmin || isProjectManager || canManageSubtask || isCreator) && (
+                                                                <DropdownItem icon={XCircle} label="Hủy bỏ" onClick={handleCancelClick} className="text-red-600 hover:!bg-red-50" />
+                                                            )}
+                                                            {/* [NEW] Admin có thể xóa task bất kể trạng thái */}
+                                                            {canDelete && (isAdmin || isProjectManager || canManageSubtask || isCreator) && (
+                                                                <>
+                                                                    {canCancel && <div className="border-t border-gray-200 my-1"></div>}
+                                                                    <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </>
                                                 )}
-                                                {(isProjectManager || canEditSubtask) && isEditable && (
-                                                    <DropdownItem icon={Edit} label="Sửa chi tiết" onClick={handleEdit} />
-                                                )}
-                                                {(isEditable || !task.parentTask) && <div className="border-t border-gray-200 my-1"></div>}
-                                                {canStartOrHold && (isProjectManager || isAssignee) && (
-                                                    <DropdownItem icon={task.status === TASK_STATUS.IN_PROGRESS ? PauseCircle : PlayCircle} label={task.status === TASK_STATUS.IN_PROGRESS ? 'Tạm dừng' : 'Tiếp tục'} onClick={toggleStartOnHold} />
-                                                )}
-                                                {canMarkDone && (isProjectManager || isAssignee) && (
-                                                    <DropdownItem icon={CheckCircle2} label="Đánh dấu Hoàn thành" onClick={handleMarkDoneClick} className="text-green-600 hover:!bg-green-50" />
-                                                )}
-                                                {/* Assignment moved to Edit dialog; use Edit to change assignee */}
-                                                <div className="border-t border-gray-200 my-1 pt-1">
-                                                    {canCancel && (isProjectManager || canManageSubtask || isCreator) && (
-                                                        <DropdownItem icon={XCircle} label="Hủy bỏ" onClick={handleCancelClick} className="text-red-600 hover:!bg-red-50" />
-                                                    )}
-                                                    {canDelete && (isProjectManager || canManageSubtask || isCreator) && (
-                                                        <DropdownItem icon={Trash2} label="Xóa vĩnh viễn" onClick={handleDelete} className="text-red-600 hover:!bg-red-50" />
-                                                    )}
-                                                </div>
                                             </div>
                                         </Dropdown.Content>
                                     </Dropdown>
@@ -686,6 +877,20 @@ export default function TaskItem({
             <UserInfoPopup isOpen={showUserPopup} onClose={() => setShowUserPopup(false)} users={Array.isArray(relevantUsers) ? relevantUsers : []} />
             <NotifyZaloDialog open={notifyDialogOpen} onClose={() => setNotifyDialogOpen(false)} recipient={notifyRecipient} task={task} context={notifyContext} statusInfo={statusInfo} fmtDate={fmt} />
             <DialogComponent />
+            <PromptDialog
+                open={promptDialog.open}
+                onOpenChange={(open) => setPromptDialog({ ...promptDialog, open })}
+                title={promptDialog.title}
+                label={promptDialog.label}
+                placeholder={promptDialog.placeholder}
+                defaultValue={promptDialog.defaultValue}
+                type={promptDialog.type}
+                required={promptDialog.required}
+                min={promptDialog.min}
+                max={promptDialog.max}
+                onConfirm={promptDialog.onConfirm}
+                onCancel={promptDialog.onCancel}
+            />
         </>
     );
 }

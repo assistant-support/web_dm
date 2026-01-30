@@ -1,10 +1,11 @@
 // components/tasks/PersonalTasksClient.client.js
 // Client component cho personal tasks với multi-view
-// trang dùng 
+
 'use client';
 
-import { useState, useMemo, useContext, useEffect } from 'react';
+import { useState, useMemo, useContext, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import TaskToolbar from './TaskToolbar'; // Assuming component exists
 import TaskList from './TaskList.client';
 import KanbanBoard from './KanbanBoard'; // Assuming component exists
@@ -17,6 +18,7 @@ import clsx from 'clsx';
 import Dropdown, { DropdownContext } from '@/components/ui/dropdown'; // Assuming component exists
 import { Input } from '@/components/ui/input'; // Assuming component exists
 import { TASK_STATUS } from '@/model/common/enums'; // Assuming enums exist
+import UserInfoBadge from '@/components/ui/UserInfoBadge.client'; // [NEW] Component hiển thị thông tin user
 
 // Helper Icons (Define or import if needed elsewhere)
 const CustomChevronDownIcon = (props) => (
@@ -140,6 +142,9 @@ export default function PersonalTasksClient({
     currentUserId,
     users = [], // For CreateTaskDialog picker
     allUsersWithDetails = [], // Receive standardized user details
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
+    currentUserName = '', // [NEW] Tên người dùng
+    currentUserRole = 'member', // [NEW] Quyền người dùng
 
     // [THÊM] Nhận 2 props này từ server
     workTypes = [],
@@ -155,12 +160,7 @@ export default function PersonalTasksClient({
     const [tasks, setTasks] = useState(initialTasks);
     const [selectedProject, setSelectedProject] = useState(''); // For Create Task Dialog
 
-    // Sync tasks when server data changes
-    useEffect(() => {
-        setTasks(initialTasks);
-    }, [initialTasks]);
-
-    // Filter State
+    // Filter State - Phải khai báo trước khi sử dụng
     const [filters, setFilters] = useState({
         status: '',
         priority: '',
@@ -168,23 +168,82 @@ export default function PersonalTasksClient({
         startDate: '',
         endDate: '',
     });
+
+    // Infinite scroll state
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const [totalLoaded, setTotalLoaded] = useState(initialTasks.length);
+    const loadMoreTriggerRef = useRef(null);
+    const scrollContainerRef = useRef(null);
+    const [isLoadingAllForView, setIsLoadingAllForView] = useState(false);
+
+    // Task statistics from database
+    const [taskStats, setTaskStats] = useState({
+        total: 0,
+        inProgress: 0,
+        waitingConfirm: 0,
+        rejected: 0,
+        completedAwaitReview: 0,
+        completed: 0,
+        cancelled: 0,
+    });
+    const [loadingStats, setLoadingStats] = useState(true);
+
+    // Function to fetch task statistics from database
+    const fetchTaskStats = useCallback(async () => {
+        try {
+            const response = await fetch('/api/tasks/my/stats');
+            if (response.ok) {
+                const data = await response.json();
+                setTaskStats(data);
+            } else {
+                console.error('Failed to fetch task stats');
+            }
+        } catch (error) {
+            console.error('Error fetching task stats:', error);
+        } finally {
+            setLoadingStats(false);
+        }
+    }, []);
+
+    // Sync tasks when server data changes (chỉ khi không có filter active)
+    useEffect(() => {
+        const hasActiveFilters = filters.status || filters.priority || filters.projectId;
+        // Chỉ sync từ initialTasks nếu không có filter active
+        // Nếu có filter, sẽ được handle bởi filter effect
+        if (!hasActiveFilters) {
+            setTasks(initialTasks);
+            setTotalLoaded(initialTasks.length);
+            // Giả định ban đầu có thể có thêm tasks nếu load được 12 tasks
+            setHasMore(initialTasks.length >= 12);
+        }
+    }, [initialTasks, filters.status, filters.priority, filters.projectId]);
     const [projectSearch, setProjectSearch] = useState(''); // For project filter dropdown
 
     // Prepare project options for filter dropdown
-    const projectOptions = useMemo(() =>
-        projects.map(p => ({ value: p._id, label: p.name })),
+    const projectOptions = useMemo(
+        () => projects.map(p => ({ value: p._id, label: p.name })),
         [projects]
     );
+
+    // [NEW] Danh sách dự án mà user có vai trò quản lý (owner/manager) hoặc là admin
+    const manageableProjects = useMemo(() => {
+        return projects.filter(project => {
+            if (isAdmin) return true;
+            const member = project.members?.find(m => m.userId === currentUserId);
+            return member && (member.role === 'owner' || member.role === 'manager');
+        });
+    }, [projects, isAdmin, currentUserId]);
 
     // Status and Priority options for filters
     const statusOptions = [
         { value: TASK_STATUS.COMPLETED, label: 'Hoàn thành' },
         { value: TASK_STATUS.DRAFT, label: 'Nháp' },
-        { value: TASK_STATUS.PENDING_APPROVAL, label: 'Chờ duyệt tạo' },
+        { value: TASK_STATUS.COMPLETED_AWAIT_REVIEW, label: 'Chờ duyệt tạo' }, // [FIX] Sửa lại mapping cho "Chờ duyệt tạo"
         { value: TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, label: 'Chờ xác nhận' },
         { value: TASK_STATUS.IN_PROGRESS, label: 'Đang làm' },
         { value: TASK_STATUS.ON_HOLD, label: 'Tạm dừng' },
-        { value: TASK_STATUS.COMPLETED_AWAIT_REVIEW, label: 'Chờ duyệt HT' },
+        { value: TASK_STATUS.PENDING_APPROVAL, label: 'Chờ duyệt HT' }, // [FIX] Đổi lại cho "Chờ duyệt HT"
         { value: TASK_STATUS.REJECTED, label: 'Bị từ chối' },
         { value: TASK_STATUS.CANCELLED, label: 'Đã hủy' },
     ];
@@ -195,101 +254,303 @@ export default function PersonalTasksClient({
         { value: 'low', label: 'Thấp' },
     ];
 
-    // Filtering Logic
-    const filteredTasks = useMemo(() => {
-        return tasks.filter(t => {
-            // Logic lọc của người dùng
-            if (filters.status && t.status !== filters.status) return false;
-            if (filters.priority && t.priority !== filters.priority) return false;
-            if (filters.projectId && String(t.project) !== String(filters.projectId)) return false;
-
-            // Date filtering
-            try {
-                const taskDueDate = t.plannedDueAt ? new Date(t.plannedDueAt) : null;
-
-                if (!taskDueDate && (filters.startDate || filters.endDate)) return false;
-
-                if (taskDueDate) {
-                    if (filters.startDate) {
-                        const startDate = new Date(filters.startDate); startDate.setHours(0, 0, 0, 0);
-                        if (taskDueDate < startDate) return false;
-                    }
-                    if (filters.endDate) {
-                        const endDate = new Date(filters.endDate); endDate.setHours(23, 59, 59, 999);
-                        if (taskDueDate > endDate) return false;
-                    }
+        // Filtering Logic
+        const filteredTasks = useMemo(() => {
+            return tasks.filter(t => {
+                // Logic lọc của người dùng
+                // [FIX] Normalize status comparison để đảm bảo so sánh đúng
+                if (filters.status) {
+                    const taskStatus = String(t.status || '').trim();
+                    const filterStatus = String(filters.status || '').trim();
+                    if (taskStatus !== filterStatus) return false;
                 }
-            } catch (e) { console.error("Date filter error:", e); return false; }
+                if (filters.priority && t.priority !== filters.priority) return false;
+                if (filters.projectId && String(t.project) !== String(filters.projectId)) return false;
 
-            return true;
-        });
-    }, [tasks, filters]);
+                // Date filtering
+                try {
+                    const taskDueDate = t.plannedDueAt ? new Date(t.plannedDueAt) : null;
 
-    // [SỬA LẠI] Logic tính toán cho Stat Cards
+                    if (!taskDueDate && (filters.startDate || filters.endDate)) return false;
+
+                    if (taskDueDate) {
+                        if (filters.startDate) {
+                            const startDate = new Date(filters.startDate); startDate.setHours(0, 0, 0, 0);
+                            if (taskDueDate < startDate) return false;
+                        }
+                        if (filters.endDate) {
+                            const endDate = new Date(filters.endDate); endDate.setHours(23, 59, 59, 999);
+                            if (taskDueDate > endDate) return false;
+                        }
+                    }
+                } catch (e) { console.error("Date filter error:", e); return false; }
+
+                return true;
+            });
+        }, [tasks, filters]);
+
+    // [NEW] Tính toán quyền thao tác kanban: admin, manager, owner
+    // Kiểm tra xem user có quyền manager/owner trong ít nhất một project của tasks không
+    const canManageKanban = useMemo(() => {
+        if (isAdmin) return true;
+        // Kiểm tra trong tất cả tasks (không chỉ filteredTasks)
+        for (const task of tasks) {
+            const projectMembersForTask = task.projectMembers || [];
+            const member = projectMembersForTask.find(m => String(m.userId) === String(currentUserId));
+            if (member && (member.role === 'owner' || member.role === 'manager')) {
+                return true;
+            }
+        }
+        return false;
+    }, [isAdmin, tasks, currentUserId]);
+
+    // Fetch task statistics from database on mount
+    useEffect(() => {
+        setLoadingStats(true);
+        fetchTaskStats();
+    }, [fetchTaskStats]); // Fetch once on mount
+
+    // Refresh stats when filters change (but only if no status filter is active)
+    useEffect(() => {
+        // Only refresh if no status filter is active (to show accurate counts)
+        if (!filters.status) {
+            fetchTaskStats();
+        }
+    }, [filters.status, filters.priority, filters.projectId, fetchTaskStats]); // Refresh when filters change
+
+    // Refresh stats when page becomes visible (user switches back to tab/window)
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchTaskStats();
+            }
+        };
+
+        const handleFocus = () => {
+            fetchTaskStats();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [fetchTaskStats]);
+
+    // Refresh stats when initialTasks change (page reloaded via router.refresh())
+    // This ensures stats are updated when the page is refreshed
+    useEffect(() => {
+        // Small delay to ensure router.refresh() has completed
+        const timer = setTimeout(() => {
+            fetchTaskStats();
+        }, 100);
+        
+        return () => clearTimeout(timer);
+    }, [initialTasks.length, fetchTaskStats]); // Refresh when initialTasks length changes (indicates data refresh)
+
+    // Use stats directly from database
     const statCardCounts = useMemo(() => {
-        const oneDayAgo = new Date();
-        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+        return {
+            total: taskStats.total || 0,
+            inProgress: taskStats.inProgress || 0,
+            waitingConfirm: taskStats.waitingConfirm || 0,
+            rejected: taskStats.rejected || 0,
+            completedAwaitReview: taskStats.completedAwaitReview || 0,
+            completed: taskStats.completed || 0,
+            cancelled: taskStats.cancelled || 0,
+        };
+    }, [taskStats]);
 
-        let total = 0; // "Tổng số (Active)"
-        let inProgress = 0;
-        let pending = 0;
+    // Load tasks function (có thể dùng để load initial hoặc load more)
+    const loadTasks = useCallback(async (skip = 0, limit = 12, isLoadMore = false) => {
+        if (loadingMore && !isLoadMore) return;
+        if (isLoadMore && (loadingMore || !hasMore)) return;
 
-        // [SỬA] Đổi tên biến này để đếm TẤT CẢ task hoàn thành
-        let allCompletedCount = 0;
+        setLoadingMore(true);
+        try {
+            // Build query params
+            const params = new URLSearchParams({
+                skip: skip.toString(),
+                limit: limit.toString(),
+            });
+            if (filters.status) params.append('status', filters.status);
+            if (filters.priority) params.append('priority', filters.priority);
+            if (filters.projectId) params.append('projectId', filters.projectId);
 
-        for (const t of filteredTasks) {
-
-            if (t.status === TASK_STATUS.COMPLETED) {
-                // [SỬA] Chỉ cần đếm tất cả task hoàn thành
-                allCompletedCount++;
-            } else if (t.status === TASK_STATUS.IN_PROGRESS) {
-                inProgress++;
-            } else if ([
-                TASK_STATUS.PENDING_APPROVAL,
-                TASK_STATUS.WAITING_ASSIGNEE_CONFIRM,
-                TASK_STATUS.COMPLETED_AWAIT_REVIEW
-            ].includes(t.status)) {
-                pending++;
+            const response = await fetch(`/api/tasks/my?${params.toString()}`);
+            if (!response.ok) {
+                throw new Error('Failed to load tasks');
             }
-        }
 
-        // Logic điều chỉnh 'total' (để khớp với TaskList)
-        total = 0;
-        if (filters.status === '') {
-            // Nếu không lọc status, Total = (Tất cả task chưa HT) + (Task HT < 24h)
-            for (const t of filteredTasks) {
-                if (t.status === TASK_STATUS.COMPLETED) {
-                    // TaskList sẽ chỉ hiển thị task HT < 24h trong danh sách active
-                    const completedDate = t.completedAt ? new Date(t.completedAt) : null;
-                    if (completedDate && completedDate >= oneDayAgo) {
-                        total++;
-                    }
-                } else {
-                    total++; // Đếm tất cả task hoạt động khác
+            const data = await response.json();
+            const newTasks = data.tasks || [];
+
+            if (isLoadMore) {
+                // Append to existing tasks
+                setTasks(prev => [...prev, ...newTasks]);
+                setTotalLoaded(prev => prev + newTasks.length);
+            } else {
+                // Replace tasks (initial load or filter change)
+                setTasks(newTasks);
+                setTotalLoaded(newTasks.length);
+            }
+            
+            setHasMore(data.hasMore);
+        } catch (error) {
+            console.error('Error loading tasks:', error);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [loadingMore, hasMore, filters]);
+
+    // When switching to non-list views (calendar/kanban/gantt), we should load ALL tasks
+    // because those views cannot rely on infinite scroll (which only exists in list view).
+    const loadAllTasksForCurrentFilters = useCallback(async () => {
+        // Avoid duplicate runs
+        if (isLoadingAllForView) return;
+        if (!hasMore) return; // already fully loaded
+
+        setIsLoadingAllForView(true);
+        try {
+            const pageLimit = 200;
+            let skip = tasks.length || 0;
+            let aggregated = [...tasks];
+            let keepGoing = true;
+
+            while (keepGoing) {
+                const params = new URLSearchParams({
+                    skip: skip.toString(),
+                    limit: pageLimit.toString(),
+                });
+                if (filters.status) params.append('status', filters.status);
+                if (filters.priority) params.append('priority', filters.priority);
+                if (filters.projectId) params.append('projectId', filters.projectId);
+
+                const response = await fetch(`/api/tasks/my?${params.toString()}`);
+                if (!response.ok) throw new Error('Failed to load all tasks');
+
+                const data = await response.json();
+                const newTasks = data.tasks || [];
+                aggregated = aggregated.concat(newTasks);
+                skip += newTasks.length;
+
+                // Stop conditions
+                if (!data.hasMore || newTasks.length === 0) {
+                    keepGoing = false;
+                }
+
+                // Safety cap: prevent runaway loops if API misbehaves
+                if (skip > 10000) {
+                    console.warn('[loadAllTasksForCurrentFilters] aborting after 10k tasks (safety cap).');
+                    keepGoing = false;
                 }
             }
-        } else if (filters.status === TASK_STATUS.COMPLETED) {
-            // Nếu lọc "Hoàn thành", total là tất cả task hoàn thành
-            total = allCompletedCount;
-        } else {
-            // Nếu lọc trạng thái active khác
-            total = inProgress + pending; // Hoặc filteredTasks.length nếu status là 1 trong các trạng thái active
-            total = filteredTasks.length;
+
+            setTasks(aggregated);
+            setTotalLoaded(aggregated.length);
+            setHasMore(false);
+        } catch (error) {
+            console.error('Error loading all tasks for view:', error);
+        } finally {
+            setIsLoadingAllForView(false);
+        }
+    }, [filters.projectId, filters.priority, filters.status, hasMore, isLoadingAllForView, tasks]);
+
+    // Load more tasks function
+    const loadMoreTasks = useCallback(() => {
+        loadTasks(totalLoaded, 6, true);
+    }, [loadTasks, totalLoaded]);
+
+    // Reset and reload when filters change
+    useEffect(() => {
+        // Reset state
+        setTasks([]);
+        setTotalLoaded(0);
+        setHasMore(true);
+        setIsLoadingAllForView(false);
+        
+        // Load initial tasks with new filters
+        const loadInitial = async () => {
+            setLoadingMore(true);
+            try {
+                const params = new URLSearchParams({
+                    skip: '0',
+                    limit: '12',
+                });
+                if (filters.status) params.append('status', filters.status);
+                if (filters.priority) params.append('priority', filters.priority);
+                if (filters.projectId) params.append('projectId', filters.projectId);
+
+                const response = await fetch(`/api/tasks/my?${params.toString()}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setTasks(data.tasks || []);
+                    setTotalLoaded(data.tasks?.length || 0);
+                    setHasMore(data.hasMore);
+                }
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+            } finally {
+                setLoadingMore(false);
+            }
+        };
+        
+        loadInitial();
+    }, [filters.status, filters.priority, filters.projectId]); // Chỉ reload khi các filter quan trọng thay đổi
+
+    // Ensure all tasks are loaded when switching to calendar/kanban/gantt
+    useEffect(() => {
+        if (view === 'list') return;
+        // Only start once we have some initial data loaded (or attempt anyway)
+        // Admin will get all tasks; non-admin will get all tasks they have access to.
+        loadAllTasksForCurrentFilters();
+    }, [view, loadAllTasksForCurrentFilters]);
+
+    // Intersection Observer for infinite scroll
+    useEffect(() => {
+        if (view !== 'list' || !hasMore || loadingMore) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                // Trigger khi element vào viewport (khi scroll đến nửa màn hình)
+                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                    loadMoreTasks();
+                }
+            },
+            {
+                root: null, // Use viewport as root
+                rootMargin: '0px',
+                threshold: 0.5 // Trigger khi 50% element visible
+            }
+        );
+
+        const triggerElement = loadMoreTriggerRef.current;
+        if (triggerElement) {
+            observer.observe(triggerElement);
         }
 
-        // [SỬA] Trả về allCompletedCount
-        return { total, inProgress, pending, allCompletedCount };
+        return () => {
+            if (triggerElement) {
+                observer.unobserve(triggerElement);
+            }
+        };
+    }, [view, hasMore, loadingMore, loadMoreTasks]);
 
-    }, [filteredTasks, filters.status]);
 
-
-    // Callbacks for Dialogs: Dùng router.refresh()
+    // Callbacks for Dialogs: Dùng router.refresh() và refresh stats
     const handleTaskCreated = (newTask) => {
         router.refresh();
+        // Refresh stats after creating task
+        fetchTaskStats();
     };
 
     const handleTaskUpdated = (updatedTask) => {
         router.refresh();
+        // Refresh stats after updating task (status might have changed)
+        fetchTaskStats();
     };
 
     // Info for Create Task Dialog
@@ -299,10 +560,12 @@ export default function PersonalTasksClient({
     }, [selectedProject, projects]);
 
     const canManageSelectedProject = useMemo(() => {
+        // [NEW] Admin có tất cả quyền của manager, owner
+        if (isAdmin) return true;
         if (!selectedProjectInfo || !selectedProjectInfo.members) return false;
         const member = selectedProjectInfo.members.find(m => m.userId === currentUserId);
         return member && (member.role === 'owner' || member.role === 'manager');
-    }, [selectedProjectInfo, currentUserId]);
+    }, [isAdmin, selectedProjectInfo, currentUserId]);
 
     // Filter helpers
     const activeFilterCount = Object.values(filters).filter(Boolean).length;
@@ -316,6 +579,13 @@ export default function PersonalTasksClient({
 
     return (
         <div className="flex flex-col flex-1 w-full h-full">
+            {/* [NEW] Hiển thị thông tin tài khoản và quyền */}
+            <UserInfoBadge
+                userName={currentUserName}
+                userRole={isAdmin ? 'admin' : currentUserRole}
+                userId={currentUserId}
+            />
+            
             {/* Header Section */}
             <div className="flex-none mb-4">
                 <div className="bg-white rounded-md border border-gray-200">
@@ -392,7 +662,7 @@ export default function PersonalTasksClient({
 
                         {/* [SỬA LẠI] Stat Cards Section */}
                         {!isHeaderCollapsed && (
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3">
+                            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-2 mt-3">
                                 <div className="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
                                     <p className="text-[10px] font-medium text-gray-500 uppercase">Tổng số (Active)</p>
                                     <p className="text-xl font-bold text-gray-800 mt-0.5">{statCardCounts.total}</p>
@@ -401,19 +671,27 @@ export default function PersonalTasksClient({
                                     <p className="text-[10px] font-medium text-blue-600 uppercase">Đang làm</p>
                                     <p className="text-xl font-bold text-blue-800 mt-0.5">{statCardCounts.inProgress}</p>
                                 </div>
-                                <div className="bg-amber-50 rounded-lg p-2.5 border border-amber-100">
-                                    <p className="text-[10px] font-medium text-amber-600 uppercase">Chờ xử lý</p>
-                                    <p className="text-xl font-bold text-amber-800 mt-0.5">{statCardCounts.pending}</p>
+                                <div className="bg-yellow-50 rounded-lg p-2.5 border border-yellow-100">
+                                    <p className="text-[10px] font-medium text-yellow-600 uppercase">Đã gửi Task</p>
+                                    <p className="text-xl font-bold text-yellow-800 mt-0.5">{statCardCounts.waitingConfirm}</p>
                                 </div>
-
-                                {/* [SỬA] Thẻ hiển thị TẤT CẢ SỐ LƯỢNG task hoàn thành */}
+                                <div className="bg-red-50 rounded-lg p-2.5 border border-red-100">
+                                    <p className="text-[10px] font-medium text-red-600 uppercase">Từ chối</p>
+                                    <p className="text-xl font-bold text-red-800 mt-0.5">{statCardCounts.rejected}</p>
+                                </div>
+                                <div className="bg-amber-50 rounded-lg p-2.5 border border-amber-100">
+                                    <p className="text-[10px] font-medium text-amber-600 uppercase">Chờ duyệt</p>
+                                    <p className="text-xl font-bold text-amber-800 mt-0.5">{statCardCounts.completedAwaitReview}</p>
+                                </div>
                                 <div className="bg-green-50 rounded-lg p-2.5 border border-green-100">
-                                    {/* [SỬA] Bỏ chữ "Gần Đây" */}
                                     <p className="text-[10px] font-medium text-green-600 uppercase">Đã hoàn thành</p>
                                     <p className="text-xl font-bold text-green-800 mt-0.5">
-                                        {/* [SỬA] Hiển thị allCompletedCount */}
-                                        {statCardCounts.allCompletedCount}
+                                        {statCardCounts.completed}
                                     </p>
+                                </div>
+                                <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200">
+                                    <p className="text-[10px] font-medium text-slate-600 uppercase">Task hủy</p>
+                                    <p className="text-xl font-bold text-slate-800 mt-0.5">{statCardCounts.cancelled}</p>
                                 </div>
                             </div>
                         )}
@@ -423,20 +701,60 @@ export default function PersonalTasksClient({
 
             {/* Main Content Area (Task Views) */}
             <div className="flex-1 overflow-hidden">
-                <div className="h-full bg-white rounded-md shadow-soft border border-gray-200 overflow-y-auto custom-scrollbar">
+                <div 
+                    ref={scrollContainerRef}
+                    className="h-full bg-white rounded-md shadow-soft border border-gray-200 overflow-y-auto custom-scrollbar"
+                >
                     <div className="p-4 sm:p-6">
                         {view === 'list' && (
-                            <TaskList
-                                initialTasks={filteredTasks}
-                                users={users}
-                                allUsersWithDetails={allUsersWithDetails}
-                                currentUserId={currentUserId}
-                                onTaskUpdated={handleTaskUpdated}
-                                workTypes={workTypes}
-                                platforms={platforms}
+                            <>
+                                <TaskList
+                                    initialTasks={filteredTasks}
+                                    users={users}
+                                    allUsersWithDetails={allUsersWithDetails}
+                                    currentUserId={currentUserId}
+                                    isAdmin={isAdmin} // [NEW] Truyền quyền admin
+                                    onTaskUpdated={handleTaskUpdated}
+                                    workTypes={workTypes}
+                                    platforms={platforms}
+                                />
+                                
+                                {/* Infinite scroll trigger - đặt ở nửa màn hình */}
+                                {hasMore && (
+                                    <div 
+                                        ref={loadMoreTriggerRef}
+                                        className="flex items-center justify-center py-4"
+                                        style={{ minHeight: '50vh' }}
+                                    >
+                                        {loadingMore && (
+                                            <div className="flex items-center gap-2 text-gray-500">
+                                                <Loader2 className="w-5 h-5 animate-spin" />
+                                                <span className="text-sm">Đang tải thêm công việc...</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {/* End of list indicator */}
+                                {!hasMore && tasks.length > 0 && (
+                                    <div className="text-center py-4 text-sm text-gray-500">
+                                        Đã hiển thị tất cả {tasks.length} công việc
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        {view === 'kanban' && (
+                            <KanbanBoard 
+                                tasks={filteredTasks} 
+                                users={allUsersWithDetails} 
+                                onTaskUpdate={handleTaskUpdated} 
+                                workTypes={workTypes} 
+                                platforms={platforms} 
+                                currentUserId={currentUserId} 
+                                isAdmin={isAdmin}
+                                canManageKanban={canManageKanban}
                             />
                         )}
-                        {view === 'kanban' && <KanbanBoard tasks={filteredTasks} users={allUsersWithDetails} onTaskUpdate={handleTaskUpdated} workTypes={workTypes} platforms={platforms} />}
                         {view === 'calendar' && <CalendarView tasks={filteredTasks} />}
                         {view === 'gantt' && <GanttView tasks={filteredTasks} onTaskUpdate={handleTaskUpdated} />}
                     </div>
@@ -457,34 +775,42 @@ export default function PersonalTasksClient({
                                 </div>
                                 {/* Scrollable list of projects */}
                                 <div className="p-5 max-h-[60vh] overflow-y-auto custom-scrollbar space-y-2">
-                                    {projects.length > 0 ? projects.map(project => {
-                                        // Determine user's role in this project
-                                        const member = project.members?.find(m => m.userId === currentUserId);
-                                        const isManager = member && (member.role === 'owner' || member.role === 'manager');
-                                        const roleLabel = isManager ? 'Quản lý' : (member ? 'Thành viên' : 'Không rõ');
-                                        const roleClass = isManager ? 'text-blue-600 font-medium' : 'text-gray-600';
+                                    {manageableProjects.length > 0 ? (
+                                        manageableProjects.map(project => {
+                                            // Admin có vai trò admin trong tất cả dự án và có tất cả quyền của manager, owner
+                                            let roleLabel = 'Quản lý';
+                                            let roleClass = 'text-blue-600 font-medium';
+                                            if (isAdmin) {
+                                                roleLabel = 'Admin';
+                                                roleClass = 'text-purple-600 font-medium';
+                                            }
 
-                                        return (
-                                            <button
-                                                key={project._id}
-                                                onClick={() => project.isActive !== false && setSelectedProject(project._id)}
-                                                disabled={project.isActive === false}
-                                                title={project.isActive === false ? 'Dự án đã lưu trữ — không thể tạo nhiệm vụ' : `Chọn dự án ${project.name}`}
-                                                className={`block w-full text-left p-3 border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${project.isActive === false ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200 hover:bg-gray-50'}`}
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="font-medium text-gray-900">{project.name}</p>
-                                                        <p className="text-xs text-gray-500 mt-1">Vai trò của bạn: <span className={roleClass}>{roleLabel}</span></p>
+                                            return (
+                                                <button
+                                                    key={project._id}
+                                                    onClick={() => project.isActive !== false && setSelectedProject(project._id)}
+                                                    disabled={project.isActive === false}
+                                                    title={project.isActive === false ? 'Dự án đã lưu trữ — không thể tạo nhiệm vụ' : `Chọn dự án ${project.name}`}
+                                                    className={`block w-full text-left p-3 border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${project.isActive === false ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200 hover:bg-gray-50'}`}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="font-medium text-gray-900">{project.name}</p>
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                Vai trò của bạn: <span className={roleClass}>{roleLabel}</span>
+                                                            </p>
+                                                        </div>
+                                                        {project.isActive === false && (
+                                                            <span className="text-xs text-gray-500 italic">Đã lưu trữ</span>
+                                                        )}
                                                     </div>
-                                                    {project.isActive === false && (
-                                                        <span className="text-xs text-gray-500 italic">Đã lưu trữ</span>
-                                                    )}
-                                                </div>
-                                            </button>
-                                        );
-                                    }) : (
-                                        <p className="text-sm text-gray-500 text-center py-4">Bạn chưa tham gia dự án nào.</p>
+                                                </button>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-gray-500 text-center py-4">
+                                            bạn chưa có chức năng Quản lý trong bất kỳ dự án nào
+                                        </p>
                                     )}
                                 </div>
                                 {/* Footer with Cancel button */}
@@ -511,6 +837,7 @@ export default function PersonalTasksClient({
                                 setSelectedProject('');
                             }}
                             projectId={selectedProject}
+                            projectName={selectedProjectInfo.name}
                             currentUserId={currentUserId}
                             projectMembers={selectedProjectInfo.members || []}
                             canManage={canManageSelectedProject}

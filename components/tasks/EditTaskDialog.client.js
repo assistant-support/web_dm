@@ -3,9 +3,11 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext, useMemo } from 'react';
 import DialogComponent from '@/components/ui/dialog';
 import { Input, Textarea, Select } from '@/components/ui/input';
+import Dropdown, { DropdownContext } from '@/components/ui/dropdown';
+import { ChevronDown, Search } from 'lucide-react';
 import { useAsyncNotifier } from '@/hooks/loading.hook';
 import { updateTask } from '@/data/task/actions/server';
 import { assignTask } from '@/data/task/actions/server';
@@ -19,6 +21,32 @@ const PRIORITY_OPTIONS = [
     { value: PRIORITY.HIGH, label: 'Cao' },
     { value: PRIORITY.URGENT, label: 'Khẩn cấp' },
 ];
+
+/**
+ * DropdownItem component for Dropdown menu
+ */
+const DropdownItem = ({ onClick, children, isActive = false }) => {
+    const { setIsOpen } = useContext(DropdownContext);
+
+    const handleClick = () => {
+        if (onClick) {
+            onClick();
+        }
+        setIsOpen(false);
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            className={`block w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors ${
+                isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'
+            }`}
+        >
+            {children}
+        </button>
+    );
+};
 
 /**
  * EditTaskDialog - Dialog edit task hoặc tạo subtask
@@ -53,14 +81,18 @@ export default function EditTaskDialog({
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-    priority: PRIORITY.MEDIUM,
+        priority: PRIORITY.MEDIUM,
         workType: '',
         assignee: '',
         estimatedHours: '',
         plannedStartAt: '',
         plannedDueAt: '',
         tags: '',
+        initialPoints: 0, // [NEW] Điểm dự kiến
     });
+
+    // [NEW] State cho tìm kiếm người thực hiện
+    const [assigneeSearch, setAssigneeSearch] = useState('');
 
     // Sync form với task data khi dialog mở (edit mode)
     useEffect(() => {
@@ -85,6 +117,7 @@ export default function EditTaskDialog({
                 plannedStartAt: task.plannedStartAt ? new Date(task.plannedStartAt).toISOString().slice(0, 16) : '',
                 plannedDueAt: task.plannedDueAt ? new Date(task.plannedDueAt).toISOString().slice(0, 16) : '',
                 tags: Array.isArray(task.tags) ? task.tags.join(', ') : '',
+                initialPoints: typeof task.initialPoints === 'number' ? task.initialPoints : 0,
             });
         } else if (open && mode === 'createSubtask') {
             // Reset form cho subtask mới
@@ -98,8 +131,11 @@ export default function EditTaskDialog({
                 plannedStartAt: '',
                 plannedDueAt: '',
                 tags: '',
+                initialPoints: 0,
             });
         }
+        // [NEW] Reset search khi dialog đóng/mở
+        setAssigneeSearch('');
     }, [open, mode, task]);
 
     const handleChange = (field, value) => {
@@ -108,14 +144,29 @@ export default function EditTaskDialog({
 
     // Determine which user list to show in the assignee picker.
     // For creating subtasks we want to allow selecting any user in the system.
-    let assigneeOptions = [];
-    if (mode === 'createSubtask' && Array.isArray(allUsersWithDetails) && allUsersWithDetails.length) {
-        assigneeOptions = allUsersWithDetails.map(u => ({ value: u.id || u._id || u.value, label: u.label || u.name }));
-    } else if (Array.isArray(users)) {
-        assigneeOptions = users;
-    } else {
-        assigneeOptions = [];
-    }
+    const assigneeOptions = useMemo(() => {
+        if (mode === 'createSubtask' && Array.isArray(allUsersWithDetails) && allUsersWithDetails.length) {
+            return allUsersWithDetails.map(u => ({ value: u.id || u._id || u.value, label: u.label || u.name }));
+        } else if (Array.isArray(users)) {
+            return users;
+        } else {
+            return [];
+        }
+    }, [mode, allUsersWithDetails, users]);
+
+    const selectedAssigneeOption = useMemo(() => {
+        return assigneeOptions.find(opt => opt.value === formData.assignee);
+    }, [assigneeOptions, formData.assignee]);
+
+    // [NEW] Filter assignee options dựa trên search term
+    const filteredAssigneeOptions = useMemo(() => {
+        if (!assigneeSearch.trim()) return assigneeOptions;
+        const searchLower = assigneeSearch.toLowerCase();
+        return assigneeOptions.filter(opt =>
+            (opt.label || '').toLowerCase().includes(searchLower) ||
+            (opt.name || '').toLowerCase().includes(searchLower)
+        );
+    }, [assigneeOptions, assigneeSearch]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -137,6 +188,10 @@ export default function EditTaskDialog({
             tags: formData.tags
                 ? formData.tags.split(',').map(t => t.trim()).filter(Boolean)
                 : [],
+            // [NEW] Điểm dự kiến: chỉ cho phép manager/admin sửa
+            ...(canManage && {
+                initialPoints: formData.initialPoints ? Number(formData.initialPoints) : 0,
+            }),
         };
 
         if (mode === 'edit') {
@@ -270,18 +325,68 @@ export default function EditTaskDialog({
                                 ))}
                             </Select>
 
-                            <Select
-                                label="Người thực hiện"
-                                value={formData.assignee}
-                                onChange={(e) => handleChange('assignee', e.target.value)}
-                            >
-                                <option value="">-- Chưa gán --</option>
-                                {assigneeOptions.map(u => (
-                                    <option key={u.value} value={u.value}>
-                                        {u.label}
-                                    </option>
-                                ))}
-                            </Select>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Người thực hiện
+                                </label>
+                                <Dropdown>
+                                    <Dropdown.Trigger>
+                                        <button
+                                            type="button"
+                                            className="relative block w-full border border-gray-200 bg-white rounded-md py-2 pl-3 pr-10 text-sm text-left text-gray-900 hover:border-gray-300 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-colors"
+                                        >
+                                            <span className={selectedAssigneeOption?.value ? 'text-gray-900' : 'text-gray-400'}>
+                                                {selectedAssigneeOption?.label || '-- Chưa gán --'}
+                                            </span>
+                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                                                <ChevronDown className="h-5 w-5 text-gray-400" />
+                                            </div>
+                                        </button>
+                                    </Dropdown.Trigger>
+                                    <Dropdown.Content position="bottom-left" width="w-full" className="p-1 z-50">
+                                        {/* [NEW] Input tìm kiếm */}
+                                        <div className="p-1 sticky top-0 bg-white z-10 border-b border-gray-100 mb-1">
+                                            <Input
+                                                type="text"
+                                                placeholder="Tìm kiếm người thực hiện..."
+                                                value={assigneeSearch}
+                                                onChange={(e) => setAssigneeSearch(e.target.value)}
+                                                leftIcon={<Search size={16} />}
+                                                className="w-full !py-1.5 !text-sm"
+                                            />
+                                        </div>
+                                        <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                                            <DropdownItem
+                                                onClick={() => {
+                                                    handleChange('assignee', '');
+                                                    setAssigneeSearch('');
+                                                }}
+                                                isActive={!formData.assignee}
+                                            >
+                                                -- Chưa gán --
+                                            </DropdownItem>
+                                            {filteredAssigneeOptions.length > 0 ? (
+                                                filteredAssigneeOptions.map(u => (
+                                                    <DropdownItem
+                                                        key={u.value}
+                                                        onClick={() => {
+                                                            handleChange('assignee', u.value);
+                                                            setAssigneeSearch('');
+                                                        }}
+                                                        isActive={formData.assignee === u.value}
+                                                    >
+                                                        {u.label}
+                                                    </DropdownItem>
+                                                ))
+                                            ) : (
+                                                <div className="px-3 py-2 text-sm text-gray-400 text-center">
+                                                    Không tìm thấy
+                                                </div>
+                                            )}
+                                        </div>
+                                    </Dropdown.Content>
+                                </Dropdown>
+                            </div>
 
                             <Input
                                 label="Thời gian ước tính (giờ)"
@@ -291,6 +396,19 @@ export default function EditTaskDialog({
                                 value={formData.estimatedHours}
                                 onChange={(e) => handleChange('estimatedHours', e.target.value)}
                             />
+
+                            {canManage && (
+                                <Input
+                                    label="Điểm dự kiến"
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={formData.initialPoints}
+                                    onChange={(e) => handleChange('initialPoints', e.target.value)}
+                                    placeholder="0"
+                                    helperText="Điểm thưởng khi hoàn thành (có thể sửa sau)"
+                                />
+                            )}
 
                             <Input
                                 label="Ngày bắt đầu"

@@ -15,6 +15,7 @@ import { runAction, assert, revalidateMany } from '@/lib/action-utils.js';
 import { notifyEvent } from '@/lib/noti.js';
 import { logActivity } from '@/lib/activity.js';
 import * as tags from '@/data/_shared/tags.js';
+import { safeSerialize } from '@/lib/serialize.js';
 
 import Project from '@/model/project.model.js';
 import Task from '@/model/task.model.js';
@@ -106,7 +107,8 @@ export async function create(payload) {
             // Revalidate: task + project
             await revalidateMany([tags.task(task._id), tags.project(project._id)].filter(Boolean));
 
-            return created;
+            // Serialize before returning to client
+            return safeSerialize(created);
         },
         { requireAuth: true }
     );
@@ -142,17 +144,17 @@ export async function listByTaskAction(payload) {
                     
                     return {
                         ...comment,
-                        author: {
-                            id: author._id,
-                            name: author.name,
-                            avatar: author.avt,
-                        },
+                        author: author ? {
+                            id: String(author._id), // Serialize ObjectId to string
+                            name: author.name || null,
+                            avatar: author.avt || null,
+                        } : null,
                     };
                 })
             );
 
             // Serialize để tránh lỗi MongoDB ObjectId
-            return JSON.parse(JSON.stringify(populatedItems));
+            return safeSerialize(populatedItems);
         },
         { requireAuth: true }
     );
@@ -204,7 +206,8 @@ export async function remove(payload) {
             await revalidateMany([tags.task(task._id), tags.project(project._id)].filter(Boolean));
 
             // thêm _removed để UI tiện xử lý (không thay đổi schema trả về)
-            return { ...removedPlain, _removed: true };
+            // Serialize before returning to client
+            return safeSerialize({ ...removedPlain, _removed: true });
         },
         { requireAuth: true }
     );

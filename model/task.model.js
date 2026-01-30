@@ -19,6 +19,7 @@ import {
     TASK_SCOPE, CLAIM_MODE, CLAIM_STATUS
 } from '@/model/common/enums.js';
 import { connectDB } from '@/lib/db.js';
+import { normalizeText } from '@/lib/text-normalize.js';
 
 /**
  * -----------------------------------------------------------------------------
@@ -137,6 +138,8 @@ const TaskSchema = new mongoose.Schema({
     // ====== THÔNG TIN CƠ BẢN ======
     /** Tiêu đề task */
     title: { type: String, required: true, trim: true },
+    /** Tiêu đề đã được normalize cho search (tự động tạo) */
+    title_normalized: { type: String, index: true },
     /** Mô tả chi tiết task (HTML/Markdown) */
     description: { type: String, default: '' },
 
@@ -393,6 +396,10 @@ TaskSchema.index({ parentTask: 1, listOrder: 1 });
 TaskSchema.index({ remindAt: 1, reminderSent: 1 }, {
     partialFilterExpression: { reminderSent: false, deletedAt: null }
 });
+
+// Index hợp chất cho search tối ưu (QUAN TRỌNG).
+// Ứng dụng: Search task theo title_normalized, projectId, và deletedAt.
+TaskSchema.index({ title_normalized: 1, project: 1, deletedAt: 1 });
 
 /**
  * -----------------------------------------------------------------------------
@@ -940,6 +947,16 @@ TaskSchema.pre('save', function (next) {
         if (!this.completedAt) {
             this.completedAt = new Date();
         }
+    }
+    next();
+});
+
+/**
+ * Pre-save middleware: Tự động normalize title khi lưu.
+ */
+TaskSchema.pre('save', function (next) {
+    if (this.isModified('title') && this.title) {
+        this.title_normalized = normalizeText(this.title);
     }
     next();
 });

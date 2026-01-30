@@ -119,13 +119,19 @@ export default async function TeamsPage({ searchParams }) {
                 >
                     {/* Server-rendered initial view (improves FCP/SEO) */}
                     <div id="teams-server-root">
-                        <TeamsList teams={sortedTeams} currentUserId={user?.externalUserId} viewMode={viewMode} />
+                        <TeamsList 
+                            teams={sortedTeams} 
+                            currentUserId={user?.externalUserId} 
+                            currentUser={user}
+                            viewMode={viewMode} 
+                        />
                     </div>
 
                     {/* Client toggle/renderer: will replace server HTML on demand when users switch view */}
                     <TeamsClientList
                         teams={clientTeams}
                         currentUserId={user?.externalUserId}
+                        currentUser={user}
                         initialView={viewMode}
                         serverRootId="teams-server-root"
                         controlsRootId="teams-client-controls-root"

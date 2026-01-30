@@ -11,9 +11,10 @@ import TeamListItem from './TeamListItem.js';
  * @param {Object} props
  * @param {Array} props.teams - Danh sách teams đã sort
  * @param {string} props.currentUserId - ID user hiện tại
+ * @param {Object} props.currentUser - User object (để check admin role)
  * @param {'card'|'list'} props.viewMode - Chế độ hiển thị
  */
-export default function TeamsList({ teams, currentUserId, viewMode = 'card' }) {
+export default function TeamsList({ teams, currentUserId, currentUser, viewMode = 'card' }) {
     if (!teams || teams.length === 0) {
         return (
             <div className="text-center py-12">
@@ -39,6 +40,7 @@ export default function TeamsList({ teams, currentUserId, viewMode = 'card' }) {
                             key={team._id}
                             team={team}
                             currentUserId={currentUserId}
+                            currentUser={currentUser}
                         />
                     ))}
                 </div>
@@ -55,6 +57,7 @@ export default function TeamsList({ teams, currentUserId, viewMode = 'card' }) {
                         key={team._id}
                         team={team}
                         currentUserId={currentUserId}
+                        currentUser={currentUser}
                     />
                 ))}
             </div>

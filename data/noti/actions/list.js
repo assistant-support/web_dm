@@ -6,6 +6,7 @@
 import { connectDB } from '@/lib/db.js';
 import { runAction } from '@/lib/action-utils.js';
 import Notification from '@/model/notification.model.js';
+import { safeSerialize } from '@/lib/serialize.js';
 
 /**
  * Get notifications for current user
@@ -19,8 +20,10 @@ export async function getMyNotifications({ limit = 20, skip = 0, unreadOnly = fa
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
-        // Build query
-        const query = { userId: uid };
+        const isAdmin = user.role === 'admin';
+        
+        // Build query - Admin thấy tất cả thông báo, user thường chỉ thấy của mình
+        const query = isAdmin ? {} : { userId: uid };
         if (unreadOnly) {
             query.read = false;
         }
@@ -33,26 +36,18 @@ export async function getMyNotifications({ limit = 20, skip = 0, unreadOnly = fa
             .limit(limit)
             .lean();
 
-        // Get unread count (always calculate total unread, not just for filtered results)
-        const unreadCount = await Notification.countDocuments({ 
-            userId: uid, 
-            read: false 
-        });
+        // Get unread count - Admin đếm tất cả, user thường chỉ đếm của mình
+        const unreadCountQuery = isAdmin ? { read: false } : { userId: uid, read: false };
+        const unreadCount = await Notification.countDocuments(unreadCountQuery);
 
-        // Serialize notifications (convert ObjectId and Date to strings)
-        const serializedNotifications = notifications.map(n => ({
+        // Serialize notifications using safeSerialize to handle all ObjectIds recursively
+        const serializedNotifications = safeSerialize(notifications.map(n => ({
             ...n,
             _id: String(n._id),
-            createdAt: n.createdAt.toISOString(),
-            // Serialize metadata IDs if they exist
-            metadata: n.metadata ? {
-                ...n.metadata,
-                taskId: n.metadata.taskId ? String(n.metadata.taskId) : undefined,
-                projectId: n.metadata.projectId ? String(n.metadata.projectId) : undefined,
-                commentId: n.metadata.commentId ? String(n.metadata.commentId) : undefined,
-                actorId: n.metadata.actorId || undefined,
-            } : undefined,
-        }));
+            createdAt: n.createdAt ? (n.createdAt instanceof Date ? n.createdAt.toISOString() : String(n.createdAt)) : null,
+            // Serialize metadata - safeSerialize will handle nested ObjectIds
+            metadata: n.metadata ? safeSerialize(n.metadata) : undefined,
+        })));
 
         return {
             ok: true,
@@ -71,14 +66,16 @@ export async function markNotificationAsRead(notificationId) {
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
+        const isAdmin = user.role === 'admin';
 
-        // Update notification, but only if it belongs to the current user
-        // This prevents user A from marking user B's notifications as read
+        // Update notification
+        // Admin có thể đánh dấu đọc bất kỳ notification nào, user thường chỉ có thể đánh dấu của mình
+        const query = isAdmin 
+            ? { _id: notificationId }
+            : { _id: notificationId, userId: uid };
+            
         const result = await Notification.findOneAndUpdate(
-            { 
-                _id: notificationId, 
-                userId: uid 
-            },
+            query,
             { 
                 read: true 
             },
@@ -111,13 +108,16 @@ export async function markAllNotificationsAsRead() {
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
+        const isAdmin = user.role === 'admin';
 
-        // Update all unread notifications for this user
+        // Update all unread notifications
+        // Admin đánh dấu tất cả, user thường chỉ đánh dấu của mình
+        const query = isAdmin 
+            ? { read: false }
+            : { userId: uid, read: false };
+            
         const result = await Notification.updateMany(
-            { 
-                userId: uid, 
-                read: false 
-            },
+            query,
             { 
                 read: true 
             }

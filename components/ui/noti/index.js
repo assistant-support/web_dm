@@ -67,9 +67,11 @@ export default function NotiOverlay(props) {
     const statusColor = isSuccess ? 'var(--green)' : isError ? 'var(--red)' : 'var(--brand-600)';
 
     const handleOverlayClick = (e) => {
-        e.stopPropagation();
-        onClickOutside?.(e);
-        onClose?.();
+        // Chỉ đóng khi click vào overlay background, không phải vào card
+        if (e.target === e.currentTarget) {
+            onClickOutside?.(e);
+            onClose?.();
+        }
     };
 
     return createPortal(
@@ -78,13 +80,14 @@ export default function NotiOverlay(props) {
             role="dialog"
             aria-modal="true"
             aria-label={titleText}
+            onClick={handleOverlayClick}
         >
             <div
-                onClick={handleOverlayClick}
-                style={{ position: 'fixed', inset: 0, backgroundColor: overlayBg, backdropFilter: 'blur(4px)', zIndex: 9 }}
+                style={{ position: 'fixed', inset: 0, backgroundColor: overlayBg, backdropFilter: 'blur(4px)', zIndex: 9, pointerEvents: 'none' }}
             />
 
             <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
                     background: 'white',
                     padding: 16,
@@ -92,6 +95,7 @@ export default function NotiOverlay(props) {
                     borderRadius: 8,
                     boxShadow: '0 2px 8px rgba(0,0,0,0.26)',
                     zIndex: 10,
+                    position: 'relative',
                 }}
             >
                 <h4
@@ -126,7 +130,10 @@ export default function NotiOverlay(props) {
                             ? actions.map((a, idx) => (
                                 <button
                                     key={idx}
-                                    onClick={a.onClick}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        a.onClick?.(e);
+                                    }}
                                     style={{
                                         borderRadius: 6,
                                         padding: '8px 12px',
@@ -135,6 +142,8 @@ export default function NotiOverlay(props) {
                                         border: a.variant === 'primary' ? 'none' : '1px solid rgba(255,255,255,0.2)',
                                         background: a.variant === 'primary' ? 'var(--brand-600)' : 'transparent',
                                         color: a.variant === 'primary' ? '#fff' : 'inherit',
+                                        cursor: 'pointer',
+                                        pointerEvents: 'auto',
                                     }}
                                 >
                                     {a.label}

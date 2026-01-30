@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import TaskItem from './TaskItem.client';
 import EditTaskDialog from './EditTaskDialog.client'; // Giả định component tồn tại
 import CreateSubtaskDialog from './CreateSubtaskDialog.client'; // Giả định component tồn tại
-import CompletedTasksSection from './CompletedTasksSection.client'; // Import component mới
+// import CompletedTasksSection from './CompletedTasksSection.client'; // [SỬA] Không dùng dropdown completed tasks nữa
 import { ListTodo } from 'lucide-react';
 import { useTaskBoardActions } from '@/hooks/task-board.hook'; // Giả định hook tồn tại
 import { TASK_STATUS } from '@/model/common/enums'; // Giả định enums tồn tại
@@ -19,6 +19,7 @@ export default function TaskList({
     platforms = [], // Truyền xuống TaskItem/SubtaskListSimple nếu cần
     currentUserId = '',
     canManage = false, // Quyền quản lý chung (có thể không chính xác cho mọi task)
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
     onTaskUpdated = null, // Callback khi task được cập nhật (qua Edit/Create Subtask)
     // [THÊM] Prop mới để tắt điều hướng khi click vào item
     disableItemNavigation = false,
@@ -28,38 +29,32 @@ export default function TaskList({
     const router = useRouter();
     const taskActions = useTaskBoardActions();
 
+    // [NEW] Helper: xác định quyền quản lý cho 1 task cụ thể (dựa trên projectMembers, quyền chung và quyền admin)
+    const computeCanManageForTask = (task) => {
+        // Admin luôn có đầy đủ quyền quản lý
+        if (isAdmin) return true;
+        if (!task) return !!canManage;
+        const projectMembersForTask = task.projectMembers || [];
+        const member = projectMembersForTask.find(m => String(m.userId) === String(currentUserId));
+        // Nếu là owner/manager trong project → có quyền quản lý
+        let canManageTask = member && (member.role === 'owner' || member.role === 'manager');
+        // Nếu không có thông tin member (vd: subtask không có projectMembers) → fallback về quyền chung
+        if (member === undefined) {
+            canManageTask = canManage;
+        }
+        return !!canManageTask;
+    };
+
     // State cho Dialogs
     const [editDialog, setEditDialog] = useState({ open: false, task: null });
     const [createSubtaskDialog, setCreateSubtaskDialog] = useState({ open: false, parentTask: null });
 
     /**
-     * Tách tasks thành: hoạt động + hoàn thành gần đây (<1 ngày) VÀ hoàn thành cũ (>1 ngày).
+     * [SỬA] Hiển thị tất cả tasks trong danh sách chính, không tách completed tasks ra dropdown
      */
-    const { activeAndRecentTasks, olderCompletedTasks } = useMemo(() => {
-        const oneDayAgo = new Date();
-        oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-
-        const activeTasks = [];
-        const recentlyCompletedTasks = [];
-        const olderCompletedTasks = [];
-
-        initialTasks.forEach(task => {
-            const isCompleted = task.status === TASK_STATUS.COMPLETED;
-            if (isCompleted) {
-                const completedDate = task.completedAt ? new Date(task.completedAt) : null;
-                if (completedDate && completedDate >= oneDayAgo) {
-                    recentlyCompletedTasks.push(task);
-                } else {
-                    olderCompletedTasks.push(task);
-                }
-            } else {
-                activeTasks.push(task);
-            }
-        });
-
-        const activeAndRecentTasks = [...activeTasks, ...recentlyCompletedTasks];
-
-        return { activeAndRecentTasks, olderCompletedTasks };
+    const allTasks = useMemo(() => {
+        // Trả về tất cả tasks, không phân biệt completed hay active
+        return initialTasks;
     }, [initialTasks]);
 
     // Handlers cho Dialogs
@@ -148,7 +143,7 @@ export default function TaskList({
     };
 
     // Trạng thái rỗng
-    if (activeAndRecentTasks.length === 0 && olderCompletedTasks.length === 0) {
+    if (allTasks.length === 0) {
         return (
             <div className="text-center py-12 bg-white rounded-lg">
                 <ListTodo className="mx-auto h-12 w-12 text-gray-300" />
@@ -164,18 +159,11 @@ export default function TaskList({
 
     return (
         <>
-            {/* Render danh sách task hoạt động và hoàn thành gần đây */}
+            {/* [SỬA] Render tất cả tasks trong danh sách chính, không tách completed tasks */}
             <div className="space-y-2">
-                {activeAndRecentTasks.map((task) => {
-                    // Lấy project members từ task nếu có
+                {allTasks.map((task) => {
                     const projectMembersForTask = task.projectMembers || [];
-                    // Xác định quyền quản lý cho task cụ thể này
-                    const member = projectMembersForTask.find(m => String(m.userId) === String(currentUserId));
-                    let canManageTask = member && (member.role === 'owner' || member.role === 'manager');
-                    // Nếu không tìm thấy member trong projectMembers của task (VD: subtask không có), dùng quyền chung
-                    if (member === undefined) {
-                        canManageTask = canManage
-                    }
+                    const canManageTask = computeCanManageForTask(task);
 
                     return (
                         <TaskItem
@@ -188,6 +176,7 @@ export default function TaskList({
                             platforms={platforms}
                             currentUserId={currentUserId}
                             canManage={canManageTask} // Truyền quyền quản lý cụ thể
+                            isAdmin={isAdmin} // [NEW] Truyền quyền admin
                             actions={extendedActions} // Truyền các hàm actions
                             onRefresh={onTaskUpdated ? onTaskUpdated : router.refresh} // Ưu tiên callback, fallback refresh
                             // [THAY ĐỔI] Truyền prop disableNavigation xuống TaskItem
@@ -201,39 +190,26 @@ export default function TaskList({
                 })}
             </div>
 
-            {/* Render khu vực task hoàn thành cũ */}
-            <CompletedTasksSection
-                tasks={olderCompletedTasks}
-                users={users}
-                allUsersWithDetails={allUsersWithDetails}
-                workTypes={workTypes}
-                platforms={platforms}
-                currentUserId={currentUserId}
-                canManage={canManage} // Quyền quản lý chung có thể đủ cho việc xem task cũ
-                actions={extendedActions}
-                onRefresh={onTaskUpdated ? onTaskUpdated : router.refresh}
-                // [THAY ĐỔI] Truyền prop disableNavigation xuống TaskItem trong CompletedTasksSection
-                disableItemNavigation={disableItemNavigation}
-                // [THÊM] Truyền parentTask cho subtask
-                parentTask={parentTask}
-                projectActive={projectActive}
-            />
-
             {/* Dialog Sửa Task */}
             {editDialog.task && (
-                <EditTaskDialog
-                    open={editDialog.open}
-                    onClose={handleCloseEditDialog}
-                    mode='edit'
-                    task={editDialog.task}
-                    users={users}
-                    projectMembers={editDialog.task.projectMembers || []}
-                    workTypes={workTypes}
-                    platforms={platforms}
-                    onSuccess={handleSuccess}
-                    canManage={canManageTask}
-                    currentUserId={currentUserId}
-                />
+                (() => {
+                    const canManageEditTask = computeCanManageForTask(editDialog.task);
+                    return (
+                        <EditTaskDialog
+                            open={editDialog.open}
+                            onClose={handleCloseEditDialog}
+                            mode='edit'
+                            task={editDialog.task}
+                            users={users}
+                            projectMembers={editDialog.task.projectMembers || []}
+                            workTypes={workTypes}
+                            platforms={platforms}
+                            onSuccess={handleSuccess}
+                            canManage={canManageEditTask}
+                            currentUserId={currentUserId}
+                        />
+                    );
+                })()
             )}
 
             {/* Dialog Tạo Subtask */}

@@ -15,6 +15,7 @@ export default function CompletedTasksSection({
     platforms, // Pass down if needed by TaskItem
     currentUserId,
     canManage, // General permission context (might be less relevant for viewing completed tasks)
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
     actions, // Pass down action handlers (like onEdit, onDelete if applicable to completed tasks)
     onRefresh, // Pass down refresh callback
     disableItemNavigation = false, // [THÊM] Prop để disable navigation
@@ -68,6 +69,7 @@ export default function CompletedTasksSection({
                                 platforms={platforms} // Pass down
                                 currentUserId={currentUserId}
                                 canManage={canManageTask} // Pass specific permission
+                                isAdmin={isAdmin} // [NEW] Truyền quyền admin
                                 actions={actions} // Pass down actions
                                 onRefresh={onRefresh} // Pass down refresh callback
                                 // [THÊM] Props cho subtask

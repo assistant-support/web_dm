@@ -20,6 +20,7 @@ import TaskHeader from './ui/TaskHeader.client';
 import TaskMainContent from './ui/TaskMainContent.client';
 import TaskSidebar from './ui/TaskSidebar';
 import { AlertTriangle } from 'lucide-react';
+import UserInfoBadge from '@/components/ui/UserInfoBadge.client'; // [NEW] Component hiển thị thông tin user
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -49,6 +50,15 @@ export default async function TaskDetailPage({ params }) {
     if (!currentUser) {
         return <ErrorDisplay message="Người dùng chưa được xác thực." />;
     }
+    
+    // [DEBUG] Log thông tin tài khoản và quyền
+    console.log('[TASK DETAIL PAGE]', {
+        userId: currentUser.externalUserId,
+        userName: currentUser.name || currentUser.email || 'Unknown',
+        userRole: currentUser.role || 'member',
+        taskId: taskId,
+        isAdmin: currentUser.role === 'admin'
+    });
 
     // --- [SỬA] BƯỚC 1: Fetch dữ liệu chính (Task) và các dữ liệu độc lập ---
     const [
@@ -159,14 +169,16 @@ export default async function TaskDetailPage({ params }) {
 
     // --- Calculate Permissions & Prepare Props (Giữ nguyên) ---
     const currentUserId = currentUser.externalUserId;
-    const hasManagePermission = project ? canManageProject(project, currentUserId) : false;
+    const isAdmin = currentUser.role === 'admin'; // [NEW] Kiểm tra quyền admin
+    // Admin luôn có quyền quản lý project
+    const hasManagePermission = project ? canManageProject(project, isAdmin ? currentUser : currentUserId) : false;
     
     const isAssignee = getUserId(task.assignee) === currentUserId;
     const isCreator = getUserId(task.createdBy) === currentUserId;
-    const canEditTask = hasManagePermission || isCreator;
+    const canEditTask = isAdmin || hasManagePermission || isCreator;
 
     // Check if user can create subtasks for this task
-    const canCreateSubtaskForThisTask = project ? canCreateSubtask(task, project, currentUserId) : false;
+    const canCreateSubtaskForThisTask = project ? canCreateSubtask(task, project, isAdmin ? currentUser : currentUserId) : false;
 
     const projectName = project?.name || '';
     const projectMembers = team?.members || [];
@@ -174,6 +186,13 @@ export default async function TaskDetailPage({ params }) {
     // --- Render the Client Component ---
     return (
         <div className="flex-1 min-h-0 flex flex-col w-full gap-4 overflow-y-auto min-[1600px]:overflow-hidden">
+            {/* [NEW] Hiển thị thông tin tài khoản và quyền */}
+            <UserInfoBadge
+                userName={currentUser.name || currentUser.email || 'Unknown'}
+                userRole={isAdmin ? 'admin' : (currentUser.role || 'member')}
+                userId={currentUserId}
+            />
+            
             {/* 1. Header Component */}
             <div className="flex-shrink-0">
                 <TaskHeader
@@ -192,6 +211,7 @@ export default async function TaskDetailPage({ params }) {
                     platforms={platforms}
                     subtasksCount={subtasks.length}
                     maxPoints={maxPointsForApproval}
+                    isAdmin={isAdmin} // [NEW] Truyền quyền admin
                 />
             </div>
             {/* 2. Main Content & Sidebar */}
@@ -216,6 +236,7 @@ export default async function TaskDetailPage({ params }) {
                         workTypes={workTypes}
                         platforms={platforms}
                         comments={comments}
+                        isAdmin={isAdmin} // [NEW] Truyền quyền admin
                         remainingPoints={remainingPointsForCreation}
                     />
                 </div>

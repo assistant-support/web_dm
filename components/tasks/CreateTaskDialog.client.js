@@ -59,6 +59,14 @@ const getInitialDateTime = (date, hour, minute) => {
     return newDate;
 };
 
+/**
+ * @function getTodayString
+ * @description Trả về chuỗi YYYY-MM-DD của ngày hôm nay.
+ */
+const getTodayString = () => {
+    return formatDate(new Date());
+};
+
 
 /**
  * -----------------------------------------------------------------------------
@@ -104,14 +112,15 @@ export default function CreateTaskDialog({
     open,
     onClose,
     projectId,
+    projectName = '',
     projectMembers = [],
     users = [],
     // New prop: full detailed user list prepared by the page
     allUsersWithDetails = [],
     canManage = false,
     currentUserId = '',
-    onSuccess
-    , isActive = true
+    onSuccess,
+    isActive = true,
 }) {
     const router = useRouter();
     const { run, Overlays, isLoading } = useAsyncNotifier({ enableNoti: false });
@@ -135,6 +144,7 @@ export default function CreateTaskDialog({
         plannedDueAt: '',
         plannedDueTime: '',
         tags: '',
+        estimatedHours: '', // [NEW] Thời gian ước tính (giờ)
         initialPoints: 0,
         autoBypassForSubtask: false,
         createTaskFolder: true,
@@ -170,6 +180,7 @@ export default function CreateTaskDialog({
                 plannedDueAt: formatDate(defaultDueDate),
                 plannedDueTime: formatTime(defaultDueDate),
                 tags: '',
+                estimatedHours: '',
                 initialPoints: 0,
                 autoBypassForSubtask: false,
                 createTaskFolder: true,
@@ -181,7 +192,7 @@ export default function CreateTaskDialog({
     // --- MEMO CHO ASSIGNEE ---
     const assigneeOptions = useMemo(() => {
         if (!canManage) return [];
-        const defaultOption = { value: '', label: '-- Giao sau --', name: '-- Giao sau --' };
+        const defaultOption = { value: '', label: '-- Giao sau --', name: '-- Giao sau --', inProject: false };
 
         // Prefer `allUsersWithDetails` when available; it's an array of objects like
         // { id, name, email, avatarUrl, label }
@@ -197,16 +208,31 @@ export default function CreateTaskDialog({
                     inProject,
                 };
             });
-            return [defaultOption, ...mapped];
+            
+            // [NEW] Sắp xếp: ưu tiên thành viên trong dự án lên trên
+            const inProjectMembers = mapped.filter(opt => opt.inProject);
+            const notInProjectMembers = mapped.filter(opt => !opt.inProject);
+            
+            return [defaultOption, ...inProjectMembers, ...notInProjectMembers];
         }
 
         // Fallback to older `users` shape
-        const memberOptions = (users || []).map(user => ({
-            value: user.value,
-            label: user.label || user.name,
-            name: user.name
-        }));
-        return [defaultOption, ...memberOptions];
+        const memberOptions = (users || []).map(user => {
+            const uid = user.value;
+            const inProject = (projectMembers || []).some(pm => String(pm.userId) === String(uid));
+            return {
+                value: uid,
+                label: user.label || user.name,
+                name: user.name,
+                inProject,
+            };
+        });
+        
+        // [NEW] Sắp xếp: ưu tiên thành viên trong dự án lên trên
+        const inProjectMembers = memberOptions.filter(opt => opt.inProject);
+        const notInProjectMembers = memberOptions.filter(opt => !opt.inProject);
+        
+        return [defaultOption, ...inProjectMembers, ...notInProjectMembers];
     }, [canManage, users, allUsersWithDetails, projectMembers]);
 
     const filteredAssigneeOptions = useMemo(() => {
@@ -286,6 +312,38 @@ export default function CreateTaskDialog({
             return;
         }
 
+        // Validate ngày không được là ngày trước hôm nay (theo ngày, bỏ qua giờ)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (formData.plannedStartAt) {
+            const startDate = new Date(formData.plannedStartAt);
+            startDate.setHours(0, 0, 0, 0);
+            if (startDate < today) {
+                setError('Ngày bắt đầu không được trước ngày hôm nay');
+                return;
+            }
+        }
+
+        if (formData.plannedDueAt) {
+            const dueDate = new Date(formData.plannedDueAt);
+            dueDate.setHours(0, 0, 0, 0);
+            if (dueDate < today) {
+                setError('Hạn hoàn thành không được trước ngày hôm nay');
+                return;
+            }
+        }
+
+        // Validate hạn hoàn thành phải sau hoặc bằng ngày bắt đầu
+        if (formData.plannedStartAt && formData.plannedStartTime && formData.plannedDueAt && formData.plannedDueTime) {
+            const startDateTime = new Date(`${formData.plannedStartAt}T${formData.plannedStartTime}`);
+            const dueDateTime = new Date(`${formData.plannedDueAt}T${formData.plannedDueTime}`);
+            if (dueDateTime < startDateTime) {
+                setError('Hạn hoàn thành phải sau hoặc bằng ngày bắt đầu');
+                return;
+            }
+        }
+
         const startDateTime = (formData.plannedStartAt && formData.plannedStartTime)
             ? new Date(`${formData.plannedStartAt}T${formData.plannedStartTime}`)
             : null;
@@ -308,6 +366,7 @@ export default function CreateTaskDialog({
 
             plannedStartAt: startDateTime,
             plannedDueAt: dueDateTime,
+            estimatedHours: formData.estimatedHours ? Number(formData.estimatedHours) : null,
             initialPoints: canManage ? (Number(formData.initialPoints) || 0) : 0,
             autoBypassForSubtask: formData.autoBypassForSubtask,
             createTaskFolder: formData.createTaskFolder,
@@ -340,7 +399,7 @@ export default function CreateTaskDialog({
             <DialogComponent
                 open={open}
                 onOpenChange={(openState) => !openState && onClose()}
-                title="Tạo nhiệm vụ mới"
+                title={projectName ? `Tạo nhiệm vụ mới cho Dự án ${projectName}` : 'Tạo nhiệm vụ mới'}
                 description={canManage
                     ? "Tạo task cho bản thân hoặc gán cho thành viên trong dự án"
                     : "Task của bạn sẽ được gửi đến quản lý để phê duyệt"}
@@ -461,7 +520,15 @@ export default function CreateTaskDialog({
                                                                     <p className="text-xs text-gray-500 truncate" title={opt.label}>{opt.label}</p>
                                                                 )}
                                                             </div>
-                                                            {!opt.inProject && (
+                                                            {opt.inProject ? (
+                                                                <span
+                                                                    className="inline-flex items-center text-xs text-green-700 bg-green-50 border border-green-100 rounded-full px-2 py-0.5"
+                                                                    title="Thành viên trong dự án"
+                                                                    aria-label="Thành viên trong dự án"
+                                                                >
+                                                                    Trong dự án
+                                                                </span>
+                                                            ) : (
                                                                 <span
                                                                     className="inline-flex items-center text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-2 py-0.5"
                                                                     title="Tự động thêm vào dự án"
@@ -566,6 +633,7 @@ export default function CreateTaskDialog({
                                 <div className="flex gap-2">
                                     <Input
                                         type="date"
+                                        min={getTodayString()}
                                         value={formData.plannedStartAt}
                                         onChange={(e) => handleChange('plannedStartAt', e.target.value)}
                                         disabled={isLoading}
@@ -587,6 +655,7 @@ export default function CreateTaskDialog({
                                 <div className="flex gap-2">
                                     <Input
                                         type="date"
+                                        min={formData.plannedStartAt || getTodayString()}
                                         value={formData.plannedDueAt}
                                         onChange={(e) => handleChange('plannedDueAt', e.target.value)}
                                         disabled={isLoading}
@@ -615,6 +684,21 @@ export default function CreateTaskDialog({
                                     helperText="Điểm thưởng khi hoàn thành (có thể sửa sau)"
                                     disabled={isLoading}
                                 />
+                            )}
+
+                            {/* [NEW] Thời gian ước tính (giờ) - cho mọi vai trò */}
+                            {canManage && (
+                            <Input
+                                label="Thời gian ước tính (giờ)"
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={formData.estimatedHours}
+                                onChange={(e) => handleChange('estimatedHours', e.target.value)}
+                                placeholder="0"
+                                helperText="Thời gian dự kiến để hoàn thành nhiệm vụ"
+                                disabled={isLoading}
+                            />
                             )}
                         </div>
                     </div>

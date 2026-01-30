@@ -27,9 +27,19 @@ export async function approveTaskCreation(taskId, { approve, note, initialPoints
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
+        
+        // [DEBUG] Log thông tin tài khoản và quyền
+        console.log('[APPROVE TASK CREATION]', {
+            userId: uid,
+            userName: user.name || user.email || 'Unknown',
+            userRole: user.role || 'member',
+            taskId: taskId,
+            action: approve ? 'APPROVE' : 'REJECT'
+        });
 
         const task = await Task.findById(taskId);
         assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(task.status !== TASK_STATUS.CANCELLED, 'Không thể thao tác với task đã hủy. Task đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
         assert(task.status === TASK_STATUS.PENDING_APPROVAL, 'Công việc không ở trạng thái chờ duyệt.', 'BAD_REQUEST', 400);
 
         const project = await Project.findById(task.project);
@@ -120,6 +130,7 @@ export async function confirmAssignment(taskId, { accept, note }) {
 
         const task = await Task.findById(taskId);
         assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(task.status !== TASK_STATUS.CANCELLED, 'Không thể thao tác với task đã hủy. Task đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
         assert(task.assignee === uid, 'Bạn không phải là người được giao công việc này.', 'FORBIDDEN', 403);
         assert(task.status === TASK_STATUS.WAITING_ASSIGNEE_CONFIRM, 'Công việc không ở trạng thái chờ xác nhận.', 'BAD_REQUEST', 400);
 
@@ -129,10 +140,16 @@ export async function confirmAssignment(taskId, { accept, note }) {
             task.status = TASK_STATUS.IN_PROGRESS;
             task.startedAt = new Date();
         } else {
-            // Từ chối - trả task về draft và bỏ assignee
+            // [SỬA] Từ chối - bỏ assignee, đánh dấu assigneeConfirm là 'rejected' và chuyển trạng thái sang REJECTED
+            // Mục tiêu: hiển thị label "Từ chối" thay vì "Nháp" cho các task bị nhân viên từ chối.
             task.assignee = null;
-            task.assigneeConfirm = { required: false };
-            task.status = TASK_STATUS.DRAFT;
+            task.assigneeConfirm = {
+                required: false,
+                status: 'rejected',
+                at: new Date(),
+                by: uid,
+            };
+            task.status = TASK_STATUS.REJECTED;
         }
 
         await task.save();
@@ -172,10 +189,21 @@ export async function approveTaskCompletion(taskId, { approve, finalPoints, note
     await connectDB();
     return runAction(async ({ user }) => {
         const uid = user.externalUserId;
+        
+        // [DEBUG] Log thông tin tài khoản và quyền
+        console.log('[APPROVE TASK COMPLETION]', {
+            userId: uid,
+            userName: user.name || user.email || 'Unknown',
+            userRole: user.role || 'member',
+            taskId: taskId,
+            action: approve ? 'APPROVE' : 'REJECT',
+            finalPoints: finalPoints
+        });
 
         const task = await Task.findById(taskId);
 
         assert(task, 'Công việc không tồn tại hoặc đã bị xóa.', 'NOT_FOUND', 404);
+        assert(task.status !== TASK_STATUS.CANCELLED, 'Không thể thao tác với task đã hủy. Task đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
         assert(task.status === TASK_STATUS.COMPLETED_AWAIT_REVIEW, 'Công việc không ở trạng thái chờ duyệt hoàn thành.', 'BAD_REQUEST', 400);
 
         // Kiểm tra và cảnh báo nếu task có subtasks chưa hoàn thành

@@ -7,6 +7,7 @@
 import mongoose from 'mongoose';
 import { TEAM_ROLE } from '@/model/common/enums.js';
 import { connectDB } from '@/lib/db.js';
+import { normalizeText } from '@/lib/text-normalize.js';
 
 /**
  * @typedef {Object} TeamMembership
@@ -49,6 +50,11 @@ const TeamSchema = new mongoose.Schema(
             required: true, 
             trim: true, 
             index: true 
+        },
+        // Tên đã được normalize cho search (tự động tạo)
+        name_normalized: {
+            type: String,
+            index: true
         },
         // Mô tả chi tiết về nhóm
         description: { 
@@ -110,6 +116,12 @@ TeamSchema.index({ 'members.userId': 1, isActive: 1 });
  * Ứng dụng: Lấy tất cả team mà một user là manager/owner.
  */
 TeamSchema.index({ 'members.userId': 1, 'members.role': 1 });
+
+/**
+ * Index hợp chất cho search tối ưu (QUAN TRỌNG).
+ * Ứng dụng: Search team theo name_normalized và members.
+ */
+TeamSchema.index({ name_normalized: 1, 'members.userId': 1 });
 
 // ==================== VIRTUALS ====================
 
@@ -313,6 +325,16 @@ TeamSchema.pre('save', function (next) {
         if (userIds.length !== uniqueUserIds.length) {
             return next(new Error('Duplicate members detected in team'));
         }
+    }
+    next();
+});
+
+/**
+ * Pre-save middleware: Tự động normalize name khi lưu.
+ */
+TeamSchema.pre('save', function (next) {
+    if (this.isModified('name') && this.name) {
+        this.name_normalized = normalizeText(this.name);
     }
     next();
 });

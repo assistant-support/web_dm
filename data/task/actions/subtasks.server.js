@@ -74,6 +74,7 @@ export async function createSubtask(parentTaskId, payload) {
         // Get parent task
         const parentTask = await Task.findById(parentTaskId);
         assert(parentTask, 'Không tìm thấy công việc cha', 'NOT_FOUND', 404);
+        assert(parentTask.status !== TASK_STATUS.CANCELLED, 'Không thể tạo subtask cho task đã hủy. Task đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
 
         // Get project for permission check
         const project = await Project.findById(parentTask.project).lean();
@@ -198,6 +199,13 @@ export async function updateSubtask(subtaskId, payload) {
         const subtask = await Task.findById(subtaskId);
         assert(subtask, 'Không tìm thấy công việc con', 'NOT_FOUND', 404);
         assert(subtask.parentTask, 'Công việc này không phải là công việc con', 'VALIDATION_ERROR', 400);
+        assert(subtask.status !== TASK_STATUS.CANCELLED, 'Không thể cập nhật subtask đã hủy. Subtask đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
+        
+        // Check parent task status
+        const parentTask = await Task.findById(subtask.parentTask);
+        if (parentTask) {
+            assert(parentTask.status !== TASK_STATUS.CANCELLED, 'Không thể cập nhật subtask của task đã hủy. Task đã hủy chỉ được phép xem.', 'FORBIDDEN', 403);
+        }
 
         // Verify permission
         if (subtask.scope === TASK_SCOPE.PROJECT) {

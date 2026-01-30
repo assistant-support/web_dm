@@ -16,6 +16,17 @@ const nextConfig = {
             },
             {
                 protocol: 'https',
+                hostname: 'www.dropbox.com',
+                port: '',
+                pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: '**.zadn.vn',
+                pathname: '/**',
+              },
+            {
+                protocol: 'https',
                 hostname: 'placehold.co',
                 port: '',
                 pathname: '/**',

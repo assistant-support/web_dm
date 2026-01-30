@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation';
 /**
  * KanbanCard - Draggable task card for Kanban board
  */
-export default function KanbanCard({ task }) {
+export default function KanbanCard({ task, canDrag = false }) {
     const router = useRouter();
     
     const {
@@ -29,6 +29,7 @@ export default function KanbanCard({ task }) {
             type: 'task',
             task,
         },
+        disabled: !canDrag, // [NEW] Disable drag nếu không có quyền
     });
 
     const style = {
@@ -80,14 +81,20 @@ export default function KanbanCard({ task }) {
         >
             {/* Drag handle + Title */}
             <div className="flex items-start gap-2 mb-2">
-                <button
-                    {...attributes}
-                    {...listeners}
-                    className="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing mt-1"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <GripVertical className="w-4 h-4" />
-                </button>
+                {canDrag ? (
+                    <button
+                        {...attributes}
+                        {...listeners}
+                        className="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing mt-1"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <GripVertical className="w-4 h-4" />
+                    </button>
+                ) : (
+                    <div className="mt-1 text-gray-300">
+                        <GripVertical className="w-4 h-4" />
+                    </div>
+                )}
                 
                 <div className="flex-1 min-w-0" onClick={handleClick}>
                     <h4 className="text-sm font-medium text-gray-900 line-clamp-2">
@@ -123,6 +130,13 @@ export default function KanbanCard({ task }) {
                     <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                         <Calendar className="w-3 h-3" />
                         {format(new Date(task.plannedDueAt), 'dd/MM')}
+                    </span>
+                )}
+
+                {/* Project name label */}
+                {task.projectName && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 font-medium truncate max-w-[120px]">
+                        {task.projectName}
                     </span>
                 )}
 

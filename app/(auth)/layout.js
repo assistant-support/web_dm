@@ -10,6 +10,7 @@ import { connectDB } from '@/lib/db.js';
 import { getCurrentUserWithSync } from '@/lib/oauth-client';
 import Team from '@/model/team.model.js';
 import Project from '@/model/project.model.js';
+import { safeSerialize } from '@/lib/serialize.js';
 
 /**
  * Lấy danh sách team user là member (lite)
@@ -65,6 +66,18 @@ export default async function AuthLayout({ children }) {
                 avatar: user?.avatar || null,
             };
             uid = whoami.id;
+            
+            // [DEBUG] Log thông tin user từ layout
+            console.log('═══════════════════════════════════════════════════════════');
+            console.log('[AUTH LAYOUT - MỌI TRANG]');
+            console.log('User từ getCurrentUserWithSync:', {
+                userId: uid,
+                userName: whoami.name,
+                userEmail: whoami.email,
+                userRole: user?.role || 'N/A',
+                fullUser: JSON.stringify(user, null, 2)
+            });
+            console.log('═══════════════════════════════════════════════════════════');
         } catch (error) {
             console.error('AuthLayout: Error getting user:', error);
         }
@@ -76,9 +89,12 @@ export default async function AuthLayout({ children }) {
         : [{ teams: [], teamRoles: {} }, { projects: [], projectRoles: {} }];
 
     const authzValue = { whoami, teams, projects, teamRoles, projectRoles };
+    
+    // Serialize before passing to Context Provider (Client Component)
+    const serializedAuthzValue = safeSerialize(authzValue);
 
     return (
-        <AuthzProvider value={authzValue}>
+        <AuthzProvider value={serializedAuthzValue}>
             <div className="flex flex-col h-screen w-screen overflow-hidden">
                 <SiteHeader />
                 <main className="flex-1 flex overflow-hidden">

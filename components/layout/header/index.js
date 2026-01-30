@@ -38,7 +38,7 @@ export default async function SiteHeader() {
                             className="rounded-md"
                         />
                         <p className="text-lg font-semibold tracking-wide text-[var(--brand-600)]">
-                            Digital Marketing Tools
+                            Digital Marketing
                         </p>
                     </Link>
                 </div>

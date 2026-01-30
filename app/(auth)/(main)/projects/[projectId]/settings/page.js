@@ -39,11 +39,13 @@ export default async function ProjectSettingsPage({ params }) {
 
     const project = result.data;
 
-    // Check if user is owner or manager
+    const isAdmin = user.role === 'admin';
+
+    // Check if user is owner or manager (hoặc admin hệ thống)
     const userMember = project.members.find(m => m.userId === user.externalUserId);
     const isOwnerOrManager = userMember && (userMember.role === 'owner' || userMember.role === 'manager');
 
-    if (!isOwnerOrManager) {
+    if (!isOwnerOrManager && !isAdmin) {
         redirect(`/projects/${projectId}`);
     }
 

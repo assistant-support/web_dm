@@ -125,8 +125,11 @@ export default async function WorkflowEditor({ taskId }) {
     }
     const task = taskResult.data;
 
+    const isAdmin = user.role === 'admin';
+
     const parentTaskId = extractId(task.parentTask);
-    if (parentTaskId) {
+    // Admin có thể truy cập workflow của subtask, không redirect
+    if (parentTaskId && !isAdmin) {
         redirect(`/tasks/${parentTaskId}/workflow`);
     }
 
@@ -152,7 +155,8 @@ export default async function WorkflowEditor({ taskId }) {
             canManage || String(assigneeExternalId) === String(user.externalUserId);
     }
 
-    if (!canManage) {
+    // Admin luôn có quyền quản lý workflow
+    if (!canManage && !isAdmin) {
         redirect(`/tasks/${taskId}`);
     }
 

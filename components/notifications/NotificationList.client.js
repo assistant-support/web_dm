@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
@@ -19,9 +19,15 @@ export default function NotificationList() {
     const [hasMore, setHasMore] = useState(true);
     const [markingAll, setMarkingAll] = useState(false);
     const router = useRouter();
-    const LIMIT = 20;
+    const LIMIT = 10;
 
-    const fetchNotifications = async (isLoadMore = false) => {
+    const scrollContainerRef = useRef(null);
+    const loadMoreTriggerRef = useRef(null);
+
+    const fetchNotifications = useCallback(async (isLoadMore = false) => {
+        if (isLoadMore) {
+            if (loadingMore || !hasMore) return;
+        }
         if (isLoadMore) setLoadingMore(true);
         else setLoading(true);
 
@@ -39,6 +45,8 @@ export default function NotificationList() {
                     setNotifications(prev => [...prev, ...newNotis]);
                 } else {
                     setNotifications(newNotis);
+                    // reset hasMore when doing a fresh load
+                    setHasMore(newNotis.length >= LIMIT);
                 }
             }
         } catch (error) {
@@ -47,11 +55,35 @@ export default function NotificationList() {
             setLoading(false);
             setLoadingMore(false);
         }
-    };
+    }, [LIMIT, hasMore, loadingMore, notifications.length]);
 
     useEffect(() => {
         fetchNotifications();
     }, []);
+
+    // Infinite scroll: when trigger is ~half visible in the scroll container, load next page (10)
+    useEffect(() => {
+        const root = scrollContainerRef.current;
+        const trigger = loadMoreTriggerRef.current;
+        if (!root || !trigger) return;
+        if (!hasMore || loadingMore || loading) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const entry = entries[0];
+                if (entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
+                    fetchNotifications(true);
+                }
+            },
+            {
+                root,
+                threshold: 0.5,
+            }
+        );
+
+        observer.observe(trigger);
+        return () => observer.disconnect();
+    }, [fetchNotifications, hasMore, loading, loadingMore]);
 
     const handleMarkAsRead = async (id) => {
         // Optimistic update
@@ -141,7 +173,11 @@ export default function NotificationList() {
 
             {/* Notification List */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="divide-y divide-gray-100">
+                {/* Scroll container */}
+                <div
+                    ref={scrollContainerRef}
+                    className="divide-y divide-gray-100 overflow-y-auto max-h-[70vh]"
+                >
                     {notifications.length === 0 ? (
                         <div className="p-12 text-center">
                             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -256,15 +292,27 @@ export default function NotificationList() {
                             </div>
                         ))
                     )}
+
+                    {/* Infinite scroll trigger */}
+                    {hasMore && notifications.length > 0 && (
+                        <div ref={loadMoreTriggerRef} className="p-4 text-center bg-gray-50">
+                            {loadingMore ? (
+                                <span className="text-sm text-gray-500">Đang tải thêm...</span>
+                            ) : (
+                                <span className="text-sm text-gray-400">Cuộn để tải thêm</span>
+                            )}
+                        </div>
+                    )}
                 </div>
                 
                 {/* Load More Button */}
                 {hasMore && notifications.length > 0 && (
-                    <div className="p-4 border-t border-gray-100 text-center bg-gray-50">
+                    <div className="p-4 border-t border-gray-100 text-center bg-gray-50" style={{  marginBottom: '20px', paddingTop: '0px', paddingBottom: '10px'}}>
                         <button
                             onClick={() => fetchNotifications(true)}
                             disabled={loadingMore}
                             className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{  marginBottom: '20px', paddingTop: '0px', paddingBottom: '10px'}}
                         >
                             {loadingMore ? 'Đang tải thêm...' : 'Xem thêm thông báo cũ hơn'}
                         </button>

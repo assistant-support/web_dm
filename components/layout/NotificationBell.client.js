@@ -145,7 +145,7 @@ export default function NotificationBell({ currentUser }) {
                         <div>
                             {notifications.map((notif) => (
                                 <div
-                                    key={notif.id}
+                                    key={notif._id}
                                     className={`
                                         px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer
                                         ${!notif.read ? 'bg-blue-50' : ''}

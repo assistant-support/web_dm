@@ -27,7 +27,8 @@ export default async function ProjectOverviewPage({ params }) {
     const memberIds = project.members?.map(m => m.userId) || [];
 
     const currentMember = project.members?.find(m => m.userId === user?.externalUserId);
-    const isManager = [PROJECT_ROLE.OWNER, PROJECT_ROLE.MANAGER].includes(currentMember?.role);
+    const isAdmin = user?.role === 'admin';
+    const isManager = isAdmin || [PROJECT_ROLE.OWNER, PROJECT_ROLE.MANAGER].includes(currentMember?.role);
 
     const [analyticsData, usersMapResult, allReviewTasksResult, memberTaskStats] = await Promise.all([
         getProjectAnalytics(projectId),

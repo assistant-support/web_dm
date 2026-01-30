@@ -10,7 +10,7 @@ import { revalidateTag, revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getRequestUser } from '@/lib/request-user';
 import { logActivity } from '@/lib/activity';
-import { canEditTask, canViewProject } from '@/lib/permissions';
+import { canEditTask, canViewProject, canManageProject } from '@/lib/permissions';
 import * as taskData from '@/data/task.data';
 import * as projectData from '@/data/project.data';
 
@@ -255,8 +255,49 @@ export async function updateTaskPlan(taskId, plannedStartAt, plannedDueAt) {
         return { success: false, error: 'Công việc không tồn tại hoặc đã bị xóa.' };
     }
 
-    if (!canEditTask(task, user.id)) {
-        return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
+    // [NEW] Kiểm tra quyền: Admin luôn có quyền
+    const isAdmin = user.role === 'admin';
+    if (isAdmin) {
+        // Admin có quyền, tiếp tục
+    } else if (task.project) {
+        // [NEW] Kiểm tra quyền manager/owner nếu task có project
+        // Populate project nếu chưa có
+        let project = task.project;
+        if (typeof project === 'string' || project._id) {
+            project = await projectData.findProjectById(typeof project === 'string' ? project : project._id);
+        }
+        
+        if (project) {
+            const hasManagePermission = canManageProject(project, user);
+            if (!hasManagePermission) {
+                // Kiểm tra quyền assignee hoặc creator
+                const uid = user.externalUserId || user.id;
+                const isAssignee = task.assignee && String(task.assignee) === String(uid);
+                const isCreator = task.createdBy && String(task.createdBy) === String(uid);
+                
+                if (!isAssignee && !isCreator) {
+                    return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
+                }
+            }
+        } else {
+            // Nếu không có project hoặc không tìm thấy project, kiểm tra quyền assignee/creator
+            const uid = user.externalUserId || user.id;
+            const isAssignee = task.assignee && String(task.assignee) === String(uid);
+            const isCreator = task.createdBy && String(task.createdBy) === String(uid);
+            
+            if (!isAssignee && !isCreator) {
+                return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
+            }
+        }
+    } else {
+        // Task không có project, kiểm tra quyền assignee/creator
+        const uid = user.externalUserId || user.id;
+        const isAssignee = task.assignee && String(task.assignee) === String(uid);
+        const isCreator = task.createdBy && String(task.createdBy) === String(uid);
+        
+        if (!isAssignee && !isCreator) {
+            return { success: false, error: 'Bạn không có quyền thực hiện thao tác này.' };
+        }
     }
 
     try {

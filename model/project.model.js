@@ -8,6 +8,7 @@
 import mongoose from 'mongoose';
 import { PROJECT_ROLE, PRIORITY } from '@/model/common/enums.js';
 import { connectDB } from '@/lib/db.js';
+import { normalizeText } from '@/lib/text-normalize.js';
 
 /**
  * @typedef {Object} ProjectMembership
@@ -89,6 +90,12 @@ const ProjectSchema = new mongoose.Schema(
             required: true, 
             trim: true, 
             index: true 
+        },
+        
+        // Tên đã được normalize cho search (tự động tạo)
+        name_normalized: {
+            type: String,
+            index: true
         },
         
         // Mô tả chi tiết dự án
@@ -261,6 +268,12 @@ ProjectSchema.index({ isActive: 1, dueDate: 1 });
  * Ứng dụng: Lấy project theo độ ưu tiên và trạng thái.
  */
 ProjectSchema.index({ priority: 1, isActive: 1 });
+
+/**
+ * Index hợp chất cho search tối ưu (QUAN TRỌNG).
+ * Ứng dụng: Search project theo name_normalized, isActive, và members.
+ */
+ProjectSchema.index({ name_normalized: 1, isActive: 1, 'members.userId': 1 });
 
 // ==================== VIRTUALS ====================
 
@@ -503,6 +516,16 @@ ProjectSchema.pre('save', function (next) {
         if (userIds.length !== uniqueUserIds.length) {
             return next(new Error('Duplicate members detected in project'));
         }
+    }
+    next();
+});
+
+/**
+ * Pre-save middleware: Tự động normalize name khi lưu.
+ */
+ProjectSchema.pre('save', function (next) {
+    if (this.isModified('name') && this.name) {
+        this.name_normalized = normalizeText(this.name);
     }
     next();
 });

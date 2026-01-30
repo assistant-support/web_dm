@@ -7,6 +7,7 @@ import { ListTodo, PlusCircle } from 'lucide-react';
 import TaskList from '@/components/tasks/TaskList.client';
 import CreateSubtaskDialog from '@/components/tasks/CreateSubtaskDialog.client';
 import Button from '@/components/ui/button';
+import { TASK_STATUS } from '@/model/common/enums';
 
 export default function SubtaskList({
     parentTask,
@@ -21,6 +22,7 @@ export default function SubtaskList({
     workTypes,
     platforms,
     isAssignee,
+    isAdmin = false, // [NEW] Admin có đầy đủ quyền
     remainingPoints = null // [NEW]
 }) {
     const router = useRouter();
@@ -34,6 +36,9 @@ export default function SubtaskList({
         if ('projectIsActive' in t) return t.projectIsActive;
         return true;
     })();
+
+    // [NEW] Check nếu task đã hủy
+    const isCancelled = parentTask?.status === TASK_STATUS.CANCELLED;
 
     const hasSubtasks = subtasks && subtasks.length > 0;
     const currentUserId = currentUser?.externalUserId;
@@ -50,7 +55,7 @@ export default function SubtaskList({
                 <h3 className="text-base font-semibold text-gray-800">
                     Nhiệm vụ con ({subtasks.length})
                 </h3>
-                {canCreateSubtask && (
+                {canCreateSubtask && !isCancelled && (
                     <Button
                         variant="ghost"
                         size="sm"
@@ -59,8 +64,8 @@ export default function SubtaskList({
                             if (!projectActive) return alert('Dự án đã lưu trữ — không thể thêm việc con');
                             setShowCreateDialog(true);
                         }}
-                        disabled={!projectActive}
-                        title={!projectActive ? 'Dự án đã lưu trữ — không thể thêm việc con' : undefined}
+                        disabled={!projectActive || isCancelled}
+                        title={isCancelled ? 'Task đã hủy — không thể thêm việc con' : (!projectActive ? 'Dự án đã lưu trữ — không thể thêm việc con' : undefined)}
                         className="text-[var(--brand-600)] hover:bg-[var(--brand-50)]"
                     >
                         Thêm việc con
@@ -80,7 +85,8 @@ export default function SubtaskList({
                             workTypes={workTypes}
                             platforms={platforms}
                             currentUserId={currentUserId}
-                            canManage={canManage}
+                            canManage={isAdmin || (canManage && !isCancelled)} // [NEW] Admin vẫn có quyền quản lý ngay cả khi task đã hủy
+                            isAdmin={isAdmin} // [NEW] Truyền quyền admin
                             onTaskUpdated={router.refresh} // Refresh khi subtask được cập nhật
                             // [THAY ĐỔI] Truyền prop để tắt điều hướng
                             disableItemNavigation={true}
@@ -117,7 +123,7 @@ export default function SubtaskList({
                     currentUserId={currentUserId}
                     onSuccess={handleSubtaskCreated}
                     remainingPoints={remainingPoints} // [NEW]
-                    isActive={projectActive}
+                    isActive={projectActive && !isCancelled} // [NEW] Vô hiệu hóa khi task đã hủy
                 />
             )}
         </div>
